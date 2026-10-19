@@ -45,7 +45,7 @@ O Freshdesk segue até ~08/11 só concluindo os tickets antigos, o que dá marge
 
 **Maiores riscos:** (a) infraestrutura do Zitadel no Kubernetes consumir mais de 1 dia; (b) a virada da caixa `suporte@` gerar duplicidade ou perda de e-mails, o que é mitigado por testar antes numa caixa `suporte-teste@` e por fazer a virada removendo o encaminhamento, com rollback imediato.
 
-**Ação imediata:** criar a caixa `suporte-teste@missaosalesiana.org.br` e responder às 3 perguntas restantes de [06-perguntas-abertas.md](06-perguntas-abertas.md), em especial se `suporte@` é uma caixa de usuário ou um Grupo do Google.
+**Ação imediata:** criar a caixa `suporte-teste@missaosalesiana.org.br` (usuário, verificação em 2 etapas, senha de app) e responder às perguntas 13 a 16 de [06-perguntas-abertas.md](06-perguntas-abertas.md) até quarta.
 
 ## Respostas obtidas em 19/10
 
@@ -69,7 +69,7 @@ O Freshdesk segue até ~08/11 só concluindo os tickets antigos, o que dá marge
 ## Premissas que continuam valendo
 
 - O domínio institucional do Workspace é `missaosalesiana.org.br`. Se `msmt.org.br` também for domínio do Workspace, as contas dos dois funcionam: um app OAuth "Internal" aceita qualquer domínio da organização.
-- `suporte@missaosalesiana.org.br` é uma **caixa de usuário** do Gmail (não um Grupo do Google). ⚠️ Confirmar: IMAP só funciona em caixa de usuário.
+- `suporte@missaosalesiana.org.br` é uma **caixa de usuário** do Gmail, não um Grupo do Google (confirmado em 19/10). IMAP funciona direto nela.
 - Hoje a caixa `suporte@` encaminha para um endereço do Freshdesk. A virada consiste em remover esse encaminhamento.
 - Agentes respondem pelo portal. Se um agente responder ao e-mail de notificação a partir da própria conta, o sistema reconhece e registra como resposta pública dele (regra barata, incluída no MVP).
 - A interface é em pt-BR, e o código e os identificadores ficam em inglês.
