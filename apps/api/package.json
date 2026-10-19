@@ -1,0 +1,38 @@
+{
+  "name": "@helpdesk/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nest start --watch",
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run && vitest run --config ./vitest.config.e2e.ts",
+    "test:unit": "vitest run",
+    "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@helpdesk/shared": "workspace:*",
+    "@nestjs/common": "^12.2.0",
+    "@nestjs/core": "^12.2.0",
+    "@nestjs/platform-express": "^12.2.0",
+    "@nestjs/terminus": "^12.1.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^12.0.8",
+    "@nestjs/schematics": "^12.0.7",
+    "@nestjs/testing": "^12.2.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.19.2",
+    "@types/supertest": "^7.0.0",
+    "source-map-support": "^0.5.21",
+    "supertest": "^7.3.1",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^4.1.12"
+  }
+}

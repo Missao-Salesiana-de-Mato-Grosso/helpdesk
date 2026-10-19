@@ -1,0 +1,26 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build
+dist/
+build/
+*.tsbuildinfo
+coverage/
+
+# env and secrets
+.env
+.env.*
+!.env.example
+
+# local data
+.inbox/
+storage/
+*.log
+
+# editors and OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
