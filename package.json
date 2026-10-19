@@ -15,7 +15,11 @@
     "typecheck": "pnpm --filter @helpdesk/shared build && pnpm -r typecheck",
     "lint": "oxlint --type-aware",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "infra:up": "docker compose up -d --wait",
+    "infra:down": "docker compose down",
+    "infra:reset": "docker compose down -v",
+    "infra:logs": "docker compose logs -f"
   },
   "devDependencies": {
     "oxlint": "^1.81.0",

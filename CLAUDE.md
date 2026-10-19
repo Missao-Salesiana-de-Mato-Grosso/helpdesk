@@ -21,7 +21,9 @@ Discovery, escopo e decisões: `docs/discovery/` (leia `README.md` e `adr/README
 ```bash
 nvm use && pnpm install
 pnpm build                           # shared → api → web (necessário uma vez após clonar)
-docker compose up -d                 # postgres, zitadel, zitadel-login, mailpit (http://localhost:8025) — a partir da T02
+cp .env.example .env                 # único .env: compose + API + front (Vite lê da raiz via envDir)
+pnpm infra:up                        # postgres (127.0.0.1:5434, sempre pelo IP), zitadel (:8080, console em /ui/console), mailpit (:8025, SMTP :1025)
+pnpm infra:reset                     # apaga volumes (Zitadel e bancos do zero)
 pnpm dev                             # shared (tsc --watch) + api (:3000, nest --watch) + web (:5173, proxy /api → :3000)
 pnpm test                            # vitest em todos os pacotes
 pnpm --filter @helpdesk/api test:unit      # só *.spec.ts

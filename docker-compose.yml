@@ -1,0 +1,192 @@
+# Ambiente local de desenvolvimento: PostgreSQL, Zitadel (API + Login V2 atrás do Traefik) e Mailpit.
+# A API e o front rodam fora do Docker (`pnpm dev`).
+#
+# Baseado no compose oficial do Zitadel (deploy/compose/docker-compose.yml), simplificado para dev:
+# sem TLS, sem Redis, sem OpenTelemetry. Os valores padrão abaixo são inseguros e servem só para
+# a máquina do desenvolvedor; sobrescreva no .env quando precisar.
+#
+# Acessos:
+#   Zitadel console  http://localhost:8080/ui/console   (zitadel-admin@zitadel.localhost / Password1!)
+#   Mailpit          http://localhost:8025               (SMTP em localhost:1025)
+#   PostgreSQL       127.0.0.1:5434                      (bancos helpdesk e zitadel)
+
+name: helpdesk
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:17.10-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-postgres}
+      POSTGRES_DB: postgres
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5434}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Cria o role e o banco `helpdesk` e o banco `zitadel` na primeira subida.
+      - ./deploy/local/postgres/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - helpdesk
+
+  zitadel-api:
+    image: ghcr.io/zitadel/zitadel:${ZITADEL_VERSION:-v4.19.5}
+    restart: unless-stopped
+    user: '0'
+    command: start-from-init --masterkey "${ZITADEL_MASTERKEY:-MasterkeyNeedsToHave32Characters}"
+    environment:
+      ZITADEL_PORT: 8080
+      ZITADEL_EXTERNALDOMAIN: ${ZITADEL_DOMAIN:-localhost}
+      ZITADEL_EXTERNALPORT: ${ZITADEL_EXTERNALPORT:-8080}
+      ZITADEL_EXTERNALSECURE: 'false'
+      ZITADEL_TLS_ENABLED: 'false'
+
+      # Em dev o Zitadel usa o superusuário do Postgres; em produção, um role próprio (DBaaS).
+      ZITADEL_DATABASE_POSTGRES_DSN: postgresql://postgres:${POSTGRES_ADMIN_PASSWORD:-postgres}@postgres:5432/zitadel?sslmode=disable
+
+      # Primeira instância: organização e admin humano.
+      ZITADEL_FIRSTINSTANCE_ORG_NAME: ${ZITADEL_ORG_NAME:-Missão Salesiana de Mato Grosso}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: ${ZITADEL_ADMIN_USERNAME:-zitadel-admin}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD:-Password1!}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: 'false'
+
+      # Service user do Login V2. O PAT é gravado em ./.local/zitadel e lido pelo contêiner zitadel-login.
+      ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH: /zitadel/bootstrap/login-client.pat
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME: login-client
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_NAME: Login client (Login V2)
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_PAT_EXPIRATIONDATE: '2099-01-01T00:00:00Z'
+
+      # Service user de administração, para scripts locais de bootstrap (projeto, app, roles).
+      ZITADEL_FIRSTINSTANCE_PATPATH: /zitadel/bootstrap/admin.pat
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: bootstrap-admin
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: Bootstrap admin (scripts locais)
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: '2099-01-01T00:00:00Z'
+
+      # Login V2 obrigatório, servido pelo contêiner zitadel-login através do Traefik.
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: 'true'
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: http://${ZITADEL_DOMAIN:-localhost}:${ZITADEL_EXTERNALPORT:-8080}/ui/v2/login/
+      ZITADEL_OIDC_DEFAULTLOGINURLV2: http://${ZITADEL_DOMAIN:-localhost}:${ZITADEL_EXTERNALPORT:-8080}/ui/v2/login/login?authRequest=
+      ZITADEL_OIDC_DEFAULTLOGOUTURLV2: http://${ZITADEL_DOMAIN:-localhost}:${ZITADEL_EXTERNALPORT:-8080}/ui/v2/login/logout?post_logout_redirect=
+      ZITADEL_SAML_DEFAULTLOGINURLV2: http://${ZITADEL_DOMAIN:-localhost}:${ZITADEL_EXTERNALPORT:-8080}/ui/v2/login/login?samlRequest=
+
+      ZITADEL_LOGSTORE_ACCESS_STDOUT_ENABLED: 'false'
+    healthcheck:
+      test: ['CMD', '/app/zitadel', 'ready']
+      interval: 10s
+      timeout: 30s
+      retries: 12
+      start_period: 20s
+    volumes:
+      - ./.local/zitadel:/zitadel/bootstrap:rw
+    networks:
+      - helpdesk
+    depends_on:
+      postgres:
+        condition: service_healthy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=helpdesk
+      - traefik.http.services.zitadel-api.loadbalancer.server.port=8080
+      # gRPC, Connect-RPC e HTTP passam pelo mesmo backend h2c.
+      - traefik.http.services.zitadel-api.loadbalancer.server.scheme=h2c
+      - traefik.http.routers.zitadel-api.rule=!PathPrefix(`/ui/v2/login`) && !Path(`/`)
+      - traefik.http.routers.zitadel-api.entrypoints=web
+      - traefik.http.routers.zitadel-api.service=zitadel-api
+      - traefik.http.routers.zitadel-api.priority=100
+
+  zitadel-login:
+    image: ghcr.io/zitadel/zitadel-login:${ZITADEL_VERSION:-v4.19.5}
+    restart: unless-stopped
+    user: '0'
+    environment:
+      ZITADEL_API_URL: http://zitadel-api:8080
+      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /zitadel/bootstrap/login-client.pat
+      # Assina o cookie de sessão do Login V2 (obrigatório a partir da v4.19.2). Mínimo 32 caracteres.
+      ZITADEL_SESSION_COOKIE_SECRET: ${LOGIN_SESSION_COOKIE_SECRET:-SessionCookieSecretNeedsAtLeast32Chars}
+      CUSTOM_REQUEST_HEADERS: Host:${ZITADEL_DOMAIN:-localhost},X-Forwarded-Proto:http
+    healthcheck:
+      test:
+        [
+          'CMD',
+          '/bin/sh',
+          '-c',
+          'node /app/healthcheck.mjs http://localhost:3000/ui/v2/login/healthy',
+        ]
+      interval: 10s
+      timeout: 30s
+      retries: 12
+      start_period: 20s
+    volumes:
+      - ./.local/zitadel:/zitadel/bootstrap:ro
+    networks:
+      - helpdesk
+    depends_on:
+      zitadel-api:
+        condition: service_healthy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=helpdesk
+      - traefik.http.services.zitadel-login.loadbalancer.server.port=3000
+      # http://localhost:8080/ abre a tela de login.
+      - traefik.http.middlewares.zitadel-root-rewrite.replacepath.path=/ui/v2/login/
+      - traefik.http.routers.zitadel-root.rule=Path(`/`)
+      - traefik.http.routers.zitadel-root.entrypoints=web
+      - traefik.http.routers.zitadel-root.middlewares=zitadel-root-rewrite
+      - traefik.http.routers.zitadel-root.service=zitadel-login
+      - traefik.http.routers.zitadel-root.priority=400
+      - traefik.http.routers.zitadel-login.rule=PathPrefix(`/ui/v2/login`)
+      - traefik.http.routers.zitadel-login.entrypoints=web
+      - traefik.http.routers.zitadel-login.service=zitadel-login
+      - traefik.http.routers.zitadel-login.priority=250
+
+  proxy:
+    # Mesma tecnologia do ingress em produção. Em dev, só o entrypoint HTTP na porta 8080.
+    image: ${TRAEFIK_IMAGE:-traefik:v3.7.7}
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=helpdesk
+      - --entrypoints.web.address=:80
+      - --ping=true
+      - --ping.entrypoint=web
+      - --log.level=WARN
+      - --accesslog=false
+    ports:
+      - '${ZITADEL_EXTERNALPORT:-8080}:80'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - helpdesk
+    depends_on:
+      zitadel-api:
+        condition: service_healthy
+      zitadel-login:
+        condition: service_healthy
+
+  mailpit:
+    # Captura todo e-mail enviado em dev. UI em http://localhost:8025.
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.31.6}
+    restart: unless-stopped
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: '1'
+      MP_SMTP_AUTH_ALLOW_INSECURE: '1'
+    ports:
+      - '${MAILPIT_UI_PORT:-8025}:8025'
+      - '${MAILPIT_SMTP_PORT:-1025}:1025'
+    networks:
+      - helpdesk
+
+networks:
+  helpdesk:
+    name: helpdesk
+
+volumes:
+  postgres-data:

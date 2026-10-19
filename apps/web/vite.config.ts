@@ -1,8 +1,11 @@
 import react from '@vitejs/plugin-react';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   plugins: [react()],
+  // O .env fica na raiz do monorepo e é compartilhado com a API e o Docker Compose.
+  envDir: fileURLToPath(new URL('../..', import.meta.url)),
   server: {
     port: 5173,
     proxy: {
