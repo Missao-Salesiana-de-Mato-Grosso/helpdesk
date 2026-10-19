@@ -21,9 +21,9 @@ describe('GET /api/health (e2e)', () => {
     await app.close();
   });
 
-  it('returns 200 with status ok', async () => {
+  it('returns 200 with the database up', async () => {
     const response = await request(app.getHttpServer()).get('/api/health').expect(200);
-    expect(response.body).toMatchObject({ status: 'ok' });
+    expect(response.body).toMatchObject({ status: 'ok', details: { database: { status: 'up' } } });
   });
 
   it('is served under the /api prefix only', async () => {

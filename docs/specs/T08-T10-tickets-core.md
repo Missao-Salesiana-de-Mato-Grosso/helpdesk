@@ -293,7 +293,7 @@ Leia docs/specs/T08-T10-tickets-core.md e o CLAUDE.md. Nesta sessão vamos imple
 Antes de escrever código, apresente um plano com:
 1. arquivos a criar ou alterar (módulo tickets: controller, service, repository com ticketScope, mappers de resposta; schemas zod em packages/shared; sanitizeHtml em common/; fixture de teste compartilhada com os usuários e grupos descritos em §9);
 2. a ordem de implementação;
-3. como cada CT vira um teste e2e (Supertest + Testcontainers) ou unitário.
+3. como cada CT vira um teste e2e (Supertest contra o banco de testes) ou unitário.
 
 Aguarde minha aprovação. Depois implemente, nomeando cada teste com o identificador do CT. Ao final rode pnpm typecheck, pnpm lint e pnpm test e me mostre o resultado. Não implemente PATCH nem mensagens nesta sessão.
 ```

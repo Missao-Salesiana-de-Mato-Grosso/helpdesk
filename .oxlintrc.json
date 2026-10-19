@@ -14,7 +14,13 @@
     ],
     "no-console": "warn"
   },
-  "ignorePatterns": ["**/dist/**", "**/node_modules/**", "**/coverage/**", "**/*.d.ts"],
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/coverage/**",
+    "**/*.d.ts",
+    "apps/api/src/generated/**"
+  ],
   "overrides": [
     {
       "files": ["apps/web/**/*.{ts,tsx}"],

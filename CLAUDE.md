@@ -27,10 +27,10 @@ pnpm infra:reset                     # apaga volumes (Zitadel e bancos do zero)
 pnpm dev                             # shared (tsc --watch) + api (:3000, nest --watch) + web (:5173, proxy /api → :3000)
 pnpm test                            # vitest em todos os pacotes
 pnpm --filter @helpdesk/api test:unit      # só *.spec.ts
-pnpm --filter @helpdesk/api test:e2e       # só test/**/*.e2e-spec.ts (Testcontainers a partir da T03)
+pnpm --filter @helpdesk/api test:e2e       # só test/**/*.e2e-spec.ts (usa o banco helpdesk_test; exige a infra local)
 pnpm typecheck && pnpm lint && pnpm format:check
-pnpm --filter @helpdesk/api prisma migrate dev --name <nome>   # a partir da T03
-pnpm --filter @helpdesk/api prisma db seed
+pnpm --filter @helpdesk/api prisma:migrate -- --name <nome>   # nova migração (dev)
+pnpm --filter @helpdesk/api prisma:seed                      # dados de referência (idempotente)
 ```
 
 Antes de dar uma tarefa como concluída, **sempre** rode `pnpm typecheck`, `pnpm lint`, `pnpm test` e `pnpm format:check`.
@@ -44,6 +44,8 @@ Antes de dar uma tarefa como concluída, **sempre** rode `pnpm typecheck`, `pnpm
 - `companies` são as unidades (escolas/obras; na UI, "Unidade") e `departments` os setores. `company_id` do ticket vem do solicitante e pode ser nulo quando o ticket chega por e-mail de alguém sem unidade; **resolver exige unidade**. Quem faz login precisa informar unidade e departamento antes de abrir ticket (tela de 1º acesso).
 - Usuários com `is_external = true` (terceiros) nunca fazem login e só interagem por e-mail. Usuários sem `zitadel_sub` criados pelo canal de e-mail são vinculados pelo e-mail no 1º login. Um módulo não acessa as tabelas de outro diretamente: usa o service exportado.
 - Prisma só dentro de services e repositories, nunca em controllers.
+- Prisma 7: o client é **gerado em TypeScript** em `apps/api/src/generated/prisma` (gitignored; `prisma generate` roda no `postinstall` e antes de build, typecheck e test). Importe de `../generated/prisma/client.js`. Config da CLI em `apps/api/prisma.config.ts`; migrações em `apps/api/prisma/migrations`. Os enums do Prisma (`TicketStatus` etc.) são os enums de domínio.
+- Migrações já aplicadas não se editam: crie uma nova com `prisma:migrate -- --name <nome>` e revise o SQL gerado antes de commitar.
 - Enums de domínio: status `open | pending | resolved | closed`; prioridade `low | medium | high | urgent`; tipo de mensagem `public | internal`.
 
 ## Regras de segurança (inegociáveis)
@@ -75,7 +77,7 @@ Antes de dar uma tarefa como concluída, **sempre** rode `pnpm typecheck`, `pnpm
 
 ## Testes
 
-- API: Vitest com `globals: true` (`describe`, `it`, `expect` sem import). Unitários junto ao código (`*.spec.ts`), e2e em `apps/api/test/*.e2e-spec.ts` com Supertest (+ Testcontainers PostgreSQL a partir da T03).
+- API: Vitest com `globals: true` (`describe`, `it`, `expect` sem import). Unitários junto ao código (`*.spec.ts`), e2e em `apps/api/test/*.e2e-spec.ts` com Supertest contra o banco `helpdesk_test` do docker-compose (exige `pnpm infra:up`); os arquivos rodam em série e usam `truncateAll()` de `test/setup/db.ts` no `beforeEach`.
 - Web: Vitest + Testing Library + jsdom, arquivos `*.test.tsx` ao lado do componente, imports explícitos de `vitest`.
 - Shared: Vitest, arquivos `*.test.ts`.
 - E-mail: fixtures `.eml` em `apps/api/test/fixtures` processadas pelo driver `folder`. Os testes nunca tocam o Gmail.

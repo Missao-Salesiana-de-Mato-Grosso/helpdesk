@@ -353,7 +353,7 @@ helpdesk/
 │   │   │   ├── notifications/   # outbox, templates, cron de envio, Message-ID
 │   │   │   ├── inbound-email/   # MailboxSource (imap | folder), parser, threading, anti-loop, cron
 │   │   │   └── health/
-│   │   └── test/                # e2e (supertest + Testcontainers Postgres)
+│   │   └── test/                # e2e (supertest, banco helpdesk_test do compose)
 │   │       └── fixtures/        # .eml de exemplo: novo, resposta, auto-resposta, com anexo
 │   └── web/                     # React + Vite
 │       └── src/

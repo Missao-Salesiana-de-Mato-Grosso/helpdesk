@@ -35,6 +35,9 @@ pnpm lint              # oxlint (type-aware)
 pnpm format            # prettier
 pnpm infra:down        # para os contêineres (mantém os dados)
 pnpm infra:reset       # apaga os volumes: Zitadel e bancos voltam do zero
+pnpm --filter @helpdesk/api prisma:migrate -- --name <nome>   # nova migração (dev)
+pnpm --filter @helpdesk/api prisma:seed                      # dados de referência
+pnpm --filter @helpdesk/api prisma:studio                    # navegar no banco
 ```
 
 Depois de clonar, rode `pnpm build` uma vez: a API e o front consomem o `dist/` do `packages/shared`.

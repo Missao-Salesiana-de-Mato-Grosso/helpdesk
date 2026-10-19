@@ -1,0 +1,354 @@
+// Modelo de dados do help desk. Referência: docs/discovery/03-arquitetura.md §3.5 e as specs em docs/specs/.
+// Convenções: identificadores em inglês; tabelas e colunas em snake_case via @map; timestamps com fuso.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  runtime             = "nodejs"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────────── enums ─────────────────────────────
+
+enum TicketStatus {
+  open
+  pending
+  resolved
+  closed
+
+  @@map("ticket_status")
+}
+
+enum TicketPriority {
+  low
+  medium
+  high
+  urgent
+
+  @@map("ticket_priority")
+}
+
+enum TicketSource {
+  portal
+  agent
+  email
+
+  @@map("ticket_source")
+}
+
+enum MessageKind {
+  public
+  internal
+
+  @@map("message_kind")
+}
+
+enum MessageVia {
+  portal
+  email
+
+  @@map("message_via")
+}
+
+enum NotificationStatus {
+  pending
+  sent
+  failed
+
+  @@map("notification_status")
+}
+
+enum InboundEmailStatus {
+  processed
+  discarded
+  failed
+
+  @@map("inbound_email_status")
+}
+
+enum EmailDirection {
+  inbound
+  outbound
+
+  @@map("email_direction")
+}
+
+// ───────────────────────────── pessoas e organização ─────────────────────────────
+
+/// Colaboradores (com login pelo Zitadel), contatos criados por e-mail e terceiros.
+model User {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// `sub` do Zitadel. Nulo para quem nunca fez login (criado pelo canal de e-mail) e para terceiros.
+  zitadelSub      String?   @unique @map("zitadel_sub")
+  email           String    @unique @db.Citext
+  name            String
+  /// Unidade (escola/obra). Nulo até o 1º acesso ou a triagem de um ticket vindo por e-mail.
+  companyId       String?   @map("company_id") @db.Uuid
+  departmentId    String?   @map("department_id") @db.Uuid
+  /// Terceiro: só interage por e-mail e nunca faz login.
+  isExternal      Boolean   @default(false) @map("is_external")
+  /// Cache das roles do token (admin, supervisor, agente). Vazio = solicitante.
+  roles           String[]  @default([])
+  active          Boolean   @default(true)
+  lastLoginAt     DateTime? @map("last_login_at") @db.Timestamptz(6)
+  profileSyncedAt DateTime? @map("profile_synced_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  company          Company?        @relation(fields: [companyId], references: [id])
+  department       Department?     @relation(fields: [departmentId], references: [id])
+  groupMemberships GroupMember[]
+  requestedTickets Ticket[]        @relation("TicketRequester")
+  assignedTickets  Ticket[]        @relation("TicketAssignee")
+  messages         TicketMessage[]
+  events           TicketEvent[]
+
+  @@index([companyId])
+  @@map("users")
+}
+
+/// Unidade da Missão (escola, obra, sede). Na UI aparece como "Unidade".
+model Company {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  users   User[]
+  tickets Ticket[]
+
+  @@map("companies")
+}
+
+/// Setor do colaborador (Secretaria, Financeiro, Pedagógico...).
+model Department {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  users User[]
+
+  @@map("departments")
+}
+
+/// Grupo de atendimento (fila de agentes).
+model Group {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @unique
+  /// Opcional: e-mail que recebe o aviso de ticket novo na fila.
+  email     String?  @db.Citext
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  members    GroupMember[]
+  tickets    Ticket[]
+  categories Category[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  groupId   String   @map("group_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+  @@index([userId])
+  @@map("group_members")
+}
+
+/// Categoria do ticket. Define o grupo que recebe o ticket na criação.
+model Category {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String   @unique
+  defaultGroupId String   @map("default_group_id") @db.Uuid
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  defaultGroup Group    @relation(fields: [defaultGroupId], references: [id])
+  tickets      Ticket[]
+
+  @@map("categories")
+}
+
+// ───────────────────────────── tickets ─────────────────────────────
+
+model Ticket {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Número sequencial exibido como #1001. A sequência começa em 1001 (ver migração inicial).
+  number          Int            @unique @default(autoincrement())
+  subject         String
+  status          TicketStatus   @default(open)
+  priority        TicketPriority @default(medium)
+  source          TicketSource
+  requesterId     String         @map("requester_id") @db.Uuid
+  assigneeId      String?        @map("assignee_id") @db.Uuid
+  groupId         String         @map("group_id") @db.Uuid
+  categoryId      String         @map("category_id") @db.Uuid
+  /// Unidade. Nulo quando o ticket chega por e-mail de alguém sem unidade; obrigatório para resolver.
+  companyId       String?        @map("company_id") @db.Uuid
+  /// Reservado para a Fase 2 (campos customizados).
+  customFields    Json?          @map("custom_fields")
+  /// Locking otimista: todo PATCH envia a versão atual.
+  version         Int            @default(1)
+  firstResponseAt DateTime?      @map("first_response_at") @db.Timestamptz(6)
+  resolvedAt      DateTime?      @map("resolved_at") @db.Timestamptz(6)
+  closedAt        DateTime?      @map("closed_at") @db.Timestamptz(6)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  requester     User              @relation("TicketRequester", fields: [requesterId], references: [id])
+  assignee      User?             @relation("TicketAssignee", fields: [assigneeId], references: [id])
+  group         Group             @relation(fields: [groupId], references: [id])
+  category      Category          @relation(fields: [categoryId], references: [id])
+  company       Company?          @relation(fields: [companyId], references: [id])
+  messages      TicketMessage[]
+  events        TicketEvent[]
+  notifications Notification[]
+  inboundEmails InboundEmail[]
+  emailRefs     EmailMessageRef[]
+
+  @@index([status, groupId])
+  @@index([assigneeId, status])
+  @@index([requesterId])
+  @@index([companyId, status])
+  @@index([updatedAt(sort: Desc)])
+  @@map("tickets")
+}
+
+/// Mensagem da conversa: resposta pública ou nota interna.
+model TicketMessage {
+  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId  String      @map("ticket_id") @db.Uuid
+  authorId  String      @map("author_id") @db.Uuid
+  kind      MessageKind
+  via       MessageVia
+  /// HTML já sanitizado (sanitize-html, allowlist em docs/specs/T08-T10-tickets-core.md §7).
+  bodyHtml  String      @map("body_html")
+  /// Trecho citado de um e-mail de resposta. A UI mostra recolhido.
+  quotedHtml String?    @map("quoted_html")
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  ticket      Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author      User         @relation(fields: [authorId], references: [id])
+  attachments Attachment[]
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_messages")
+}
+
+model Attachment {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId  String   @map("message_id") @db.Uuid
+  storageKey String   @map("storage_key")
+  filename   String
+  mimeType   String   @map("mime_type")
+  sizeBytes  Int      @map("size_bytes")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  message TicketMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("attachments")
+}
+
+/// Histórico e trilha de auditoria. Append-only: a aplicação nunca faz UPDATE ou DELETE aqui.
+model TicketEvent {
+  id        BigInt   @id @default(autoincrement())
+  ticketId  String   @map("ticket_id") @db.Uuid
+  actorId   String   @map("actor_id") @db.Uuid
+  /// created | message_added | status_changed | priority_changed | assigned | group_changed | category_changed | company_changed
+  type      String
+  data      Json     @default("{}")
+  ip        String?  @db.Inet
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actor  User   @relation(fields: [actorId], references: [id])
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_events")
+}
+
+// ───────────────────────────── e-mail ─────────────────────────────
+
+/// Outbox de e-mails. Gravada na mesma transação do evento e enviada por cron.
+model Notification {
+  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId       String?            @map("ticket_id") @db.Uuid
+  toEmail        String             @map("to_email")
+  template       String
+  payload        Json
+  status         NotificationStatus @default(pending)
+  attempts       Int                @default(0)
+  lastError      String?            @map("last_error")
+  sendAfter      DateTime           @default(now()) @map("send_after") @db.Timestamptz(6)
+  sentAt         DateTime?          @map("sent_at") @db.Timestamptz(6)
+  /// Message-ID gerado no envio, para threading das respostas.
+  emailMessageId String?            @map("email_message_id")
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  ticket Ticket? @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([status, sendAfter])
+  @@map("notifications")
+}
+
+/// Inbox: cada e-mail lido da caixa, para idempotência e auditoria.
+model InboundEmail {
+  id            String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId     String             @unique @map("message_id")
+  imapUid       BigInt?            @map("imap_uid")
+  ticketId      String?            @map("ticket_id") @db.Uuid
+  fromEmail     String             @map("from_email") @db.Citext
+  subject       String?
+  /// Chave do .eml bruto no storage.
+  rawStorageKey String?            @map("raw_storage_key")
+  status        InboundEmailStatus
+  /// Motivo do descarte ou mensagem do erro.
+  reason        String?
+  receivedAt    DateTime           @map("received_at") @db.Timestamptz(6)
+  processedAt   DateTime?          @map("processed_at") @db.Timestamptz(6)
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  ticket Ticket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+
+  @@index([fromEmail, receivedAt])
+  @@index([ticketId])
+  @@map("inbound_emails")
+}
+
+/// Mapa Message-ID → ticket, para ligar respostas por In-Reply-To/References.
+model EmailMessageRef {
+  messageId String         @id @map("message_id")
+  ticketId  String         @map("ticket_id") @db.Uuid
+  direction EmailDirection
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("email_message_refs")
+}
+
+/// Chave/valor para estado operacional (ex.: cursor `mailbox.last_uid`).
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("app_settings")
+}

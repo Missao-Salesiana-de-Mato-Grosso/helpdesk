@@ -8,6 +8,9 @@ build/
 *.tsbuildinfo
 coverage/
 
+# gerado pelo prisma generate
+apps/api/src/generated/
+
 # env and secrets
 .env
 .env.*
