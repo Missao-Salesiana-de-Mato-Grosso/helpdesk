@@ -25,7 +25,7 @@
 **Veredito sobre o prazo:** o escopo completo de paridade com o Freshdesk não cabe em 5 dias com 1 desenvolvedor. E, como o e-mail é o canal principal, a abertura de tickets por e-mail **não pode ficar para a Fase 2**: entra no MVP e custa cerca de 1,5 dia a mais. Por isso o plano passa a ter duas datas:
 
 - **Sábado 24/10:** portal e login no ar, para os agentes testarem (soft launch).
-- **Terça 27/10:** virada do `suporte@` (remove-se o encaminhamento para o Freshdesk). Esta é a data que importa para o usuário final.
+- **Terça 27/10:** virada do `suporte@` (desconecta-se a caixa no admin do Freshdesk). Esta é a data que importa para o usuário final.
 
 O Freshdesk segue até ~08/11 só concluindo os tickets antigos, o que dá margem segura. Se preferir manter 24/10 como data única, o custo é entrar no ar **sem** o canal de e-mail, o que contraria o hábito de todo mundo. Não recomendo.
 
@@ -43,7 +43,7 @@ O Freshdesk segue até ~08/11 só concluindo os tickets antigos, o que dá marge
 6. **Magalu Cloud:** Kubernetes gerenciado, PostgreSQL via DBaaS (bancos separados para Zitadel e help desk), Object Storage para anexos e `.eml` brutos, Traefik e cert-manager. **Contingência:** VM com Docker Compose se o cluster não estiver pronto no fim do dia 1.
 7. **Sem Redis, filas, WebSocket ou motor de busca** no MVP. Polling, locking otimista, `@nestjs/schedule` e tabelas _outbox_ (saída) e _inbox_ (entrada).
 
-**Maiores riscos:** (a) infraestrutura do Zitadel no Kubernetes consumir mais de 1 dia; (b) a virada da caixa `suporte@` gerar duplicidade ou perda de e-mails, o que é mitigado por testar antes numa caixa `suporte-teste@` e por fazer a virada removendo o encaminhamento, com rollback imediato.
+**Maiores riscos:** (a) infraestrutura do Zitadel no Kubernetes consumir mais de 1 dia; (b) a virada da caixa `suporte@` gerar duplicidade ou perda de e-mails, o que é mitigado por testar antes numa caixa `suporte-teste@` e por fazer a virada desconectando a caixa no Freshdesk, com rollback imediato.
 
 **Ação imediata:** criar a caixa `suporte-teste@missaosalesiana.org.br` (usuário, verificação em 2 etapas, senha de app) e responder às perguntas 13 a 16 de [06-perguntas-abertas.md](06-perguntas-abertas.md) até quarta.
 
@@ -65,12 +65,16 @@ O Freshdesk segue até ~08/11 só concluindo os tickets antigos, o que dá marge
 | Migração do histórico                | Não agora                                                                                             | Fora do plano. Só o export de segurança                                                        |
 | Estrutura                            | Agentes, **empresas** (= unidades/escolas), **departamentos**; permissões básicas por usuário e grupo | `companies` e `departments` no MVP                                                             |
 | DPO                                  | Samuel Rees (DataGuardian)                                                                            | Validar base legal e aviso de privacidade                                                      |
+| Como o Freshdesk recebe o e-mail     | Lê a caixa diretamente                                                                                | Virada = desconectar a caixa no Freshdesk. Leitor IMAP por UID, ignorando a flag de lido       |
+| Por onde os agentes respondem        | Pelo Freshdesk                                                                                        | Respostas pelo portal                                                                          |
+| Outras caixas                        | Não                                                                                                   | Uma caixa só                                                                                   |
+| `msmt.org.br` tem e-mail?            | Não, é domínio de serviço                                                                             | Só `missaosalesiana.org.br` é domínio interno                                                  |
 
 ## Premissas que continuam valendo
 
-- O domínio institucional do Workspace é `missaosalesiana.org.br`. Se `msmt.org.br` também for domínio do Workspace, as contas dos dois funcionam: um app OAuth "Internal" aceita qualquer domínio da organização.
+- O único domínio de e-mail é `missaosalesiana.org.br`. `msmt.org.br` é domínio de serviço (app e Zitadel), sem e-mail. Logo `INTERNAL_EMAIL_DOMAINS=missaosalesiana.org.br` (confirmado em 19/10).
 - `suporte@missaosalesiana.org.br` é uma **caixa de usuário** do Gmail, não um Grupo do Google (confirmado em 19/10). IMAP funciona direto nela.
-- Hoje a caixa `suporte@` encaminha para um endereço do Freshdesk. A virada consiste em remover esse encaminhamento.
-- Agentes respondem pelo portal. Se um agente responder ao e-mail de notificação a partir da própria conta, o sistema reconhece e registra como resposta pública dele (regra barata, incluída no MVP).
+- O Freshdesk lê a caixa `suporte@` diretamente; não há encaminhamento (confirmado em 19/10). A virada consiste em desconectar a caixa no admin do Freshdesk, com rollback por reconexão. Enquanto os dois sistemas estiverem ligados à mesma caixa, os dois criam tickets.
+- Agentes respondem pelo portal, como hoje fazem dentro do Freshdesk (confirmado em 19/10). Se um agente responder ao e-mail de notificação a partir da própria conta, o sistema registra como resposta pública dele, sem custo extra.
 - A interface é em pt-BR, e o código e os identificadores ficam em inglês.
 - Versão do Zitadel: **v4.19.5** (a mais recente em 15/10/2026). O Zitadel **não possui canal LTS**: as versões saem continuamente na linha 4.x. Fixe a versão explicitamente no Helm.

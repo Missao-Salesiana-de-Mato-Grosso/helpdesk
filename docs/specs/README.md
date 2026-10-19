@@ -2,12 +2,12 @@
 
 Uma spec por tarefa (ou grupo de tarefas) do backlog em `docs/discovery/05-plano-mvp.md`, escrita **na véspera** da sessão do Claude Code que vai implementá-la. Só as tarefas em que a ambiguidade custa caro ganham spec; para as demais, a linha do backlog basta.
 
-| Spec                                               | Tarefas                        | Status                                          | Sessão prevista |
-| -------------------------------------------------- | ------------------------------ | ----------------------------------------------- | --------------- |
-| [T04-T05-auth-jit.md](T04-T05-auth-jit.md)         | T04, T05 (+ contrato para T06) | pronta                                          | ter 20/10       |
-| [T08-T10-tickets-core.md](T08-T10-tickets-core.md) | T08, T09, T10                  | pronta                                          | qua 21/10       |
-| T14-notifications.md                               | T14                            | a escrever (qua 21/10)                          | qua 21/10       |
-| T21-inbound-email.md                               | T21                            | a escrever (qua 21/10, após as perguntas 12–16) | qui 22/10       |
+| Spec                                               | Tarefas                        | Status                 | Sessão prevista |
+| -------------------------------------------------- | ------------------------------ | ---------------------- | --------------- |
+| [T04-T05-auth-jit.md](T04-T05-auth-jit.md)         | T04, T05 (+ contrato para T06) | pronta                 | ter 20/10       |
+| [T08-T10-tickets-core.md](T08-T10-tickets-core.md) | T08, T09, T10                  | pronta                 | qua 21/10       |
+| T14-notifications.md                               | T14                            | a escrever (qua 21/10) | qua 21/10       |
+| T21-inbound-email.md                               | T21                            | a escrever (qua 21/10) | qui 22/10       |
 
 ## Como usar uma spec numa sessão do Claude Code
 
