@@ -12,15 +12,7 @@ import {
 } from './setup/auth.js';
 import { truncateAll } from './setup/db.js';
 
-// Rotas só de teste. `GET /tickets` é um dublê até a T08 criar a rota real (CT-26, CT-28).
-@Controller('tickets')
-class TicketsStubController {
-  @Get()
-  list(): unknown[] {
-    return [];
-  }
-}
-
+// Rotas só de teste, para exercitar @Roles e @AllowDuringOnboarding.
 @Controller('probe')
 class ProbeController {
   @Get('supervisor')
@@ -49,7 +41,7 @@ describe('auth e JIT (spec T04–T05, e2e)', () => {
   let t: TestApp;
 
   beforeAll(async () => {
-    t = await createTestApp({ controllers: [TicketsStubController, ProbeController] });
+    t = await createTestApp({ controllers: [ProbeController] });
   });
 
   afterAll(async () => {

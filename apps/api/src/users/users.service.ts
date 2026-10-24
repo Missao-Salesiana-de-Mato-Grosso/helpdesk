@@ -34,6 +34,10 @@ export interface NewLoginUser {
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
+  findById(id: string): Promise<UserWithGroupIds | null> {
+    return this.prisma.user.findUnique({ where: { id }, ...userWithGroupIds });
+  }
+
   findBySub(zitadelSub: string): Promise<UserWithGroupIds | null> {
     return this.prisma.user.findUnique({ where: { zitadelSub }, ...userWithGroupIds });
   }
@@ -77,6 +81,11 @@ export class UsersService {
 
   findProfile(id: string): Promise<UserProfile | null> {
     return this.prisma.user.findUnique({ where: { id }, ...userProfile });
+  }
+
+  /** Grava a unidade no usuário (triagem de ticket, RN-28 da spec T08–T10). */
+  async setCompany(id: string, companyId: string): Promise<void> {
+    await this.prisma.user.update({ where: { id }, data: { companyId } });
   }
 
   setCompanyAndDepartment(

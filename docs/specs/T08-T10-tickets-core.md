@@ -1,6 +1,6 @@
 # Spec T08–T10 — Tickets: criação, leitura, atualização e mensagens
 
-> Status: pronta · Tarefas: T08 (criar e ler), T09 (atualizar), T10 (mensagens) · Depende de: T03, T04–T05 · Consumida por: T11, T12 (front), T13 (anexos), T14 (notificações), T21 (e-mail) · Revisada em: 19/10/2026
+> Status: T08 implementada (24/10/2026); T09–T10 pendentes · Tarefas: T08 (criar e ler), T09 (atualizar), T10 (mensagens) · Depende de: T03, T04–T05 · Consumida por: T11, T12 (front), T13 (anexos), T14 (notificações), T21 (e-mail) · Revisada em: 19/10/2026
 
 ## 1. Objetivo
 
@@ -281,7 +281,20 @@ Fixture base: unidades U1, U2; grupos G1, G2; categoria C1 (grupo padrão G1), C
 
 ## 10. Decisões tomadas na implementação
 
-_(preencher após a sessão)_
+### T08 (24/10/2026)
+
+- **Barramento de eventos:** `@nestjs/event-emitter` (aprovado na sessão). `ticket.created` é emitido **depois do commit**, com `{ ticketId, number, actorId, requesterId, source }`.
+- **Ator:** os services recebem `TicketActor` (`id`, `roles`, `groupIds`, `companyId`), que o `CurrentUser` satisfaz. A resolução do `system@helpdesk.local` como ator fica para a T21, que é quem o usa.
+- **Retorno de escrita:** `TicketsRepository.loadAfterWrite` é a única leitura sem `ticketScope`, usada só para devolver o resultado de uma escrita já autorizada (ex.: agente que abre chamado numa categoria de outro grupo; PATCH que move o ticket). Ainda aplica o filtro de mensagens e eventos internos.
+- **`requesterId` inexistente** → `422 INACTIVE_REFERENCE`. A unidade resultante (do corpo ou herdada do solicitante) também precisa estar ativa.
+- **CT-04** é testado direto no `TicketsService`: pelo HTTP, quem não tem unidade é barrado antes pelo guard (`403 ONBOARDING_REQUIRED`, spec T04–T05). A regra continua valendo para os outros chamadores (T21).
+- **`lastMessageAt`** da listagem respeita a visibilidade: nota interna não "move" o ticket para o solicitante.
+- **`number`** ficou `int` (T03), não `bigint`: cabe 2 bilhões de tickets. `q` numérico acima disso não casa nada.
+- **`events[].id`** é serializado como **string** (`bigserial` não cabe em JSON number com segurança).
+- **IP (RN-40):** primeiro valor de `X-Forwarded-For`, validado com `net.isIP` (inválido → `null`). Depende de o Traefik **não** confiar em `X-Forwarded-For` vindo do cliente (padrão do Traefik sem `forwardedHeaders.trustedIPs`), senão o primeiro valor é falsificável. Registrar no deploy (T17).
+- **Sanitização:** além da §7, imagens `data:` também são removidas; `htmlHasContent` considera `<img>` http(s) como conteúdo.
+- Matriz de permissões: `POST /tickets`, `GET /tickets`, `GET /tickets/counters` e `GET /tickets/:id` (no escopo e fora dele, que dá 404) × 5 papéis.
+- O dublê de `GET /api/tickets` da suíte de auth foi removido; CT-26/CT-28 da T04–T05 usam a rota real.
 
 ## 11. Prompt sugerido para a sessão
 

@@ -9,3 +9,4 @@ export {
   type Role,
   type UpdateMeInput,
 } from './schemas/me.js';
+export * from './schemas/tickets.js';

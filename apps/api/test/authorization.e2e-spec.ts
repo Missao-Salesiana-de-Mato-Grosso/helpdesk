@@ -15,18 +15,27 @@ const ACTORS: { actor: Actor; roles: string[] }[] = [
 const ALL_ACTORS: Actor[] = ['anonimo', ...ACTORS.map((a) => a.actor)];
 
 interface RouteCase {
-  method: 'get' | 'patch';
-  path: string;
+  method: 'get' | 'patch' | 'post';
+  /** Pode depender dos dados criados no beforeEach (ex.: id de um ticket). */
+  path: string | ((ref: Refs) => string);
   body?: (ref: Refs) => object;
+  /** Nome no relatório quando `path` é uma função. */
+  label?: string;
   expected: Record<Actor, number>;
 }
 
 interface Refs {
   companyId: string;
   departmentId: string;
+  categoryId: string;
+  /** Ticket aberto pelo solicitante, no grupo do agente. */
+  ticketId: string;
+  /** Ticket de um terceiro, num grupo do qual o agente não participa. */
+  foreignTicketId: string;
 }
 
 const AUTHENTICATED = { anonimo: 401, solicitante: 200, agente: 200, supervisor: 200, admin: 200 };
+const AGENT_ONLY = { anonimo: 401, solicitante: 403, agente: 200, supervisor: 200, admin: 200 };
 
 const MATRIX: RouteCase[] = [
   {
@@ -43,6 +52,27 @@ const MATRIX: RouteCase[] = [
   },
   { method: 'get', path: '/api/companies', expected: AUTHENTICATED },
   { method: 'get', path: '/api/departments', expected: AUTHENTICATED },
+  {
+    method: 'post',
+    path: '/api/tickets',
+    body: (ref) => ({ subject: 'Teste', bodyHtml: '<p>x</p>', categoryId: ref.categoryId }),
+    expected: { anonimo: 401, solicitante: 201, agente: 201, supervisor: 201, admin: 201 },
+  },
+  { method: 'get', path: '/api/tickets', expected: AUTHENTICATED },
+  { method: 'get', path: '/api/tickets/counters', expected: AGENT_ONLY },
+  {
+    method: 'get',
+    path: (ref) => `/api/tickets/${ref.ticketId}`,
+    label: '/api/tickets/:id (do solicitante, grupo do agente)',
+    expected: AUTHENTICATED,
+  },
+  {
+    // Fora do escopo → 404 (não 403), para não revelar a existência.
+    method: 'get',
+    path: (ref) => `/api/tickets/${ref.foreignTicketId}`,
+    label: '/api/tickets/:id (fora do escopo)',
+    expected: { anonimo: 401, solicitante: 404, agente: 404, supervisor: 200, admin: 200 },
+  },
 ];
 
 describe('matriz de permissões (e2e)', () => {
@@ -63,10 +93,15 @@ describe('matriz de permissões (e2e)', () => {
     t.cache.clear();
     const company = await t.prisma.company.create({ data: { name: 'Sede' } });
     const department = await t.prisma.department.create({ data: { name: 'Secretaria' } });
-    refs = { companyId: company.id, departmentId: department.id };
+    const ownGroup = await t.prisma.group.create({ data: { name: 'Suporte TI' } });
+    const otherGroup = await t.prisma.group.create({ data: { name: 'Sistemas' } });
+    const category = await t.prisma.category.create({
+      data: { name: 'Geral', defaultGroupId: ownGroup.id },
+    });
+    const userIds = new Map<Actor, string>();
     for (const { actor, roles } of ACTORS) {
       const sub = `sub-${actor}`;
-      await t.prisma.user.create({
+      const user = await t.prisma.user.create({
         data: {
           zitadelSub: sub,
           email: `${actor}@missaosalesiana.org.br`,
@@ -78,22 +113,50 @@ describe('matriz de permissões (e2e)', () => {
           profileSyncedAt: new Date(),
         },
       });
+      userIds.set(actor, user.id);
       tokens.set(actor, await t.tokens.sign({ sub, roles }));
     }
+    await t.prisma.groupMember.create({
+      data: { groupId: ownGroup.id, userId: userIds.get('agente')! },
+    });
+    const external = await t.prisma.user.create({
+      data: { email: 'terceiro@exemplo.com', name: 'Terceiro', isExternal: true },
+    });
+    const ticket = (requesterId: string, groupId: string) =>
+      t.prisma.ticket.create({
+        data: {
+          subject: 'Matriz',
+          source: 'portal',
+          requesterId,
+          groupId,
+          categoryId: category.id,
+          companyId: company.id,
+        },
+        select: { id: true },
+      });
+    refs = {
+      companyId: company.id,
+      departmentId: department.id,
+      categoryId: category.id,
+      ticketId: (await ticket(userIds.get('solicitante')!, ownGroup.id)).id,
+      foreignTicketId: (await ticket(external.id, otherGroup.id)).id,
+    };
   });
 
   const cases = MATRIX.flatMap((route) =>
     ALL_ACTORS.map((actor) => ({
       ...route,
+      route: route.label ?? (typeof route.path === 'string' ? route.path : '?'),
       actor,
       status: route.expected[actor],
     })),
   );
 
   it.each(cases)(
-    '$method $path como $actor → $status',
+    '$method $route como $actor → $status',
     async ({ method, path, body, actor, status }) => {
-      let req = request(t.app.getHttpServer())[method](path);
+      const url = typeof path === 'string' ? path : path(refs);
+      let req = request(t.app.getHttpServer())[method](url);
       const token = tokens.get(actor);
       if (token) req = req.set('Authorization', `Bearer ${token}`);
       if (body) req = req.send(body(refs));
