@@ -1,3 +1,4 @@
+import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import type { ReactElement } from 'react';
@@ -5,6 +6,7 @@ import type { AuthContextProps } from 'react-oidc-context';
 import { MemoryRouter } from 'react-router';
 import { vi, type Mock } from 'vitest';
 import { ApiProvider } from '../api/ApiProvider.tsx';
+import { theme } from '../theme.ts';
 
 export type FakeAuth = AuthContextProps & { signinRedirect: Mock; signoutRedirect: Mock };
 
@@ -32,14 +34,17 @@ export function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
-/** Renderiza com Router em memória, React Query sem retry e o cliente da API. */
+/** Renderiza com Mantine, Router em memória, React Query sem retry e o cliente da API. */
 export function renderWithProviders(ui: ReactElement, { route = '/' } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // env="test" desliga transições e portais do Mantine, que o jsdom não anima.
   return render(
-    <MemoryRouter initialEntries={[route]}>
-      <QueryClientProvider client={queryClient}>
-        <ApiProvider>{ui}</ApiProvider>
-      </QueryClientProvider>
-    </MemoryRouter>,
+    <MantineProvider theme={theme} env="test">
+      <MemoryRouter initialEntries={[route]}>
+        <QueryClientProvider client={queryClient}>
+          <ApiProvider>{ui}</ApiProvider>
+        </QueryClientProvider>
+      </MemoryRouter>
+    </MantineProvider>,
   );
 }

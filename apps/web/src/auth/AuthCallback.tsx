@@ -1,5 +1,6 @@
+import { Button } from '@mantine/core';
 import { useAuth } from 'react-oidc-context';
-import { StatusScreen } from './StatusScreen.tsx';
+import { StatusScreen } from '../components/StatusScreen.tsx';
 
 /** `/auth/callback`: o AuthProvider troca o code pelos tokens e o `onSigninCallback` navega de volta. */
 export function AuthCallback() {
@@ -8,7 +9,7 @@ export function AuthCallback() {
     return (
       <StatusScreen
         title="Não foi possível entrar"
-        actions={<button onClick={() => void auth.signinRedirect()}>Tentar de novo</button>}
+        actions={<Button onClick={() => void auth.signinRedirect()}>Tentar de novo</Button>}
       >
         <p>{auth.error.message}</p>
       </StatusScreen>

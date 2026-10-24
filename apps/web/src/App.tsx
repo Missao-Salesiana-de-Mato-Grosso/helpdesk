@@ -1,32 +1,23 @@
-import { Route, Routes } from 'react-router';
-import { AuthCallback } from './auth/AuthCallback.tsx';
-import { CALLBACK_PATH } from './auth/oidc-config.ts';
-import { ONBOARDING_PATH, RequireAuth } from './auth/RequireAuth.tsx';
-import { StatusScreen } from './auth/StatusScreen.tsx';
-import { HomePage } from './pages/HomePage.tsx';
-import { OnboardingPage } from './pages/OnboardingPage.tsx';
+import { MantineProvider } from '@mantine/core';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useState } from 'react';
+import { ApiProvider } from './api/ApiProvider.tsx';
+import { OidcProvider } from './auth/OidcProvider.tsx';
+import { AppRoutes } from './routes.tsx';
+import { theme } from './theme.ts';
 
+/** Provedores globais. O Router fica no main.tsx (BrowserRouter) e nos testes (MemoryRouter). */
 export function App() {
+  const [queryClient] = useState(() => new QueryClient());
   return (
-    <Routes>
-      <Route path={CALLBACK_PATH} element={<AuthCallback />} />
-      <Route
-        path={ONBOARDING_PATH}
-        element={
-          <RequireAuth>
-            <OnboardingPage />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/"
-        element={
-          <RequireAuth>
-            <HomePage />
-          </RequireAuth>
-        }
-      />
-      <Route path="*" element={<StatusScreen title="Página não encontrada" />} />
-    </Routes>
+    <MantineProvider theme={theme} defaultColorScheme="auto">
+      <OidcProvider>
+        <QueryClientProvider client={queryClient}>
+          <ApiProvider>
+            <AppRoutes />
+          </ApiProvider>
+        </QueryClientProvider>
+      </OidcProvider>
+    </MantineProvider>
   );
 }

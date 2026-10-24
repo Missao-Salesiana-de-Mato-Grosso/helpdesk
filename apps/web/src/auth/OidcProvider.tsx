@@ -2,7 +2,7 @@ import { useCallback, useMemo, type ReactNode } from 'react';
 import { AuthProvider } from 'react-oidc-context';
 import type { User } from 'oidc-client-ts';
 import { useNavigate } from 'react-router';
-import { StatusScreen } from './StatusScreen.tsx';
+import { StatusScreen } from '../components/StatusScreen.tsx';
 import { buildOidcSettings, CALLBACK_PATH, isSigninState, readOidcEnv } from './oidc-config.ts';
 
 /** AuthProvider do react-oidc-context com a configuração da spec. Fica dentro do Router. */

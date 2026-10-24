@@ -1,10 +1,11 @@
+import { Button } from '@mantine/core';
 import { ApiErrorCode } from '@helpdesk/shared';
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { Navigate, useLocation } from 'react-router';
 import { ApiRequestError } from '../api/client.ts';
 import type { SigninState } from './oidc-config.ts';
-import { StatusScreen } from './StatusScreen.tsx';
+import { StatusScreen } from '../components/StatusScreen.tsx';
 import { useMe } from './useMe.ts';
 
 export const ONBOARDING_PATH = '/primeiro-acesso';
@@ -71,9 +72,9 @@ export function RequireAuth({ children }: { children: ReactNode }) {
       <StatusScreen
         title="Não foi possível entrar"
         actions={
-          <button onClick={() => void auth.signinRedirect({ state: { returnTo } })}>
+          <Button onClick={() => void auth.signinRedirect({ state: { returnTo } })}>
             Tentar de novo
-          </button>
+          </Button>
         }
       >
         <p>{auth.error.message}</p>
@@ -89,7 +90,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     return (
       <StatusScreen
         title="Sem acesso"
-        actions={<button onClick={() => void auth.signoutRedirect()}>Sair</button>}
+        actions={<Button onClick={() => void auth.signoutRedirect()}>Sair</Button>}
       >
         <p>{meError.message}</p>
       </StatusScreen>
@@ -100,7 +101,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     return (
       <StatusScreen
         title="Não foi possível entrar"
-        actions={<button onClick={() => void auth.signoutRedirect()}>Sair</button>}
+        actions={<Button onClick={() => void auth.signoutRedirect()}>Sair</Button>}
       >
         <p>O servidor recusou sua sessão logo após o login. Avise o suporte de TI.</p>
       </StatusScreen>
@@ -112,7 +113,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     return (
       <StatusScreen
         title={unavailable ? 'Autenticação temporariamente indisponível' : 'Algo deu errado'}
-        actions={<button onClick={() => void me.refetch()}>Tentar de novo</button>}
+        actions={<Button onClick={() => void me.refetch()}>Tentar de novo</Button>}
       >
         <p>{me.error?.message ?? 'Não foi possível carregar seus dados.'}</p>
       </StatusScreen>

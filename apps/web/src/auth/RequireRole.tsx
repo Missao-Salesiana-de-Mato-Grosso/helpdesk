@@ -1,6 +1,6 @@
 import type { Role } from '@helpdesk/shared';
 import type { ReactNode } from 'react';
-import { StatusScreen } from './StatusScreen.tsx';
+import { StatusScreen } from '../components/StatusScreen.tsx';
 import { useMe } from './useMe.ts';
 
 /**
