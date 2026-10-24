@@ -2,6 +2,7 @@
 
 Help desk interno da Missão Salesiana de Mato Grosso, que substitui o Freshdesk. Atende cerca de 20 agentes e 500 tickets/mês. A autenticação é feita pelo Zitadel self-hosted, federado com o Google Workspace (contas `@missaosalesiana.org.br`). **O canal principal é o e-mail:** mensagens para `suporte@missaosalesiana.org.br` viram tickets e as respostas por e-mail caem no mesmo ticket. O portal é o canal secundário.
 Discovery, escopo e decisões: `docs/discovery/` (leia `README.md` e `adr/README.md` antes de mudanças estruturais).
+Montagem dos ambientes: `docs/ambientes.md`. **Todo passo executado para montar ou alterar o ambiente local ou o de produção (Magalu) é registrado lá na mesma sessão**, com as armadilhas encontradas.
 
 ## Stack
 
@@ -23,6 +24,7 @@ nvm use && pnpm install
 pnpm build                           # shared → api → web (necessário uma vez após clonar)
 cp .env.example .env                 # único .env: compose + API + front (Vite lê da raiz via envDir)
 pnpm infra:up                        # postgres (127.0.0.1:5434, sempre pelo IP), zitadel (:8080, console em /ui/console), mailpit (:8025, SMTP :1025)
+pnpm infra:bootstrap -- --admin <email>   # Zitadel local: projeto, roles, app SPA, SMTP→Mailpit; grava os IDs no .env
 pnpm infra:reset                     # apaga volumes (Zitadel e bancos do zero)
 pnpm dev                             # shared (tsc --watch) + api (:3000, nest --watch) + web (:5173, proxy /api → :3000)
 pnpm test                            # vitest em todos os pacotes

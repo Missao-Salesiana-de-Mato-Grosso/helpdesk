@@ -6,7 +6,7 @@
 # a máquina do desenvolvedor; sobrescreva no .env quando precisar.
 #
 # Acessos:
-#   Zitadel console  http://localhost:8080/ui/console   (zitadel-admin@zitadel.localhost / Password1!)
+#   Zitadel console  http://localhost:8080/ui/console   (zitadel-admin@missão-salesiana-de-mato-grosso.localhost / Password1!)
 #   Mailpit          http://localhost:8025               (SMTP em localhost:1025)
 #   PostgreSQL       127.0.0.1:5434                      (bancos helpdesk e zitadel)
 
