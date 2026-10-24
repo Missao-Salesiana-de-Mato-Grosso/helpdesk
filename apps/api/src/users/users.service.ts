@@ -84,8 +84,12 @@ export class UsersService {
   }
 
   /** Grava a unidade no usuário (triagem de ticket, RN-28 da spec T08–T10). */
-  async setCompany(id: string, companyId: string): Promise<void> {
-    await this.prisma.user.update({ where: { id }, data: { companyId } });
+  async setCompany(
+    id: string,
+    companyId: string,
+    tx: Prisma.TransactionClient = this.prisma,
+  ): Promise<void> {
+    await tx.user.update({ where: { id }, data: { companyId } });
   }
 
   setCompanyAndDepartment(

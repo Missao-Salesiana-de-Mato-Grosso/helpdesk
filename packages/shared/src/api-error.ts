@@ -36,4 +36,6 @@ export interface ApiError {
   statusCode: number;
   code: ApiErrorCode;
   message: string;
+  /** Só em `409 VERSION_CONFLICT`: a versão atual do ticket. */
+  currentVersion?: number;
 }

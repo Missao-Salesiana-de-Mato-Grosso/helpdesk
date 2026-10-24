@@ -73,6 +73,41 @@ const MATRIX: RouteCase[] = [
     label: '/api/tickets/:id (fora do escopo)',
     expected: { anonimo: 401, solicitante: 404, agente: 404, supervisor: 200, admin: 200 },
   },
+  {
+    method: 'patch',
+    path: (ref) => `/api/tickets/${ref.ticketId}`,
+    label: 'PATCH /api/tickets/:id (grupo do agente)',
+    body: () => ({ version: 1, priority: 'high' }),
+    expected: AGENT_ONLY,
+  },
+  {
+    method: 'patch',
+    path: (ref) => `/api/tickets/${ref.foreignTicketId}`,
+    label: 'PATCH /api/tickets/:id (fora do escopo)',
+    body: () => ({ version: 1, priority: 'high' }),
+    expected: { anonimo: 401, solicitante: 403, agente: 404, supervisor: 200, admin: 200 },
+  },
+  {
+    method: 'post',
+    path: (ref) => `/api/tickets/${ref.ticketId}/messages`,
+    label: '/api/tickets/:id/messages (do solicitante, grupo do agente)',
+    body: () => ({ kind: 'public', bodyHtml: '<p>oi</p>' }),
+    expected: { anonimo: 401, solicitante: 201, agente: 201, supervisor: 201, admin: 201 },
+  },
+  {
+    method: 'post',
+    path: (ref) => `/api/tickets/${ref.ticketId}/messages`,
+    label: '/api/tickets/:id/messages (nota interna)',
+    body: () => ({ kind: 'internal', bodyHtml: '<p>oi</p>' }),
+    expected: { anonimo: 401, solicitante: 403, agente: 201, supervisor: 201, admin: 201 },
+  },
+  {
+    method: 'post',
+    path: (ref) => `/api/tickets/${ref.foreignTicketId}/messages`,
+    label: '/api/tickets/:id/messages (fora do escopo)',
+    body: () => ({ kind: 'public', bodyHtml: '<p>oi</p>' }),
+    expected: { anonimo: 401, solicitante: 404, agente: 404, supervisor: 201, admin: 201 },
+  },
 ];
 
 describe('matriz de permissões (e2e)', () => {

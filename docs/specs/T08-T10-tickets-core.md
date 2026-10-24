@@ -1,6 +1,6 @@
 # Spec T08–T10 — Tickets: criação, leitura, atualização e mensagens
 
-> Status: T08 implementada (24/10/2026); T09–T10 pendentes · Tarefas: T08 (criar e ler), T09 (atualizar), T10 (mensagens) · Depende de: T03, T04–T05 · Consumida por: T11, T12 (front), T13 (anexos), T14 (notificações), T21 (e-mail) · Revisada em: 19/10/2026
+> Status: implementada (T08, T09 e T10 em 24/10/2026) · Tarefas: T08 (criar e ler), T09 (atualizar), T10 (mensagens) · Depende de: T03, T04–T05 · Consumida por: T11, T12 (front), T13 (anexos), T14 (notificações), T21 (e-mail) · Revisada em: 19/10/2026
 
 ## 1. Objetivo
 
@@ -295,6 +295,18 @@ Fixture base: unidades U1, U2; grupos G1, G2; categoria C1 (grupo padrão G1), C
 - **Sanitização:** além da §7, imagens `data:` também são removidas; `htmlHasContent` considera `<img>` http(s) como conteúdo.
 - Matriz de permissões: `POST /tickets`, `GET /tickets`, `GET /tickets/counters` e `GET /tickets/:id` (no escopo e fora dele, que dá 404) × 5 papéis.
 - O dublê de `GET /api/tickets` da suíte de auth foi removido; CT-26/CT-28 da T04–T05 usam a rota real.
+
+### T09 e T10 (24/10/2026)
+
+- **Concorrência:** `PATCH` e `POST /messages` rodam numa transação que trava a linha do ticket (`SELECT … FOR UPDATE`) antes de ler o estado, dentro do escopo. A checagem de `version` é feita com a linha travada, então duas escritas simultâneas não se sobrepõem.
+- **`version`** sobe em todo `PATCH` que muda algo e em mensagem que muda o status (explícito ou reabertura pelo solicitante). Mensagem sem mudança de status, ou só com `first_response_at`, não sobe a versão: não conflita com um `PATCH` em andamento.
+- **`PATCH` sem mudança efetiva** (CT-34): 200, nenhum evento, nenhum evento de domínio (nem `ticket.updated`).
+- **Ticket fechado:** qualquer `PATCH` dá `422 TICKET_CLOSED`, mesmo sem `status` no corpo. É checado antes da versão.
+- **RN-26:** a dispensa de pertencer ao grupo vale quando o **ator** é supervisor/admin (CT-30) e também quando o **atribuído** é supervisor/admin. Atribuído inexistente, inativo ou sem role de agente → `ASSIGNEE_NOT_IN_GROUP`. Mudar o grupo não remove o responsável atual.
+- **RN-28:** `applyCompanyToRequester` grava a unidade no solicitante mesmo se a unidade do ticket já era essa; o cache de login do solicitante (60 s) não é invalidado.
+- **Mensagens:** solicitante com `status` no corpo → `403 FORBIDDEN_ROLE`. Com `status` explícito, a reabertura automática (RN-37) não se aplica. Resposta: `201` com o `TicketDetail`.
+- **`409 VERSION_CONFLICT`** traz `currentVersion` (campo opcional em `ApiError` no shared; `ApiException` aceita campos extras).
+- **Eventos de domínio** (emitidos depois do commit): `ticket.updated {ticketId, actorId, changes}`, `ticket.status_changed {ticketId, actorId, from, to, reason?}`, `ticket.assigned {ticketId, actorId, from, to}`, `ticket.message_added {ticketId, messageId, kind, authorId, authorIsRequester}`.
 
 ## 11. Prompt sugerido para a sessão
 

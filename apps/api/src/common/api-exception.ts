@@ -7,7 +7,9 @@ export class ApiException extends HttpException {
     readonly statusCode: number,
     readonly code: ApiErrorCode,
     message: string,
+    /** Campos extras no corpo do erro (ex.: `currentVersion` no 409 de versão). */
+    readonly details: Record<string, unknown> = {},
   ) {
-    super({ statusCode, code, message } satisfies ApiError, statusCode);
+    super({ ...details, statusCode, code, message } satisfies ApiError, statusCode);
   }
 }

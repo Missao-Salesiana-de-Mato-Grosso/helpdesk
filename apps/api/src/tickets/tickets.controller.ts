@@ -1,12 +1,16 @@
-import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import {
+  createMessageSchema,
   createTicketSchema,
+  updateTicketSchema,
+  type CreateMessageInput,
   listTicketsQuerySchema,
   type CreateTicketData,
   type ListTicketsQuery,
   type TicketCounters,
   type TicketDetail,
   type TicketListResponse,
+  type UpdateTicketInput,
 } from '@helpdesk/shared';
 import type { Request } from 'express';
 import type { CurrentUser as CurrentUserType } from '../auth/current-user.js';
@@ -45,5 +49,26 @@ export class TicketsController {
   @Get(':id')
   detail(@CurrentUser() user: CurrentUserType, @Param('id') id: string): Promise<TicketDetail> {
     return this.tickets.detail(user, id);
+  }
+
+  @Patch(':id')
+  @Roles('agente', 'supervisor', 'admin')
+  update(
+    @CurrentUser() user: CurrentUserType,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(updateTicketSchema)) body: UpdateTicketInput,
+    @Req() request: Request,
+  ): Promise<TicketDetail> {
+    return this.tickets.update(user, id, body, clientIp(request));
+  }
+
+  @Post(':id/messages')
+  addMessage(
+    @CurrentUser() user: CurrentUserType,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(createMessageSchema)) body: CreateMessageInput,
+    @Req() request: Request,
+  ): Promise<TicketDetail> {
+    return this.tickets.addMessage(user, id, body, clientIp(request));
   }
 }

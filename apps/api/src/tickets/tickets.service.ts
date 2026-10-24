@@ -2,6 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   ApiErrorCode,
+  type CreateMessageInput,
   type CreateTicketData,
   type ListTicketsQuery,
   type TicketCounters,
@@ -9,16 +10,26 @@ import {
   type TicketListResponse,
   type TicketStatus,
   type TicketView,
+  type UpdateTicketInput,
 } from '@helpdesk/shared';
 import { ApiException } from '../common/api-exception.js';
 import { htmlHasContent, sanitizeHtml } from '../common/sanitize-html.js';
 import { CategoriesService } from '../categories/categories.service.js';
 import { CompaniesService } from '../companies/companies.service.js';
+import { GroupsService } from '../groups/groups.service.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { UsersService } from '../users/users.service.js';
 import { isAgent, seesAllTickets, type ScopeUser } from './ticket-scope.js';
+import { planStatusChange, ticketClosed, versionConflict } from './ticket-status.js';
 import { toTicketDetail, toTicketSummary } from './tickets.mapper.js';
-import { TicketEventsRepository, TicketsRepository } from './tickets.repository.js';
+import {
+  TicketEventsRepository,
+  TicketsRepository,
+  type LockedTicket,
+  type NewEvent,
+  type TicketChanges,
+  type Tx,
+} from './tickets.repository.js';
 
 /**
  * Quem age sobre os tickets: o usuário da requisição (`CurrentUser` satisfaz) ou, na T21,
@@ -31,6 +42,10 @@ export interface TicketActor extends ScopeUser {
 /** Eventos de domínio emitidos depois do commit. A T14 (notificações) os assina. */
 export const TicketDomainEvent = {
   created: 'ticket.created',
+  updated: 'ticket.updated',
+  statusChanged: 'ticket.status_changed',
+  assigned: 'ticket.assigned',
+  messageAdded: 'ticket.message_added',
 } as const;
 
 export interface TicketCreatedEvent {
@@ -41,6 +56,38 @@ export interface TicketCreatedEvent {
   source: 'portal' | 'agent' | 'email';
 }
 
+export interface TicketUpdatedEvent {
+  ticketId: string;
+  actorId: string;
+  /** Tipos dos `ticket_events` gravados (ex.: `priority_changed`). */
+  changes: string[];
+}
+
+export interface TicketStatusChangedEvent {
+  ticketId: string;
+  actorId: string;
+  from: TicketStatus;
+  to: TicketStatus;
+  reason?: 'requester_reply';
+}
+
+export interface TicketAssignedEvent {
+  ticketId: string;
+  actorId: string;
+  from: string | null;
+  to: string | null;
+}
+
+export interface TicketMessageAddedEvent {
+  ticketId: string;
+  messageId: string;
+  kind: 'public' | 'internal';
+  authorId: string;
+  authorIsRequester: boolean;
+}
+
+type PendingEmit = { name: string; payload: object };
+
 const AGENT_DEFAULT_STATUSES: TicketStatus[] = ['open', 'pending'];
 const OPEN_STATUSES: TicketStatus[] = ['open', 'pending'];
 
@@ -50,6 +97,13 @@ const forbidden = (message: string) =>
   new ApiException(HttpStatus.FORBIDDEN, ApiErrorCode.FORBIDDEN_ROLE, message);
 const inactiveReference = (message: string) =>
   new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, ApiErrorCode.INACTIVE_REFERENCE, message);
+
+const notAssignable = () =>
+  new ApiException(
+    HttpStatus.UNPROCESSABLE_ENTITY,
+    ApiErrorCode.ASSIGNEE_NOT_IN_GROUP,
+    'O responsável precisa ser um agente ativo do grupo do ticket.',
+  );
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -84,8 +138,225 @@ export class TicketsService {
     private readonly users: UsersService,
     private readonly categories: CategoriesService,
     private readonly companies: CompaniesService,
+    private readonly groups: GroupsService,
     private readonly emitter: EventEmitter2,
   ) {}
+
+  /** RN-21 a RN-30. O controller já exige agente+. */
+  async update(
+    actor: TicketActor,
+    id: string,
+    input: UpdateTicketInput,
+    ip: string | null,
+  ): Promise<TicketDetail> {
+    if (!UUID.test(id)) throw notFound();
+    const emits = await this.tickets.transaction(async (tx) => {
+      const ticket = await this.lockOrThrow(tx, actor, id);
+      if (ticket.status === 'closed') throw ticketClosed();
+      if (input.version !== ticket.version) throw versionConflict(ticket.version);
+
+      const changes: TicketChanges = {};
+      const events: Omit<NewEvent, 'ticketId' | 'actorId' | 'ip'>[] = [];
+      const pending: PendingEmit[] = [];
+      const changed = <K extends keyof LockedTicket>(key: K, value: LockedTicket[K] | undefined) =>
+        value !== undefined && value !== ticket[key];
+
+      const groupId = input.groupId ?? ticket.groupId;
+      const companyId = input.companyId ?? ticket.companyId;
+
+      if (input.companyId !== undefined) {
+        if (!(await this.companies.isActive(input.companyId))) {
+          throw inactiveReference('Unidade inexistente ou inativa.');
+        }
+        if (changed('companyId', input.companyId)) {
+          changes.companyId = input.companyId;
+          events.push(fromTo('company_changed', ticket.companyId, input.companyId));
+        }
+        // RN-28: a unidade também vai para o solicitante só com a flag.
+        if (input.applyCompanyToRequester) {
+          await this.users.setCompany(ticket.requesterId, input.companyId, tx);
+        }
+      }
+
+      if (input.status !== undefined) {
+        const plan = planStatusChange(ticket.status, input.status, companyId, new Date());
+        if (plan) {
+          changes.status = plan.to;
+          Object.assign(changes, plan.timestamps);
+          events.push(fromTo('status_changed', plan.from, plan.to));
+          pending.push(statusEmit(id, actor.id, plan.from, plan.to));
+        }
+      }
+
+      if (changed('priority', input.priority)) {
+        changes.priority = input.priority;
+        events.push(fromTo('priority_changed', ticket.priority, input.priority!));
+      }
+
+      if (changed('groupId', input.groupId)) {
+        if (!(await this.groups.isActive(input.groupId!))) {
+          throw inactiveReference('Grupo inexistente ou inativo.');
+        }
+        changes.groupId = input.groupId;
+        events.push(fromTo('group_changed', ticket.groupId, input.groupId!));
+      }
+
+      if (changed('categoryId', input.categoryId)) {
+        if (!(await this.categories.findActive(input.categoryId!))) {
+          throw inactiveReference('Categoria inexistente ou inativa.');
+        }
+        changes.categoryId = input.categoryId;
+        events.push(fromTo('category_changed', ticket.categoryId, input.categoryId!));
+      }
+
+      if (changed('assigneeId', input.assigneeId)) {
+        const assigneeId = input.assigneeId ?? null;
+        if (assigneeId !== null) await this.assertAssignable(actor, assigneeId, groupId);
+        changes.assigneeId = assigneeId;
+        events.push(fromTo('assigned', ticket.assigneeId, assigneeId));
+        pending.push({
+          name: TicketDomainEvent.assigned,
+          payload: {
+            ticketId: id,
+            actorId: actor.id,
+            from: ticket.assigneeId,
+            to: assigneeId,
+          } satisfies TicketAssignedEvent,
+        });
+      }
+
+      if (events.length === 0) return [];
+      await this.tickets.update(tx, id, changes, true);
+      for (const event of events) {
+        await this.events.append(tx, { ...event, ticketId: id, actorId: actor.id, ip });
+      }
+      pending.push({
+        name: TicketDomainEvent.updated,
+        payload: {
+          ticketId: id,
+          actorId: actor.id,
+          changes: events.map((e) => e.type),
+        } satisfies TicketUpdatedEvent,
+      });
+      return pending;
+    });
+
+    this.emitAll(emits);
+    return toTicketDetail(await this.tickets.loadAfterWrite(actor, id));
+  }
+
+  /** RN-31 a RN-39. */
+  async addMessage(
+    actor: TicketActor,
+    id: string,
+    input: CreateMessageInput,
+    ip: string | null,
+  ): Promise<TicketDetail> {
+    const agent = isAgent(actor);
+    if (!agent && input.kind === 'internal') {
+      throw forbidden('Só agentes escrevem notas internas.');
+    }
+    if (!agent && input.status !== undefined) {
+      throw forbidden('Só agentes mudam o status do ticket.');
+    }
+    if (!UUID.test(id)) throw notFound();
+    const bodyHtml = cleanBody(input.bodyHtml);
+
+    const emits = await this.tickets.transaction(async (tx) => {
+      const ticket = await this.lockOrThrow(tx, actor, id);
+      if (ticket.status === 'closed') throw ticketClosed();
+      if (input.version !== undefined && input.version !== ticket.version) {
+        throw versionConflict(ticket.version);
+      }
+
+      const authorIsRequester = actor.id === ticket.requesterId;
+      const changes: TicketChanges = {};
+      const pending: PendingEmit[] = [];
+      let statusEvent: Omit<NewEvent, 'ticketId' | 'actorId' | 'ip'> | null = null;
+
+      if (input.kind === 'public' && agent && !authorIsRequester && !ticket.firstResponseAt) {
+        changes.firstResponseAt = new Date();
+      }
+
+      if (input.status !== undefined) {
+        const plan = planStatusChange(ticket.status, input.status, ticket.companyId, new Date());
+        if (plan) {
+          Object.assign(changes, { status: plan.to }, plan.timestamps);
+          statusEvent = fromTo('status_changed', plan.from, plan.to);
+          pending.push(statusEmit(id, actor.id, plan.from, plan.to));
+        }
+      } else if (
+        input.kind === 'public' &&
+        authorIsRequester &&
+        (ticket.status === 'pending' || ticket.status === 'resolved')
+      ) {
+        const plan = planStatusChange(ticket.status, 'open', ticket.companyId, new Date());
+        if (plan) {
+          Object.assign(changes, { status: plan.to }, plan.timestamps);
+          statusEvent = {
+            type: 'status_changed',
+            data: { from: plan.from, to: plan.to, reason: 'requester_reply' },
+          };
+          pending.push(statusEmit(id, actor.id, plan.from, plan.to, 'requester_reply'));
+        }
+      }
+
+      const message = await this.tickets.addMessage(tx, {
+        ticketId: id,
+        authorId: actor.id,
+        kind: input.kind,
+        via: 'portal',
+        bodyHtml,
+      });
+      // Mudar o status muda o ticket: a versão sobe, para um PATCH concorrente dar 409.
+      await this.tickets.update(tx, id, changes, changes.status !== undefined);
+      await this.events.append(tx, {
+        ticketId: id,
+        actorId: actor.id,
+        type: 'message_added',
+        data: { messageId: message.id, kind: input.kind },
+        ip,
+      });
+      if (statusEvent) {
+        await this.events.append(tx, { ...statusEvent, ticketId: id, actorId: actor.id, ip });
+      }
+
+      pending.unshift({
+        name: TicketDomainEvent.messageAdded,
+        payload: {
+          ticketId: id,
+          messageId: message.id,
+          kind: input.kind,
+          authorId: actor.id,
+          authorIsRequester,
+        } satisfies TicketMessageAddedEvent,
+      });
+      return pending;
+    });
+
+    this.emitAll(emits);
+    return toTicketDetail(await this.tickets.loadAfterWrite(actor, id));
+  }
+
+  private async lockOrThrow(tx: Tx, actor: ScopeUser, id: string): Promise<LockedTicket> {
+    const ticket = await this.tickets.lockInScope(tx, actor, id);
+    if (!ticket) throw notFound();
+    return ticket;
+  }
+
+  /** RN-26: agente+ ativo e membro do grupo; supervisor e admin (ator ou atribuído) dispensam o grupo. */
+  private async assertAssignable(actor: ScopeUser, assigneeId: string, groupId: string) {
+    const user = await this.users.findById(assigneeId);
+    if (!user || !user.active) throw notAssignable();
+    const assignee = { roles: user.roles.filter(isKnownRole) };
+    if (!isAgent(assignee)) throw notAssignable();
+    if (seesAllTickets(actor) || seesAllTickets(assignee)) return;
+    if (!(await this.groups.isMember(groupId, assigneeId))) throw notAssignable();
+  }
+
+  private emitAll(emits: PendingEmit[]): void {
+    for (const { name, payload } of emits) this.emitter.emit(name, payload);
+  }
 
   async detail(viewer: ScopeUser, id: string): Promise<TicketDetail> {
     if (!UUID.test(id)) throw notFound();
@@ -241,6 +512,37 @@ export class TicketsService {
       companyId: user.companyId,
     };
   }
+}
+
+function isKnownRole(role: string): role is 'admin' | 'supervisor' | 'agente' {
+  return role === 'admin' || role === 'supervisor' || role === 'agente';
+}
+
+function fromTo(
+  type: string,
+  from: string | null,
+  to: string | null,
+): Omit<NewEvent, 'ticketId' | 'actorId' | 'ip'> {
+  return { type, data: { from, to } };
+}
+
+function statusEmit(
+  ticketId: string,
+  actorId: string,
+  from: TicketStatus,
+  to: TicketStatus,
+  reason?: 'requester_reply',
+): PendingEmit {
+  return {
+    name: TicketDomainEvent.statusChanged,
+    payload: {
+      ticketId,
+      actorId,
+      from,
+      to,
+      ...(reason ? { reason } : {}),
+    } satisfies TicketStatusChangedEvent,
+  };
 }
 
 /** RN-15: `#1001` ou `1001` → número; texto com 2+ caracteres → assunto; o resto é ignorado. */

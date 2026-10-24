@@ -32,7 +32,12 @@ export class ApiExceptionFilter implements ExceptionFilter {
 
   private toBody(exception: unknown): ApiError {
     if (exception instanceof ApiException) {
-      return { statusCode: exception.statusCode, code: exception.code, message: exception.message };
+      return {
+        ...exception.details,
+        statusCode: exception.statusCode,
+        code: exception.code,
+        message: exception.message,
+      };
     }
     if (exception instanceof HttpException) {
       const statusCode = exception.getStatus();

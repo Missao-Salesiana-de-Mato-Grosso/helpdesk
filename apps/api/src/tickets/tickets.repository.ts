@@ -73,6 +73,35 @@ export type TicketSummaryRow = Prisma.TicketGetPayload<{
   include: ReturnType<typeof summaryInclude>;
 }>;
 
+const lockedState = {
+  id: true,
+  number: true,
+  status: true,
+  priority: true,
+  version: true,
+  requesterId: true,
+  assigneeId: true,
+  groupId: true,
+  categoryId: true,
+  companyId: true,
+  firstResponseAt: true,
+} satisfies Prisma.TicketSelect;
+
+export type LockedTicket = Prisma.TicketGetPayload<{ select: typeof lockedState }>;
+
+export type TicketChanges = Pick<
+  Prisma.TicketUncheckedUpdateInput,
+  | 'status'
+  | 'priority'
+  | 'assigneeId'
+  | 'groupId'
+  | 'categoryId'
+  | 'companyId'
+  | 'firstResponseAt'
+  | 'resolvedAt'
+  | 'closedAt'
+>;
+
 export interface NewTicket {
   subject: string;
   priority: Prisma.TicketCreateInput['priority'];
@@ -147,6 +176,30 @@ export class TicketsRepository {
 
   count(viewer: ScopeUser, filter: Prisma.TicketWhereInput): Promise<number> {
     return this.prisma.ticket.count({ where: { AND: [ticketScope(viewer), filter] } });
+  }
+
+  /**
+   * Trava a linha do ticket (`SELECT ... FOR UPDATE`) e devolve o estado atual, dentro do escopo.
+   * `null` se não existe ou está fora do escopo. Serializa escritas concorrentes no mesmo ticket.
+   */
+  async lockInScope(tx: Tx, viewer: ScopeUser, id: string): Promise<LockedTicket | null> {
+    await tx.$queryRaw`SELECT id FROM tickets WHERE id = ${id}::uuid FOR UPDATE`;
+    return tx.ticket.findFirst({
+      where: { AND: [ticketScope(viewer), { id }] },
+      select: lockedState,
+    });
+  }
+
+  /** Grava as mudanças; `bumpVersion` incrementa `version` (RN-22). Sempre atualiza `updated_at`. */
+  async update(tx: Tx, id: string, changes: TicketChanges, bumpVersion: boolean): Promise<void> {
+    await tx.ticket.update({
+      where: { id },
+      data: {
+        ...changes,
+        ...(bumpVersion ? { version: { increment: 1 } } : {}),
+        updatedAt: new Date(),
+      },
+    });
   }
 
   async create(
