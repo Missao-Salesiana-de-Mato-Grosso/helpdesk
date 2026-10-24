@@ -84,6 +84,8 @@ done
 2. Conferir no banco: `docker compose exec -T postgres psql -U helpdesk -d helpdesk -c "select email, roles, zitadel_sub from users where zitadel_sub is not null"` → o usuário com `{admin}`.
 3. Claims do access token: DevTools → Network → requisição `me` → copiar o header `Authorization` → no terminal `pbpaste | node deploy/local/decode-jwt.mjs` (mascara sub, jti, client id, e-mail e nome; não imprime o token). Nunca cole o token em chat ou ticket.
 
+4. Primeiro acesso (T16): a tela lista as unidades e os departamentos ativos do seed (`prisma:seed`). Depois de salvar, o admin cai em `/fila/meus`. Para refazer o teste: `docker compose exec -T postgres psql -U helpdesk -d helpdesk -c "update users set company_id = null, department_id = null where email = '<email>'"` e aguardar até 60 s (cache da API) ou reiniciar o `pnpm dev`.
+
 ⚠️ **Armadilha:** entrar direto na tela de login do Zitadel (ou numa aba antiga dele) faz um login "solto", sem `requestId`: termina em `/ui/v2/login/signedin` ("Você está conectado") e não volta para o app. Sempre comece pelo `localhost:5173`.
 
 ℹ️ O access token local dura **12 h** (padrão do Zitadel). Ver spec T04–T05 §10.
