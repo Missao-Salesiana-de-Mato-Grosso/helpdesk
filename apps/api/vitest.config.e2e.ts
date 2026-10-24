@@ -16,6 +16,12 @@ export default defineConfig({
       NODE_ENV: 'test',
       DATABASE_URL: TEST_DATABASE_URL,
       LOG_LEVEL: 'warn',
+      // test/setup/auth.ts assina tokens com este issuer e projeto; o Zitadel nunca é chamado.
+      ZITADEL_ISSUER: 'http://zitadel.test',
+      ZITADEL_PROJECT_ID: 'test-project',
+      ZITADEL_ORG_ID: '',
+      AUTH_CLOCK_TOLERANCE_SECONDS: '60',
+      AUTH_CACHE_TTL_SECONDS: '60',
     },
   },
 });

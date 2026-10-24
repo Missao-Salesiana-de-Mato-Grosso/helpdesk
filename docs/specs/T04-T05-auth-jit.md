@@ -1,6 +1,6 @@
 # Spec T04–T05 — Autenticação, autorização e provisionamento JIT
 
-> Status: pronta · Tarefas: T04 (guard e roles), T05 (JIT, `/me`, onboarding) · Depende de: T01, T03 · Define o contrato para: T06 (front OIDC), T16 (tela de 1º acesso) · Revisada em: 19/10/2026
+> Status: implementada (24/10/2026) · Tarefas: T04 (guard e roles), T05 (JIT, `/me`, onboarding) · Depende de: T01, T03 · Define o contrato para: T06 (front OIDC), T16 (tela de 1º acesso) · Revisada em: 19/10/2026
 
 ## 1. Objetivo
 
@@ -45,11 +45,11 @@ Toda requisição à API é autenticada por um JWT emitido pelo Zitadel e valida
 - **RN-09** — Após validar o token, o guard resolve o usuário local por `zitadel_sub`, com cache em memória por `sub` (TTL `AUTH_CACHE_TTL_SECONDS`, padrão 60 s). Cache hit não toca o banco.
 - **RN-10** — Cache miss e usuário **não existe** por `zitadel_sub`:
   1. Buscar `name` e `email` em `GET {ZITADEL_ISSUER}/oidc/v1/userinfo` com o access token. Falha → `503 AUTH_UNAVAILABLE` (não criar usuário sem e-mail).
-  2. Se existir usuário com o mesmo `email` (comparação case-insensitive) e `zitadel_sub = null` e `is_external = false` → **vincular**: gravar `zitadel_sub`, atualizar `name`, `profile_synced_at = now()`.
+  2. Se existir usuário com o mesmo `email` (comparação case-insensitive) e `zitadel_sub = null` e `is_external = false` → **vincular**, desde que o `userinfo` traga `email_verified = true`; senão → `403 EMAIL_NOT_VERIFIED` e nada é alterado (💡 adicionado em 24/10: vincular por e-mail não verificado entregaria os tickets de outra pessoa a quem cadastrou o e-mail no Zitadel): gravar `zitadel_sub`, atualizar `name`, `profile_synced_at = now()`.
   3. Se existir usuário com o mesmo `email` e `is_external = true` → `403 EXTERNAL_USER_CANNOT_LOGIN` e log em `warn`. O admin corrige a marcação (T15). Não vincular automaticamente.
   4. Se existir usuário com o mesmo `email` e `zitadel_sub` **diferente** e não nulo → `403 WRONG_ORGANIZATION` e log em `error` (indica conta duplicada no Zitadel; precisa de intervenção).
   5. Senão → **criar**: `zitadel_sub`, `email`, `name`, `roles` (do token), `active = true`, `is_external = false`, `company_id = null`, `department_id = null`, `last_login_at = now()`, `profile_synced_at = now()`.
-- **RN-11** — Cache miss e usuário **existe**: se `roles` do token ≠ `roles` gravadas → atualizar. Se `last_login_at` for anterior a 1 h → atualizar para `now()`. Se `profile_synced_at` for anterior a 24 h → chamar `userinfo` e atualizar `name` e `email`; se o novo e-mail colidir com outro usuário → manter o antigo e logar `warn`. Falha no `userinfo` nessa resincronização **não** bloqueia a requisição.
+- **RN-11** — Cache miss e usuário **existe**: se `roles` do token ≠ `roles` gravadas → atualizar. Se `last_login_at` for anterior a 1 h → atualizar para `now()`. Se `profile_synced_at` for anterior a 24 h → chamar `userinfo` e atualizar `name` e `email`; se o novo e-mail colidir com outro usuário ou não estiver verificado → manter o antigo (colisão: logar `warn`). Falha no `userinfo` nessa resincronização **não** bloqueia a requisição.
 - **RN-12** — `active = false` → `403 USER_INACTIVE`, mesmo com token válido. Essa é a forma de corte imediato no MVP.
 - **RN-13** — `needsOnboarding = (company_id == null || department_id == null)`. Vale para todos, inclusive agentes e admins.
 - **RN-14** — Enquanto `needsOnboarding`, só são permitidas rotas marcadas com `@AllowDuringOnboarding()`: `GET /api/me`, `PATCH /api/me`, `GET /api/companies`, `GET /api/departments`. Qualquer outra → `403 ONBOARDING_REQUIRED`.
@@ -60,7 +60,7 @@ Toda requisição à API é autenticada por um JWT emitido pelo Zitadel e valida
 
 Formato de erro em toda a API: `{ "statusCode": 403, "code": "ONBOARDING_REQUIRED", "message": "Informe unidade e departamento para continuar." }`. Respostas 401 levam o header `WWW-Authenticate: Bearer`.
 
-Códigos novos em `ApiErrorCode`: `AUTH_MISSING`, `AUTH_INVALID`, `AUTH_UNAVAILABLE`, `WRONG_ORGANIZATION`, `FORBIDDEN_ROLE`, `USER_INACTIVE`, `EXTERNAL_USER_CANNOT_LOGIN`, `ONBOARDING_REQUIRED`, `VALIDATION_ERROR`.
+Códigos novos em `ApiErrorCode`: `AUTH_MISSING`, `AUTH_INVALID`, `AUTH_UNAVAILABLE`, `WRONG_ORGANIZATION`, `FORBIDDEN_ROLE`, `USER_INACTIVE`, `EXTERNAL_USER_CANNOT_LOGIN`, `ONBOARDING_REQUIRED`, `EMAIL_NOT_VERIFIED`, `VALIDATION_ERROR`.
 
 ### `GET /api/me` — autenticado, permitido durante o onboarding
 
@@ -163,6 +163,9 @@ Tabela `users` (criada em T03). Esta spec exige que existam: `zitadel_sub text u
 | CT-29 | —                                                                            | `PATCH /api/me` com `departmentId` de registro inativo | 422 `VALIDATION_ERROR`                                                                  | RN-15          |
 | CT-30 | —                                                                            | `PATCH /api/me` com campo extra `name`                 | 422 `VALIDATION_ERROR`                                                                  | RN-15          |
 | CT-31 | Agente com 2 grupos                                                          | `GET /api/me`                                          | `groups` com os 2; `company` e `department` preenchidos                                 | RN-08          |
+| CT-32 | Usuário do canal de e-mail; `userinfo` com `email_verified = false`          | `GET /api/me` com `sub` novo                           | 403 `EMAIL_NOT_VERIFIED`; registro intacto                                              | RN-10.2        |
+| CT-33 | Sem usuário com o e-mail; `email_verified = false`                           | `GET /api/me`                                          | Usuário criado normalmente                                                              | RN-10.5        |
+| CT-34 | Resincronização; `userinfo` traz e-mail novo não verificado                  | Request                                                | E-mail antigo mantido                                                                   | RN-11          |
 
 ## 10. Claims reais (preencher no dia 2)
 
@@ -193,11 +196,25 @@ Configuração do `oidc-client-ts` / `react-oidc-context`:
 }
 ```
 
-Comportamento do front com os códigos desta spec: `401` → inicia `signinRedirect()`; `403 ONBOARDING_REQUIRED` ou `needsOnboarding = true` no `/me` → rota `/primeiro-acesso` (T16); `403 USER_INACTIVE` / `EXTERNAL_USER_CANNOT_LOGIN` / `WRONG_ORGANIZATION` → página "sem acesso" com a mensagem do erro e botão de logout; `503 AUTH_UNAVAILABLE` → aviso e botão "tentar de novo".
+Comportamento do front com os códigos desta spec: `401` → inicia `signinRedirect()`; `403 ONBOARDING_REQUIRED` ou `needsOnboarding = true` no `/me` → rota `/primeiro-acesso` (T16); `403 USER_INACTIVE` / `EXTERNAL_USER_CANNOT_LOGIN` / `WRONG_ORGANIZATION` / `EMAIL_NOT_VERIFIED` → página "sem acesso" com a mensagem do erro e botão de logout; `503 AUTH_UNAVAILABLE` → aviso e botão "tentar de novo".
 
 ## 12. Decisões tomadas na implementação
 
-_(preencher após a sessão)_
+- **Roles da requisição vêm sempre do token**, não do banco. O cache por `sub` guarda só o usuário local (id, e-mail, nome, `active`, unidade, departamento e grupos); `users.roles` é sincronizado no cache miss (RN-11) e serve de registro, não de autorização.
+- **`/me` vive no módulo `auth`** (`MeController`), não em `users`: o `PATCH` precisa invalidar o `UserCache`, e `auth` já depende de `users`. Assim não há dependência circular.
+- **JWKS com `cacheMaxAge` infinito** (`createRemoteJWKSet`). O padrão do `jose` (10 min) refaz o fetch quando a cache envelhece e falharia com o Zitadel fora do ar, contrariando a RN-04. A rotação de chave continua funcionando pelo `kid` desconhecido, que força o refetch (com cooldown de 30 s).
+- **Classificação de erro do `jose`:** erros do próprio token (`ERR_JWT_*`, `ERR_JWS_*`, `ERR_JWKS_NO_MATCHING_KEY`, alg não suportado) → 401; qualquer outro (rede, timeout, JWKS ilegível) → 503.
+- **`iat` no futuro** (além da tolerância) é rejeitado à mão: o `jose` só confere `iat` com `maxTokenAge`.
+- **`ZITADEL_PROJECT_ID` é obrigatório na subida da API**; `ZITADEL_ORG_ID` vazio = checagem desligada. O issuer é normalizado sem barra final.
+- **Corrida no 1º acesso:** duas requisições simultâneas do mesmo `sub` novo → a segunda pega o `P2002` do `create` e relê por `sub`.
+- **Nome do `userinfo`:** `name`, senão `given_name + family_name`, senão `preferred_username`, senão o e-mail. Resposta sem `email` válido conta como falha (503 no 1º acesso).
+- **`groups` no `/me`** só lista grupos ativos, ordenados por nome, e vem `[]` para quem não é agente. `CurrentUser.groupIds` traz todas as associações (o escopo de tickets decide o que fazer com grupo inativo).
+- **Formato de erro global:** `ApiExceptionFilter` serializa tudo como `{ statusCode, code, message }`, com `WWW-Authenticate: Bearer` em 401. Erro não tratado → 500 `INTERNAL_ERROR`, stack só no log. `ZodValidationPipe` (em `src/common`) → 422 `VALIDATION_ERROR`.
+- **CT-26 / CT-28** usam um controller dublê em `GET /api/tickets` dentro de `test/auth.e2e-spec.ts`. **Remover o dublê na T08**, quando a rota real existir.
+- **CT-13** sobe uma segunda instância da aplicação com `ZITADEL_ORG_ID` sobrescrito no `TokenVerifierService`.
+- Matriz de permissões criada em `test/authorization.e2e-spec.ts` com `/health`, `/me` (GET e PATCH), `/companies` e `/departments` × 5 papéis.
+- **`email_verified` exigido para vincular** (RN-10.2, CT-32 a CT-34), acrescentado depois da revisão: o login local do Zitadel permite e-mail não verificado.
+- §10 (claims reais) **continua pendente**: depende do login real no Zitadel (checklist do dia 2).
 
 ## 13. Prompt sugerido para a sessão
 

@@ -9,6 +9,19 @@ export const envSchema = z.object({
   DATABASE_URL: z
     .string()
     .startsWith('postgresql://', 'DATABASE_URL precisa começar com postgresql://'),
+
+  // Zitadel (spec T04–T05)
+  ZITADEL_ISSUER: z.url().transform((url) => url.replace(/\/+$/, '')),
+  ZITADEL_PROJECT_ID: z
+    .string()
+    .min(1, 'ZITADEL_PROJECT_ID é obrigatório (id do projeto no Zitadel)'),
+  /** Vazio = não verifica a organização do usuário (RN-06). */
+  ZITADEL_ORG_ID: z
+    .string()
+    .optional()
+    .transform((value) => value || undefined),
+  AUTH_CLOCK_TOLERANCE_SECONDS: z.coerce.number().int().nonnegative().default(60),
+  AUTH_CACHE_TTL_SECONDS: z.coerce.number().int().nonnegative().default(60),
 });
 
 export type Env = z.infer<typeof envSchema>;
