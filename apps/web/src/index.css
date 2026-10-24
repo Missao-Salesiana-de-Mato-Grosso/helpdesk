@@ -15,3 +15,14 @@ body {
     sans-serif;
   line-height: 1.5;
 }
+
+.status-screen {
+  max-width: 32rem;
+  margin: 15vh auto 0;
+  padding: 0 1rem;
+  text-align: center;
+}
+
+.status-actions {
+  margin-top: 1.5rem;
+}

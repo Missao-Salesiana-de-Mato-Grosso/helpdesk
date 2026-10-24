@@ -167,12 +167,40 @@ Tabela `users` (criada em T03). Esta spec exige que existam: `zitadel_sub text u
 | CT-33 | Sem usuário com o e-mail; `email_verified = false`                           | `GET /api/me`                                          | Usuário criado normalmente                                                              | RN-10.5        |
 | CT-34 | Resincronização; `userinfo` traz e-mail novo não verificado                  | Request                                                | E-mail antigo mantido                                                                   | RN-11          |
 
-## 10. Claims reais (preencher no dia 2)
+## 10. Claims reais
+
+Capturado em 24/10/2026 no **ambiente local** (Zitadel v4.19.5, app criada por `pnpm infra:bootstrap`), com `deploy/local/decode-jwt.mjs`. Repetir em produção no dia do login real com o IdP Google.
 
 ```json
-// Colar aqui o payload decodificado de um access token real do ambiente de produção,
-// com valores sensíveis mascarados. Serve de fixture para os testes.
+{
+  "header": { "alg": "RS256", "typ": "JWT", "kid": "<kid>" },
+  "payload": {
+    "aud": ["<client-id>", "<project-id>"],
+    "client_id": "<client-id>",
+    "exp": 1792925149,
+    "iat": 1792881949,
+    "iss": "http://localhost:8080",
+    "jti": "<jti>",
+    "nbf": 1792881949,
+    "sub": "<sub>",
+    "urn:zitadel:iam:org:project:<project-id>:roles": {
+      "admin": { "<org-id>": "missão-salesiana-de-mato-grosso.localhost" }
+    },
+    "urn:zitadel:iam:org:project:roles": {
+      "admin": { "<org-id>": "missão-salesiana-de-mato-grosso.localhost" }
+    },
+    "urn:zitadel:iam:user:resourceowner:id": "<org-id>",
+    "urn:zitadel:iam:user:resourceowner:name": "Missão Salesiana de Mato Grosso",
+    "urn:zitadel:iam:user:resourceowner:primary_domain": "missão-salesiana-de-mato-grosso.localhost"
+  }
+}
 ```
+
+Conclusões:
+
+- Claim de roles é **objeto** (não array). O código continua aceitando os dois.
+- `aud` é array com o client id e o project id. Sem `email` nem `name` no access token: o `userinfo` é necessário.
+- ⚠️ **O access token dura 12 h** (`exp − iat = 43200`), o padrão do Zitadel, e não 1 h como assumem o ADR e o §2 desta spec. Ajustar o _Access Token Lifetime_ (OIDC settings da instância) para 1 h em produção depende de decisão explícita (CLAUDE.md: não alterar configurações de token sem pedido). Até lá, o corte imediato de acesso é só pela flag `active` (RN-12).
 
 ## 11. Contrato para o front (T06)
 
