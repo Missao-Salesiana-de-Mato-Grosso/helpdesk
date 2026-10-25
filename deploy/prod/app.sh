@@ -18,8 +18,9 @@ registry_credentials() {
     [[ -z "$json" ]]; then
     if grep -q "Error getting user" "$err"; then
       rm -f "$err"
-      die "O login do mgc ainda não tem usuário no Container Registry. Gere a credencial uma vez (no seu Terminal,
-  sem colar a saída em chat): mgc container-registry credentials password — e rode make deploy de novo."
+      die "O login do mgc ainda não tem usuário no Container Registry. Crie-o uma vez:
+  mgc container-registry users create
+  e rode make deploy de novo (docs/ambientes.md §2.4)."
     fi
     grep -v -i 'outdated version' "$err" >&2 || true
     rm -f "$err"
