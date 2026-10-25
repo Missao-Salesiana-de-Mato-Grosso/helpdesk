@@ -52,6 +52,7 @@ const MATRIX: RouteCase[] = [
   },
   { method: 'get', path: '/api/companies', expected: AUTHENTICATED },
   { method: 'get', path: '/api/departments', expected: AUTHENTICATED },
+  { method: 'get', path: '/api/categories', expected: AUTHENTICATED },
   {
     method: 'post',
     path: '/api/tickets',

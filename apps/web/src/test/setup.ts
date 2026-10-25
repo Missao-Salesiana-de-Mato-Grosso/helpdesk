@@ -28,3 +28,6 @@ class ResizeObserverStub {
   disconnect(): void {}
 }
 window.ResizeObserver = ResizeObserverStub;
+
+// O Combobox do Mantine rola a opção ativa até ficar visível.
+Element.prototype.scrollIntoView = vi.fn();

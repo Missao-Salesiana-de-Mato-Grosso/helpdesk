@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { useAuth } from 'react-oidc-context';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../routes.tsx';
+import { stubApi } from '../test/api.ts';
 import { fakeAuth, jsonResponse, renderWithProviders } from '../test/render.tsx';
 
 vi.mock('react-oidc-context', () => ({ useAuth: vi.fn() }));
@@ -22,20 +23,6 @@ const pending: MeResponse = {
   groups: [],
   needsOnboarding: true,
 };
-
-type Handler = (init?: RequestInit) => Response;
-
-function stubApi(routes: Record<string, Handler>) {
-  const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    const key = `${init?.method ?? 'GET'} ${url}`;
-    const handler = routes[key];
-    if (!handler) throw new Error(`rota não mockada: ${key}`);
-    return handler(init);
-  });
-  vi.stubGlobal('fetch', fetchMock);
-  return fetchMock;
-}
 
 async function choose(label: string, option: string) {
   await userEvent.click(screen.getByRole('combobox', { name: new RegExp(`^${label}`) }));

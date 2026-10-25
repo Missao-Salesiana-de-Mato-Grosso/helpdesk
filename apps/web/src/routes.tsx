@@ -8,7 +8,9 @@ import { useMe } from './auth/useMe.ts';
 import { StatusScreen } from './components/StatusScreen.tsx';
 import { GroupsPage, UsersPage } from './features/admin/pages.tsx';
 import { QueuePage } from './features/queue/QueuePage.tsx';
-import { MyTicketsPage, NewTicketPage, TicketDetailPage } from './features/tickets/pages.tsx';
+import { MyTicketsPage } from './features/tickets/MyTicketsPage.tsx';
+import { NewTicketPage } from './features/tickets/NewTicketPage.tsx';
+import { TicketDetailPage } from './features/tickets/TicketDetailPage.tsx';
 import { AppLayout } from './layout/AppLayout.tsx';
 import { AGENT_ROLES, homePath } from './layout/navigation.ts';
 
@@ -33,7 +35,7 @@ export function AppRoutes() {
           <Route index element={<HomeRedirect />} />
           <Route path="tickets" element={<MyTicketsPage />} />
           <Route path="tickets/novo" element={<NewTicketPage />} />
-          <Route path="tickets/:number" element={<TicketDetailPage />} />
+          <Route path="tickets/:id" element={<TicketDetailPage />} />
           <Route
             path="fila/:view"
             element={
