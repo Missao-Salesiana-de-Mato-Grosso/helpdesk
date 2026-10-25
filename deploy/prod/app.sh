@@ -12,9 +12,20 @@ client_id=$(overlay_value VITE_ZITADEL_CLIENT_ID)
 # ── Registry ────────────────────────────────────────────────────────────────────
 registry_credentials() {
   # Usuário e senha do Container Registry da conta. Não são impressos.
-  local json
-  json=$(mgc container-registry credentials get -o json --raw 2>/dev/null | sed -n '/^[[:space:]]*[[{]/,$p') ||
-    die "Não consegui ler as credenciais do registry (mgc container-registry credentials get). Login no mgc ok?"
+  local json err
+  err=$(mktemp)
+  if ! json=$(mgc container-registry credentials get -o json --raw 2>"$err" | sed -n '/^[[:space:]]*[[{]/,$p') ||
+    [[ -z "$json" ]]; then
+    if grep -q "Error getting user" "$err"; then
+      rm -f "$err"
+      die "O login do mgc ainda não tem usuário no Container Registry. Gere a credencial uma vez (no seu Terminal,
+  sem colar a saída em chat): mgc container-registry credentials password — e rode make deploy de novo."
+    fi
+    grep -v -i 'outdated version' "$err" >&2 || true
+    rm -f "$err"
+    die "Não consegui ler as credenciais do registry (mgc container-registry credentials get)."
+  fi
+  rm -f "$err"
   REGISTRY_USER=$(printf '%s' "$json" | jq -r '[.. | objects | (.username? // .user? // empty)][0] // empty')
   REGISTRY_PASSWORD=$(printf '%s' "$json" | jq -r '[.. | objects | (.password? // empty)][0] // empty')
   [[ -n "$REGISTRY_USER" && -n "$REGISTRY_PASSWORD" ]] ||
