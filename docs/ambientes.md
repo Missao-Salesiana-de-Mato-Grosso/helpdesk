@@ -238,6 +238,8 @@ Tudo pelo `Makefile` da raiz, **numa janela do Terminal** (cada alvo pergunta an
 | 5     | `make zitadel-bootstrap ARGS="--admin <email>"` | Depois do **primeiro login pelo Google** da pessoa: concede a role `admin` no projeto                                                                                                                                                                                     |
 | —     | `make status`                                   | Só leitura: pods, certificados e saúde                                                                                                                                                                                                                                    |
 
+**Sem o Secret `iam-admin-pat`** (o setup gera o PAT uma única vez; se o contêiner que o grava falhar, ele se perde): console como `zitadel-admin` → Usuários → aba **Usuários de serviço** → `iam-admin` → **Tokens de acesso pessoal** → Novo (validade longa) → copiar o token e gravá-lo, **sem colar em chat**, como linha `ZITADEL_BOOTSTRAP_PAT=<token>` em `../msmt-infra-automation/secrets/zitadel.env`. O `make zitadel-bootstrap` usa esse valor quando o Secret não existe.
+
 **Admin de emergência do Zitadel:** usuário `zitadel-admin` (e-mail `zitadel-admin@msmt.org.br`, fora do Workspace para não colidir com contas Google), senha em `secrets/zitadel.env` (`ZITADEL_ADMIN_PASSWORD`). Console: `https://auth.msmt.org.br/ui/console`.
 
 ⚠️ **A masterkey (`ZITADEL_MASTERKEY`) nunca muda** depois da 1ª instalação: perdê-la ou trocá-la torna os dados cifrados do Zitadel ilegíveis. Guardar `secrets/zitadel.env` no cofre da equipe.
