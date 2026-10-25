@@ -160,14 +160,15 @@ Decisões e confirmações em aberto que precisam estar resolvidas antes ou dura
 
 Registro do que foi executado na conta **MISSAO SALESIANA DE MATO GROSSO** (região `br-se1`), em ordem.
 
-| Data       | Passo                                                         | Resultado                                                                     |
-| ---------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| 2026-10-24 | `mgc` v0.48 → v0.67, `helm` 4.3, `kubectl` 1.37               | ok                                                                            |
-| 2026-10-24 | DBaaS `pg-msmt-prd-web` (PostgreSQL 17, BV1-4-10) pelo painel | **status Erro**; a excluir pelo painel e recriar com `make database`          |
-| 2026-10-25 | `make cluster`: `k8s-msmt-prd`, v1.34.2, 2 × BV2-4-40         | ok (~30 min); 3 nós de controle gerenciados + 2 de trabalho, IPs `172.18.x.x` |
-| 2026-10-25 | `make registry`: `cr-msmt-prd`                                | ok (já existia `cr-msmt-dev`, não usado aqui)                                 |
-| 2026-10-25 | Bucket `msmt-helpdesk` pelo painel (privado, versionado)      | ok; `make storage` ainda cria as chaves (CLI e app)                           |
-| —          | `make database`, `make addons`, DNS                           | pendente                                                                      |
+| Data       | Passo                                                               | Resultado                                                                     |
+| ---------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 2026-10-24 | `mgc` v0.48 → v0.67, `helm` 4.3, `kubectl` 1.37                     | ok                                                                            |
+| 2026-10-24 | DBaaS `pg-msmt-prd-web` (PostgreSQL 17, BV1-4-10) pelo painel       | **status Erro**; a excluir pelo painel e recriar com `make database`          |
+| 2026-10-25 | `make cluster`: `k8s-msmt-prd`, v1.34.2, 2 × BV2-4-40               | ok (~30 min); 3 nós de controle gerenciados + 2 de trabalho, IPs `172.18.x.x` |
+| 2026-10-25 | `make registry`: `cr-msmt-prd`                                      | ok (já existia `cr-msmt-dev`, não usado aqui)                                 |
+| 2026-10-25 | Bucket `msmt-helpdesk` pelo painel (privado, versionado)            | ok; `make storage` ainda cria as chaves (CLI e app)                           |
+| 2026-10-25 | `make storage`: chaves `msmt-infra-cli` (só o mgc) e `helpdesk-app` | ok; par do app em `msmt-infra-automation/secrets/object-storage.env`          |
+| —          | `make database`, `make addons`, DNS                                 | pendente                                                                      |
 
 Armadilhas encontradas:
 
@@ -176,6 +177,7 @@ Armadilhas encontradas:
 - **Rodar os `make` numa janela do Terminal**, um por vez. Pelo `!` do Claude Code não há terminal para a confirmação `[s/N]`. Colar várias linhas de uma vez faz a linha seguinte virar a resposta da pergunta (cancela).
 - Logo após o cluster ficar `running`, o `kube-user` do kubeconfig recebe "forbidden" por alguns minutos (permissões ainda sendo aplicadas). O script espera até 10 min.
 - `mgc dbaas instances list` **não mostra instâncias com erro**; só com `--status ERROR`.
+- `mgc object-storage api-key current` sai com código 0 mesmo sem chave ("No current API key set!"): conferir o `uuid` no JSON.
 - Os comandos de bucket do `mgc` exigem uma chave do Object Storage selecionada no CLI (`msmt-infra-cli`, separada da chave do app). Os comandos `object-storage api-key` não aceitam `--region`.
 
 ### 2.1 Bucket do help desk (Object Storage)
