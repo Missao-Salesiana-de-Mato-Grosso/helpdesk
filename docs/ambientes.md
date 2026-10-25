@@ -262,6 +262,7 @@ MAILBOX_START_SINCE=
 
 Armadilhas e decisões:
 
+- O chart do Zitadel usa a imagem `alpine/k8s:<versão do cluster>` nos jobs. A `1.34.2` não existe no Docker Hub: o setup ficava em `ImagePullBackOff` até o prazo do job (`DeadlineExceeded`, sem log). Tag fixada em `tools.kubectl.image.tag`. Ao atualizar o cluster, conferir se a tag ainda serve.
 - `DATABASE_URL` vai sem `sslmode` (rede privada). Se a migração falhar com "no pg_hba.conf entry … no encryption", o DBaaS exige TLS: acrescentar `&sslmode=no-verify` em `deploy/prod/app.sh`. O Zitadel usa `SSL.Mode: prefer`.
 - O app roda com **1 réplica** e estratégia `Recreate`: os crons (outbox e IMAP) rodam no processo, e a leitura da caixa não deve rodar em paralelo.
 - As variáveis `VITE_*` são embutidas no front no build. Trocar o client id do Zitadel exige novo `make deploy`.
