@@ -14,12 +14,12 @@ registry_credentials() {
   # Usuário e senha do Container Registry da conta. Não são impressos.
   local json err
   err=$(mktemp)
-  if ! json=$(mgc container-registry credentials get -o json --raw 2>"$err" | sed -n '/^[[:space:]]*[[{]/,$p') ||
+  if ! json=$(mgc container-registry credentials get --region "$MGC_REGION" -o json --raw 2>"$err" | sed -n '/^[[:space:]]*[[{]/,$p') ||
     [[ -z "$json" ]]; then
     if grep -q "Error getting user" "$err"; then
       rm -f "$err"
       die "O login do mgc ainda não tem usuário no Container Registry. Crie-o uma vez:
-  mgc container-registry users create
+  mgc container-registry users create --region $MGC_REGION
   e rode make deploy de novo (docs/ambientes.md §2.4)."
     fi
     grep -v -i 'outdated version' "$err" >&2 || true

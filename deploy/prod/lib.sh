@@ -8,7 +8,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 INFRA_DIR="${INFRA_DIR:-$ROOT/../msmt-infra-automation}"
 SECRETS_DIR="$INFRA_DIR/secrets"
 KUBECONFIG_FILE="$SECRETS_DIR/kubeconfig-k8s-msmt-prd.yaml"
-REGISTRY_HOST=container-registry.br-se1.magalu.cloud
+# Região explícita em todo comando mgc: o padrão do CLI (mgc config) pode estar em outra (ex.: br-ne1),
+# e o usuário/credencial do registry é por região.
+MGC_REGION=br-se1
+REGISTRY_HOST=container-registry.${MGC_REGION}.magalu.cloud
 IMAGE_REPO="$REGISTRY_HOST/cr-msmt-prd/helpdesk"
 ZITADEL_CHART_VERSION=10.4.0
 APP_HOST=suporte.msmt.org.br
