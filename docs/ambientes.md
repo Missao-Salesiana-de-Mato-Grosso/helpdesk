@@ -223,3 +223,46 @@ A preparar com as etapas 1, 7 e 11. O código já está pronto (T21).
 - Conferência depois do deploy: o log mostra `Cursor inicial da INBOX: UID …`. Enviar um e-mail de teste e ver o ticket, o rótulo `helpdesk/processado` no Gmail (com o e-mail ainda na INBOX) e a confirmação no thread (P5 e P6 em 2.0).
 - Monitorar `inbound_emails` com `status = 'failed'` e o rótulo `helpdesk/erro`. Para reprocessar um e-mail com falha: o runbook (T20) vai descrever o passo.
 - Para recomeçar a leitura do zero (por exemplo, ao trocar de `suporte-teste@` para `suporte@`), apague as chaves `mailbox.last_uid` e `mailbox.uid_validity` em `app_settings` antes do deploy. Sem isso, a API usaria o cursor da outra caixa.
+
+### 2.4 Publicação do Zitadel e do app (etapas 4, 5 e 8; T17)
+
+Tudo pelo `Makefile` da raiz, **numa janela do Terminal** (cada alvo pergunta antes de alterar). Os scripts estão em `deploy/prod/`, leem os segredos de `../msmt-infra-automation/secrets/` (nunca impressos) e usam o kubeconfig de lá, nunca o contexto atual do `kubectl`. Pré-requisitos: plataforma pronta (2.0.1), Docker Desktop aberto, `mgc` logado.
+
+| Ordem | Comando                                         | O que faz                                                                                                                                                                                                                                                                 |
+| ----- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | `make zitadel`                                  | Gera (uma vez) masterkey, senha do admin de emergência e segredo do cookie do login em `secrets/zitadel.env`; cria os Secrets; instala o chart `zitadel/zitadel` 10.4.0 com imagem **v4.19.5** (`deploy/zitadel/values.yaml`); espera o certificado de `auth.msmt.org.br` |
+| 2     | `make zitadel-bootstrap`                        | Projeto "Help Desk", roles e app SPA (sem Development Mode, redirects de `https://suporte.msmt.org.br`), com o PAT do Secret `iam-admin-pat`. Grava `ZITADEL_PROJECT_ID` e `VITE_ZITADEL_CLIENT_ID` em `deploy/k8s/overlays/prod/zitadel.env` (**commitar**)              |
+| 3     | IdP Google (manual, abaixo)                     | Login com as contas `@missaosalesiana.org.br`                                                                                                                                                                                                                             |
+| 4     | `make deploy`                                   | Build `linux/amd64` e push para `cr-msmt-prd`; Secrets `registry` e `helpdesk-secrets`; ConfigMap; Job de migração (`prisma migrate deploy` + seed); rollout; confere o certificado e `https://suporte.msmt.org.br/api/health`                                            |
+| 5     | `make zitadel-bootstrap ARGS="--admin <email>"` | Depois do **primeiro login pelo Google** da pessoa: concede a role `admin` no projeto                                                                                                                                                                                     |
+| —     | `make status`                                   | Só leitura: pods, certificados e saúde                                                                                                                                                                                                                                    |
+
+**Admin de emergência do Zitadel:** usuário `zitadel-admin` (e-mail `zitadel-admin@msmt.org.br`, fora do Workspace para não colidir com contas Google), senha em `secrets/zitadel.env` (`ZITADEL_ADMIN_PASSWORD`). Console: `https://auth.msmt.org.br/ui/console`.
+
+⚠️ **A masterkey (`ZITADEL_MASTERKEY`) nunca muda** depois da 1ª instalação: perdê-la ou trocá-la torna os dados cifrados do Zitadel ilegíveis. Guardar `secrets/zitadel.env` no cofre da equipe.
+
+**IdP Google (etapa 5, manual):**
+
+1. Google Cloud Console (projeto da organização) → APIs e serviços → Tela de consentimento OAuth: tipo **Interno** (só contas do Workspace).
+2. Credenciais → Criar ID do cliente OAuth → **Aplicativo da Web**. URI de redirecionamento autorizado: `https://auth.msmt.org.br/idps/callback`. ⚠️ Conferir na tela do IdP no console do Zitadel, que mostra a URL de callback exata.
+3. Console do Zitadel (como `zitadel-admin`) → Configurações padrão → Provedores de identidade → **Google**: client id e secret do passo 2; marcar criação automática, atualização automática e vinculação por e-mail.
+4. Configurações padrão → Configurações de login: permitir login com IdP externo. Manter o login por usuário e senha só enquanto o admin de emergência precisar.
+5. Testar: abrir `https://suporte.msmt.org.br` em aba anônima e entrar com uma conta `@missaosalesiana.org.br`. Depois, passo 5 da tabela para dar a role `admin`.
+
+**E-mail (SMTP e IMAP):** opcional no 1º deploy. Sem o arquivo abaixo, o app sobe com notificações e leitura da caixa **desligadas** (o `make deploy` avisa). Para ligar, crie `../msmt-infra-automation/secrets/helpdesk-email.env` (permissão 600) e rode `make deploy` de novo:
+
+```
+SMTP_USER=suporte-teste@missaosalesiana.org.br
+SMTP_PASSWORD=<senha de app>
+MAILBOX_USER=suporte-teste@missaosalesiana.org.br
+MAILBOX_PASSWORD=<senha de app>
+# Na virada: hora da desconexão do Freshdesk (ver 2.3)
+MAILBOX_START_SINCE=
+```
+
+Armadilhas e decisões:
+
+- `DATABASE_URL` vai sem `sslmode` (rede privada). Se a migração falhar com "no pg_hba.conf entry … no encryption", o DBaaS exige TLS: acrescentar `&sslmode=no-verify` em `deploy/prod/app.sh`. O Zitadel usa `SSL.Mode: prefer`.
+- O app roda com **1 réplica** e estratégia `Recreate`: os crons (outbox e IMAP) rodam no processo, e a leitura da caixa não deve rodar em paralelo.
+- As variáveis `VITE_*` são embutidas no front no build. Trocar o client id do Zitadel exige novo `make deploy`.
+- O `.dockerignore` excluía `**/storage` e levava junto o código de `src/attachments/storage/`: as exclusões de dados são só `/storage` e `apps/api/storage`.

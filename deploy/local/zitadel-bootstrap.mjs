@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // oxlint-disable no-console -- script de CLI: a saída no terminal é o objetivo
-// Configura o Zitadel LOCAL para o Help Desk. Idempotente: pode rodar quantas vezes quiser,
-// inclusive depois de `pnpm infra:reset`. Nunca aponte para produção (ver docs/ambientes.md).
+// Configura o Zitadel para o Help Desk. Idempotente: pode rodar quantas vezes quiser,
+// inclusive depois de `pnpm infra:reset`.
 //
-// Uso: pnpm infra:bootstrap [-- --admin <email>]
+// Uso local:    pnpm infra:bootstrap [-- --admin <email>]
+// Uso produção: make zitadel-bootstrap (deploy/prod/zitadel.sh), que define BOOTSTRAP_TARGET=prod,
+//               ZITADEL_ISSUER, PORTAL_URL e ZITADEL_BOOTSTRAP_PAT. Em produção: sem Development Mode,
+//               sem SMTP do Mailpit, e os IDs vão para deploy/k8s/overlays/prod/zitadel.env.
 //
 // O que faz:
 //   1. projeto "Help Desk" com Assert Roles on Authentication;
@@ -15,11 +18,13 @@
 //   6. grava ZITADEL_PROJECT_ID, VITE_ZITADEL_PROJECT_ID e VITE_ZITADEL_CLIENT_ID no .env da raiz.
 //
 // Autentica com o PAT do service user `bootstrap-admin`, que o docker-compose grava em
-// .local/zitadel/admin.pat na primeira subida. O PAT nunca é impresso.
+// .local/zitadel/admin.pat na primeira subida (em produção, ZITADEL_BOOTSTRAP_PAT, lido do Secret
+// iam-admin-pat). O PAT nunca é impresso.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
+const PROD = process.env.BOOTSTRAP_TARGET === 'prod';
 const ISSUER = process.env.ZITADEL_ISSUER ?? 'http://localhost:8080';
 const WEB_ORIGIN = process.env.PORTAL_URL ?? 'http://localhost:5173';
 const PROJECT_NAME = 'Help Desk';
@@ -44,11 +49,18 @@ const adminEmail = (() => {
   return index > -1 ? process.argv[index + 1] : undefined;
 })();
 
-const patFile = `${ROOT}.local/zitadel/admin.pat`;
-if (!existsSync(patFile)) {
-  fail(`PAT não encontrado em ${patFile}. A infra local está no ar? (pnpm infra:up)`);
-}
-const PAT = readFileSync(patFile, 'utf8').trim();
+const PAT = (() => {
+  if (PROD) {
+    if (!process.env.ZITADEL_BOOTSTRAP_PAT)
+      fail('ZITADEL_BOOTSTRAP_PAT não definido (use make zitadel-bootstrap)');
+    return process.env.ZITADEL_BOOTSTRAP_PAT.trim();
+  }
+  const patFile = `${ROOT}.local/zitadel/admin.pat`;
+  if (!existsSync(patFile)) {
+    fail(`PAT não encontrado em ${patFile}. A infra local está no ar? (pnpm infra:up)`);
+  }
+  return readFileSync(patFile, 'utf8').trim();
+})();
 
 async function api(method, path, body) {
   const init = {
@@ -123,7 +135,8 @@ async function ensureApp(projectId) {
     grantTypes: ['OIDC_GRANT_TYPE_AUTHORIZATION_CODE', 'OIDC_GRANT_TYPE_REFRESH_TOKEN'],
     appType: 'OIDC_APP_TYPE_USER_AGENT',
     authMethodType: 'OIDC_AUTH_METHOD_TYPE_NONE',
-    devMode: true,
+    // Development Mode aceita redirect sem HTTPS: só no ambiente local.
+    devMode: !PROD,
     accessTokenType: 'OIDC_TOKEN_TYPE_JWT',
     accessTokenRoleAssertion: true,
     idTokenRoleAssertion: true,
@@ -194,8 +207,8 @@ async function ensureAdminGrant(projectId, email) {
 }
 
 function writeEnv(values) {
-  const envFile = `${ROOT}.env`;
-  if (!existsSync(envFile)) fail('.env não existe na raiz. Rode: cp .env.example .env');
+  const envFile = PROD ? `${ROOT}deploy/k8s/overlays/prod/zitadel.env` : `${ROOT}.env`;
+  if (!existsSync(envFile)) fail(`${envFile} não existe. Rode: cp .env.example .env`);
   let content = readFileSync(envFile, 'utf8');
   for (const [key, value] of Object.entries(values)) {
     const line = `${key}=${value}`;
@@ -205,20 +218,25 @@ function writeEnv(values) {
       : `${content.trimEnd()}\n${line}\n`;
   }
   writeFileSync(envFile, content);
-  console.log(`✔ .env atualizado: ${Object.keys(values).join(', ')}`);
+  console.log(`✔ ${envFile.slice(ROOT.length)} atualizado: ${Object.keys(values).join(', ')}`);
 }
 
 try {
   const projectId = await ensureProject();
   await ensureRoles(projectId);
   const clientId = await ensureApp(projectId);
-  await ensureSmtp();
+  // Em produção o Zitadel ainda não envia e-mail (o login é pelo Google); SMTP fica para depois.
+  if (!PROD) await ensureSmtp();
   if (adminEmail) await ensureAdminGrant(projectId, adminEmail);
-  writeEnv({
-    ZITADEL_PROJECT_ID: projectId,
-    VITE_ZITADEL_PROJECT_ID: projectId,
-    VITE_ZITADEL_CLIENT_ID: clientId,
-  });
+  writeEnv(
+    PROD
+      ? { ZITADEL_PROJECT_ID: projectId, VITE_ZITADEL_CLIENT_ID: clientId }
+      : {
+          ZITADEL_PROJECT_ID: projectId,
+          VITE_ZITADEL_PROJECT_ID: projectId,
+          VITE_ZITADEL_CLIENT_ID: clientId,
+        },
+  );
 } catch (error) {
   fail(error.message);
 }

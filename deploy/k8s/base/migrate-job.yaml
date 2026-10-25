@@ -1,0 +1,41 @@
+# Aplicado por deploy/prod/app.sh antes do rollout (não faz parte do kustomization): migrações e seed.
+# O seed é idempotente (dados de referência).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: helpdesk-migrate
+  namespace: helpdesk
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: registry
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: migrate
+          image: IMAGE
+          command: ['sh', '-c', 'prisma migrate deploy && prisma db seed']
+          envFrom:
+            - configMapRef:
+                name: helpdesk-config
+            - secretRef:
+                name: helpdesk-secrets
+          env:
+            - name: HOME
+              value: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

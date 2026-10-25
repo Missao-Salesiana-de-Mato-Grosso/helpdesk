@@ -1,0 +1,17 @@
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+apps/api/src/generated
+.git
+.env
+.env.*
+.local
+.inbox
+**/.inbox
+/storage
+apps/api/storage
+coverage
+docs
+deploy
+*.log
+.DS_Store
