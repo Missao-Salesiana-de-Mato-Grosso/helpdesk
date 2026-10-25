@@ -125,19 +125,19 @@ done
 
 > **Plataforma (etapas 2 e 3):** criada pelo repositório irmão `msmt-infra-automation` (`../msmt-infra-automation`), com scripts idempotentes do CLI `mgc`: `make preflight`, depois `make registry storage cluster database addons`. Ele gera as senhas do banco, a chave do Object Storage e o kubeconfig em `secrets/` (fora do git) e imprime o IP do Traefik para o DNS. O passo a passo, os valores a preencher em `config/prod.env` e o que conferir na 1ª execução estão no README de lá. Este repositório continua dono do deploy do app e do Zitadel (`deploy/k8s`, `deploy/zitadel`).
 
-| #   | Etapa                                                                                                                                                             | Status                                                |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| 1   | Caixa `suporte-teste@missaosalesiana.org.br`: usuário no Workspace, verificação em 2 etapas, senha de app                                                         | pendente                                              |
-| 2   | Cluster Kubernetes, DBaaS (bancos `zitadel` e `helpdesk`), registry, bucket de anexos (ver 2.1)                                                                   | feito 2026-10-25 (ver 2.0.1)                          |
-| 3   | DNS (`suporte.msmt.org.br`, `auth.msmt.org.br`), Traefik, cert-manager                                                                                            | Traefik e cert-manager feitos 2026-10-25; DNS a criar |
-| 4   | Zitadel v4.19.5 via Helm (`deploy/zitadel`): org, projeto, roles, app SPA (JWT), branding. Mesmos passos do 1.4, com redirects de produção e sem Development Mode | pendente                                              |
-| 5   | IdP Google: app OAuth "Internal" no Google Cloud + IdP na org do Zitadel                                                                                          | pendente                                              |
-| 6   | Login real e claims do access token na §10 da spec T04–T05 (local já capturado; repetir em produção). **Decidir o Access Token Lifetime** (P1)                    | pendente                                              |
-| 7   | Senha de app de `suporte@` (produção); anotar onde se desconecta a caixa no Freshdesk. SMTP: ver 2.2                                                              | pendente                                              |
-| 8   | Deploy do app (`make deploy`, T17), Secrets, migração                                                                                                             | pendente                                              |
-| 9   | CronJob de backup e **teste de restore**                                                                                                                          | pendente                                              |
-| 10  | Monitor de disponibilidade; verificação em 2 etapas obrigatória para os agentes no Workspace                                                                      | pendente                                              |
-| 11  | Virada do e-mail (`05-plano-mvp.md` §5.4)                                                                                                                         | pendente                                              |
+| #   | Etapa                                                                                                                                                             | Status                       |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| 1   | Caixa `suporte-teste@missaosalesiana.org.br`: usuário no Workspace, verificação em 2 etapas, senha de app                                                         | pendente                     |
+| 2   | Cluster Kubernetes, DBaaS (bancos `zitadel` e `helpdesk`), registry, bucket de anexos (ver 2.1)                                                                   | feito 2026-10-25 (ver 2.0.1) |
+| 3   | DNS (`suporte.msmt.org.br`, `auth.msmt.org.br`), Traefik, cert-manager                                                                                            | feito 2026-10-25 (ver 2.0.1) |
+| 4   | Zitadel v4.19.5 via Helm (`deploy/zitadel`): org, projeto, roles, app SPA (JWT), branding. Mesmos passos do 1.4, com redirects de produção e sem Development Mode | pendente                     |
+| 5   | IdP Google: app OAuth "Internal" no Google Cloud + IdP na org do Zitadel                                                                                          | pendente                     |
+| 6   | Login real e claims do access token na §10 da spec T04–T05 (local já capturado; repetir em produção). **Decidir o Access Token Lifetime** (P1)                    | pendente                     |
+| 7   | Senha de app de `suporte@` (produção); anotar onde se desconecta a caixa no Freshdesk. SMTP: ver 2.2                                                              | pendente                     |
+| 8   | Deploy do app (`make deploy`, T17), Secrets, migração                                                                                                             | pendente                     |
+| 9   | CronJob de backup e **teste de restore**                                                                                                                          | pendente                     |
+| 10  | Monitor de disponibilidade; verificação em 2 etapas obrigatória para os agentes no Workspace                                                                      | pendente                     |
+| 11  | Virada do e-mail (`05-plano-mvp.md` §5.4)                                                                                                                         | pendente                     |
 
 ### 2.0 Pendências para o rollout
 
@@ -170,7 +170,7 @@ Registro do que foi executado na conta **MISSAO SALESIANA DE MATO GROSSO** (regi
 | 2026-10-25 | `make storage`: chaves `msmt-infra-cli` (só o mgc) e `helpdesk-app`                                                            | ok; par do app em `msmt-infra-automation/secrets/object-storage.env`                                                                                                                   |
 | 2026-10-25 | `make database`: `pg-msmt-prd-web` recriada (PostgreSQL 17, BV1-4-10, 20 GB, `br-se1-a`, IP privado `172.18.3.73`)             | ok; backup 7 dias às 05:00 UTC, protegida contra exclusão; bancos e usuários `zitadel` e `helpdesk` criados por pod no cluster; senhas em `msmt-infra-automation/secrets/database.env` |
 | 2026-10-25 | `make addons`: Traefik 42.1.3 (2 réplicas, LoadBalancer) e cert-manager v1.21.3 com `letsencrypt-staging` e `letsencrypt-prod` | ok; **IP público `201.23.74.106`** (balanceador criado pela Magalu sem configuração extra)                                                                                             |
-| 2026-10-25 | DNS: `suporte.msmt.org.br` e `auth.msmt.org.br` → A `201.23.74.106`, TTL 300                                                   | a criar                                                                                                                                                                                |
+| 2026-10-25 | DNS: `suporte.msmt.org.br` e `auth.msmt.org.br` → A `201.23.74.106`, TTL 300                                                   | ok, na **Cloudflare**, proxy **desligado** (DNS only); HTTP → 301 para HTTPS; HTTPS responde 404 com o certificado padrão do Traefik até existirem as rotas dos apps                   |
 
 Armadilhas encontradas:
 
@@ -179,6 +179,7 @@ Armadilhas encontradas:
 - **Rodar os `make` numa janela do Terminal**, um por vez. Pelo `!` do Claude Code não há terminal para a confirmação `[s/N]`. Colar várias linhas de uma vez faz a linha seguinte virar a resposta da pergunta (cancela).
 - Logo após o cluster ficar `running`, o `kube-user` do kubeconfig recebe "forbidden" por alguns minutos (permissões ainda sendo aplicadas). O script espera até 10 min.
 - `mgc dbaas instances list` **não mostra instâncias com erro**; só com `--status ERROR`. Depois de excluir, esperar sair de `DELETING` antes de recriar com o mesmo nome.
+- O DNS de `msmt.org.br` está na Cloudflare. Com o **proxy ligado (nuvem laranja)** os nomes resolvem para IPs da Cloudflare e o HTTPS dá **erro 526** (origem sem certificado válido); o Let's Encrypt também não valida. Manter **DNS only (nuvem cinza)**.
 - O chart 42 do Traefik mudou o formato dos valores (`ports.<ep>.http.redirections`, `ports.<ep>.http.tls`, `accessLog`). O `make addons` valida os valores com `helm template` antes de instalar.
 - No DBaaS, o mesmo rótulo de tipo (`BV1-4-10`) existe para cada engine: buscar o tipo com `--engine-id` do PostgreSQL.
 - `mgc object-storage api-key current` sai com código 0 mesmo sem chave ("No current API key set!"): conferir o `uuid` no JSON.
