@@ -143,32 +143,33 @@ done
 
 Decisões e confirmações em aberto que precisam estar resolvidas antes ou durante a subida em produção. Ao resolver uma, marque a data e mova o detalhe para a seção da etapa.
 
-| #   | Pendência                                                                                                                                                                                               | Etapa | Quem            | Status |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | --------------- | ------ |
-| P1  | **Decidir o Access Token Lifetime do Zitadel:** padrão de 12 h ou 1 h (recomendado; ADR). Não alterar sem decisão explícita                                                                             | 6     | dono do produto | aberta |
-| P2  | **Confirmar com o suporte da Magalu** que o envio autenticado pelo Gmail (`smtp.gmail.com:587`) não fere os termos de uso ("e-mail transacional diretamente via SMTP"). Ver 2.2                         | 2, 7  | dono do produto | aberta |
-| P3  | Testar se o cluster sai pela porta **587** (SMTP) e pela **993** (IMAP) até o Gmail. Se a 587 estiver bloqueada, a alternativa é um provedor SMTP externo (só muda `SMTP_*`; exige SPF/DKIM no DNS)     | 2     | desenvolvedor   | aberta |
-| P4  | Confirmar o **endpoint do Object Storage** (`https://br-se1.magaluobjects.com`) no painel ao criar o bucket. O driver `s3` só foi testado com cliente falso: validar upload e download reais            | 2, 8  | desenvolvedor   | aberta |
-| P5  | Com `suporte-teste@`: conferir se o Gmail **preserva o `Message-ID`** que enviamos (`<tk-…@suporte.msmt.org.br>`) e se as respostas ficam no mesmo thread. Se reescrever, a tag `[#n]` segura           | 1     | desenvolvedor   | aberta |
-| P6  | Com `suporte-teste@` (T21; ver 2.3): conferir num e-mail real o cabeçalho `Authentication-Results: mx.google.com … dmarc=` e se copiar para o rótulo `helpdesk/processado` **mantém o e-mail na INBOX** | 1     | desenvolvedor   | aberta |
-| P7  | Anotar no admin do Freshdesk (Admin → Canais → E-mail) **onde se desconecta a caixa** `suporte@`, para a virada e o rollback                                                                            | 7, 11 | dono do produto | aberta |
-| P9  | A chave do Object Storage criada pelo `mgc` vale para **todos os buckets da conta** (o CLI não tem escopo por bucket). Aceitar, ou ver no painel se há chave restrita                                   | 2     | dono do produto | aberta |
-| P10 | Conferir que o DBaaS é alcançável **a partir dos nós do cluster** (mesma rede privada). O `make database` cria os bancos por um pod `psql` dentro do cluster                                            | 2     | desenvolvedor   | aberta |
-| P8  | Depois da virada: acompanhar `notifications` com `status = 'failed'` e `inbound_emails` com `failed`/`discarded` (rótulo `helpdesk/erro`) por 2 h, e incluir isso no monitoramento                      | 10–11 | desenvolvedor   | aberta |
+| #   | Pendência                                                                                                                                                                                               | Etapa | Quem            | Status                                                          |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | --------------- | --------------------------------------------------------------- |
+| P1  | **Decidir o Access Token Lifetime do Zitadel:** padrão de 12 h ou 1 h (recomendado; ADR). Não alterar sem decisão explícita                                                                             | 6     | dono do produto | aberta                                                          |
+| P2  | **Confirmar com o suporte da Magalu** que o envio autenticado pelo Gmail (`smtp.gmail.com:587`) não fere os termos de uso ("e-mail transacional diretamente via SMTP"). Ver 2.2                         | 2, 7  | dono do produto | aberta                                                          |
+| P3  | Testar se o cluster sai pela porta **587** (SMTP) e pela **993** (IMAP) até o Gmail. Se a 587 estiver bloqueada, a alternativa é um provedor SMTP externo (só muda `SMTP_*`; exige SPF/DKIM no DNS)     | 2     | desenvolvedor   | aberta                                                          |
+| P4  | Confirmar o **endpoint do Object Storage** (`https://br-se1.magaluobjects.com`) no painel ao criar o bucket. O driver `s3` só foi testado com cliente falso: validar upload e download reais            | 2, 8  | desenvolvedor   | aberta                                                          |
+| P5  | Com `suporte-teste@`: conferir se o Gmail **preserva o `Message-ID`** que enviamos (`<tk-…@suporte.msmt.org.br>`) e se as respostas ficam no mesmo thread. Se reescrever, a tag `[#n]` segura           | 1     | desenvolvedor   | aberta                                                          |
+| P6  | Com `suporte-teste@` (T21; ver 2.3): conferir num e-mail real o cabeçalho `Authentication-Results: mx.google.com … dmarc=` e se copiar para o rótulo `helpdesk/processado` **mantém o e-mail na INBOX** | 1     | desenvolvedor   | aberta                                                          |
+| P7  | Anotar no admin do Freshdesk (Admin → Canais → E-mail) **onde se desconecta a caixa** `suporte@`, para a virada e o rollback                                                                            | 7, 11 | dono do produto | aberta                                                          |
+| P9  | A chave do Object Storage criada pelo `mgc` vale para **todos os buckets da conta** (o CLI não tem escopo por bucket). Aceitar, ou ver no painel se há chave restrita                                   | 2     | dono do produto | aberta                                                          |
+| P10 | Conferir que o DBaaS é alcançável **a partir dos nós do cluster** (mesma rede privada). O `make database` cria os bancos por um pod `psql` dentro do cluster                                            | 2     | desenvolvedor   | resolvida 2026-10-25: o pod `psql` no cluster conectou ao DBaaS |
+| P8  | Depois da virada: acompanhar `notifications` com `status = 'failed'` e `inbound_emails` com `failed`/`discarded` (rótulo `helpdesk/erro`) por 2 h, e incluir isso no monitoramento                      | 10–11 | desenvolvedor   | aberta                                                          |
 
 ### 2.0.1 Execução da plataforma (`msmt-infra-automation`)
 
 Registro do que foi executado na conta **MISSAO SALESIANA DE MATO GROSSO** (região `br-se1`), em ordem.
 
-| Data       | Passo                                                               | Resultado                                                                     |
-| ---------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| 2026-10-24 | `mgc` v0.48 → v0.67, `helm` 4.3, `kubectl` 1.37                     | ok                                                                            |
-| 2026-10-24 | DBaaS `pg-msmt-prd-web` (PostgreSQL 17, BV1-4-10) pelo painel       | **status Erro**; a excluir pelo painel e recriar com `make database`          |
-| 2026-10-25 | `make cluster`: `k8s-msmt-prd`, v1.34.2, 2 × BV2-4-40               | ok (~30 min); 3 nós de controle gerenciados + 2 de trabalho, IPs `172.18.x.x` |
-| 2026-10-25 | `make registry`: `cr-msmt-prd`                                      | ok (já existia `cr-msmt-dev`, não usado aqui)                                 |
-| 2026-10-25 | Bucket `msmt-helpdesk` pelo painel (privado, versionado)            | ok; `make storage` ainda cria as chaves (CLI e app)                           |
-| 2026-10-25 | `make storage`: chaves `msmt-infra-cli` (só o mgc) e `helpdesk-app` | ok; par do app em `msmt-infra-automation/secrets/object-storage.env`          |
-| —          | `make database`, `make addons`, DNS                                 | pendente                                                                      |
+| Data       | Passo                                                                                                              | Resultado                                                                                                                                                                              |
+| ---------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-10-24 | `mgc` v0.48 → v0.67, `helm` 4.3, `kubectl` 1.37                                                                    | ok                                                                                                                                                                                     |
+| 2026-10-24 | DBaaS `pg-msmt-prd-web` pelo painel (PostgreSQL 17, BV1-4-10)                                                      | **status Erro**; excluída pelo painel em 2026-10-25                                                                                                                                    |
+| 2026-10-25 | `make cluster`: `k8s-msmt-prd`, v1.34.2, 2 × BV2-4-40                                                              | ok (~30 min); 3 nós de controle gerenciados + 2 de trabalho, IPs `172.18.x.x`                                                                                                          |
+| 2026-10-25 | `make registry`: `cr-msmt-prd`                                                                                     | ok (já existia `cr-msmt-dev`, não usado aqui)                                                                                                                                          |
+| 2026-10-25 | Bucket `msmt-helpdesk` pelo painel (privado, versionado)                                                           | ok; `make storage` ainda cria as chaves (CLI e app)                                                                                                                                    |
+| 2026-10-25 | `make storage`: chaves `msmt-infra-cli` (só o mgc) e `helpdesk-app`                                                | ok; par do app em `msmt-infra-automation/secrets/object-storage.env`                                                                                                                   |
+| 2026-10-25 | `make database`: `pg-msmt-prd-web` recriada (PostgreSQL 17, BV1-4-10, 20 GB, `br-se1-a`, IP privado `172.18.3.73`) | ok; backup 7 dias às 05:00 UTC, protegida contra exclusão; bancos e usuários `zitadel` e `helpdesk` criados por pod no cluster; senhas em `msmt-infra-automation/secrets/database.env` |
+| —          | `make database`, `make addons`, DNS                                                                                | pendente                                                                                                                                                                               |
 
 Armadilhas encontradas:
 
@@ -176,7 +177,8 @@ Armadilhas encontradas:
 - O `mgc` v0.67 trocou os tipos de nó do Kubernetes pelos tipos de VM (`BV2-4-40` é o menor) e descontinuou `--enabled-server-group`.
 - **Rodar os `make` numa janela do Terminal**, um por vez. Pelo `!` do Claude Code não há terminal para a confirmação `[s/N]`. Colar várias linhas de uma vez faz a linha seguinte virar a resposta da pergunta (cancela).
 - Logo após o cluster ficar `running`, o `kube-user` do kubeconfig recebe "forbidden" por alguns minutos (permissões ainda sendo aplicadas). O script espera até 10 min.
-- `mgc dbaas instances list` **não mostra instâncias com erro**; só com `--status ERROR`.
+- `mgc dbaas instances list` **não mostra instâncias com erro**; só com `--status ERROR`. Depois de excluir, esperar sair de `DELETING` antes de recriar com o mesmo nome.
+- No DBaaS, o mesmo rótulo de tipo (`BV1-4-10`) existe para cada engine: buscar o tipo com `--engine-id` do PostgreSQL.
 - `mgc object-storage api-key current` sai com código 0 mesmo sem chave ("No current API key set!"): conferir o `uuid` no JSON.
 - Os comandos de bucket do `mgc` exigem uma chave do Object Storage selecionada no CLI (`msmt-infra-cli`, separada da chave do app). Os comandos `object-storage api-key` não aceitam `--region`.
 
