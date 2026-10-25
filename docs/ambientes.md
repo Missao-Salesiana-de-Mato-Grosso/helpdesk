@@ -112,21 +112,36 @@ done
 
 ## 2. Produção (Magalu Cloud)
 
-> **A documentar à medida que for executado.** Cada item abaixo vem do plano (`docs/discovery/05-plano-mvp.md` §5.2) e vira um passo a passo detalhado (console, comandos, valores não secretos, armadilhas) quando for feito. Segredos nunca entram aqui: só o nome do Secret e de onde o valor vem.
+> **Antes de começar, veja as pendências em 2.0.** **A documentar à medida que for executado.** Cada item abaixo vem do plano (`docs/discovery/05-plano-mvp.md` §5.2) e vira um passo a passo detalhado (console, comandos, valores não secretos, armadilhas) quando for feito. Segredos nunca entram aqui: só o nome do Secret e de onde o valor vem.
 
-| #   | Etapa                                                                                                                                                                | Status   |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| 1   | Caixa `suporte-teste@missaosalesiana.org.br`: usuário no Workspace, verificação em 2 etapas, senha de app                                                            | pendente |
-| 2   | Cluster Kubernetes, DBaaS (bancos `zitadel` e `helpdesk`), registry, bucket de anexos (ver 2.1)                                                                      | pendente |
-| 3   | DNS (`suporte.msmt.org.br`, `auth.msmt.org.br`), Traefik, cert-manager                                                                                               | pendente |
-| 4   | Zitadel v4.19.5 via Helm (`deploy/zitadel`): org, projeto, roles, app SPA (JWT), branding. Mesmos passos do 1.4, com redirects de produção e sem Development Mode    | pendente |
-| 5   | IdP Google: app OAuth "Internal" no Google Cloud + IdP na org do Zitadel                                                                                             | pendente |
-| 6   | Login real e claims do access token na §10 da spec T04–T05 (local já capturado; repetir em produção). **Decidir o Access Token Lifetime** (padrão 12 h × 1 h do ADR) | pendente |
-| 7   | Senha de app de `suporte@` (produção); anotar onde se desconecta a caixa no Freshdesk. SMTP: ver 2.2                                                                 | pendente |
-| 8   | Deploy do app (`make deploy`, T17), Secrets, migração                                                                                                                | pendente |
-| 9   | CronJob de backup e **teste de restore**                                                                                                                             | pendente |
-| 10  | Monitor de disponibilidade; verificação em 2 etapas obrigatória para os agentes no Workspace                                                                         | pendente |
-| 11  | Virada do e-mail (`05-plano-mvp.md` §5.4)                                                                                                                            | pendente |
+| #   | Etapa                                                                                                                                                             | Status   |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| 1   | Caixa `suporte-teste@missaosalesiana.org.br`: usuário no Workspace, verificação em 2 etapas, senha de app                                                         | pendente |
+| 2   | Cluster Kubernetes, DBaaS (bancos `zitadel` e `helpdesk`), registry, bucket de anexos (ver 2.1)                                                                   | pendente |
+| 3   | DNS (`suporte.msmt.org.br`, `auth.msmt.org.br`), Traefik, cert-manager                                                                                            | pendente |
+| 4   | Zitadel v4.19.5 via Helm (`deploy/zitadel`): org, projeto, roles, app SPA (JWT), branding. Mesmos passos do 1.4, com redirects de produção e sem Development Mode | pendente |
+| 5   | IdP Google: app OAuth "Internal" no Google Cloud + IdP na org do Zitadel                                                                                          | pendente |
+| 6   | Login real e claims do access token na §10 da spec T04–T05 (local já capturado; repetir em produção). **Decidir o Access Token Lifetime** (P1)                    | pendente |
+| 7   | Senha de app de `suporte@` (produção); anotar onde se desconecta a caixa no Freshdesk. SMTP: ver 2.2                                                              | pendente |
+| 8   | Deploy do app (`make deploy`, T17), Secrets, migração                                                                                                             | pendente |
+| 9   | CronJob de backup e **teste de restore**                                                                                                                          | pendente |
+| 10  | Monitor de disponibilidade; verificação em 2 etapas obrigatória para os agentes no Workspace                                                                      | pendente |
+| 11  | Virada do e-mail (`05-plano-mvp.md` §5.4)                                                                                                                         | pendente |
+
+### 2.0 Pendências para o rollout
+
+Decisões e confirmações em aberto que precisam estar resolvidas antes ou durante a subida em produção. Ao resolver uma, marque a data e mova o detalhe para a seção da etapa.
+
+| #   | Pendência                                                                                                                                                                                           | Etapa | Quem            | Status |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | --------------- | ------ |
+| P1  | **Decidir o Access Token Lifetime do Zitadel:** padrão de 12 h ou 1 h (recomendado; ADR). Não alterar sem decisão explícita                                                                         | 6     | dono do produto | aberta |
+| P2  | **Confirmar com o suporte da Magalu** que o envio autenticado pelo Gmail (`smtp.gmail.com:587`) não fere os termos de uso ("e-mail transacional diretamente via SMTP"). Ver 2.2                     | 2, 7  | dono do produto | aberta |
+| P3  | Testar se o cluster sai pela porta **587** (SMTP) e pela **993** (IMAP) até o Gmail. Se a 587 estiver bloqueada, a alternativa é um provedor SMTP externo (só muda `SMTP_*`; exige SPF/DKIM no DNS) | 2     | desenvolvedor   | aberta |
+| P4  | Confirmar o **endpoint do Object Storage** (`https://br-se1.magaluobjects.com`) no painel ao criar o bucket. O driver `s3` só foi testado com cliente falso: validar upload e download reais        | 2, 8  | desenvolvedor   | aberta |
+| P5  | Com `suporte-teste@`: conferir se o Gmail **preserva o `Message-ID`** que enviamos (`<tk-…@suporte.msmt.org.br>`) e se as respostas ficam no mesmo thread. Se reescrever, a tag `[#n]` segura       | 1     | desenvolvedor   | aberta |
+| P6  | Com `suporte-teste@` (T21): conferir num e-mail real o cabeçalho `Authentication-Results: mx.google.com … dmarc=` e se copiar para o rótulo `helpdesk/processado` **mantém o e-mail na INBOX**      | 1     | desenvolvedor   | aberta |
+| P7  | Anotar no admin do Freshdesk (Admin → Canais → E-mail) **onde se desconecta a caixa** `suporte@`, para a virada e o rollback                                                                        | 7, 11 | dono do produto | aberta |
+| P8  | Depois da virada: acompanhar `notifications` com `status = 'failed'` e `inbound_emails` com `failed`/`discarded` (rótulo `helpdesk/erro`) por 2 h, e incluir isso no monitoramento                  | 10–11 | desenvolvedor   | aberta |
 
 ### 2.1 Bucket de anexos (Object Storage)
 
