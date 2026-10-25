@@ -171,6 +171,7 @@ Registro do que foi executado na conta **MISSAO SALESIANA DE MATO GROSSO** (regi
 | 2026-10-25 | `make database`: `pg-msmt-prd-web` recriada (PostgreSQL 17, BV1-4-10, 20 GB, `br-se1-a`, IP privado `172.18.3.73`)             | ok; backup 7 dias às 05:00 UTC, protegida contra exclusão; bancos e usuários `zitadel` e `helpdesk` criados por pod no cluster; senhas em `msmt-infra-automation/secrets/database.env` |
 | 2026-10-25 | `make addons`: Traefik 42.1.3 (2 réplicas, LoadBalancer) e cert-manager v1.21.3 com `letsencrypt-staging` e `letsencrypt-prod` | ok; **IP público `201.23.74.106`** (balanceador criado pela Magalu sem configuração extra)                                                                                             |
 | 2026-10-25 | DNS: `suporte.msmt.org.br` e `auth.msmt.org.br` → A `201.23.74.106`, TTL 300                                                   | ok, na **Cloudflare**, proxy **desligado** (DNS only); HTTP → 301 para HTTPS; HTTPS responde 404 com o certificado padrão do Traefik até existirem as rotas dos apps                   |
+| 2026-10-25 | `make zitadel`: Zitadel v4.19.5 (chart 10.4.0) em `https://auth.msmt.org.br`                                                   | ok na 3ª tentativa (as 2 primeiras: imagem `alpine/k8s:1.34.2` inexistente, ver 2.4); certificado Let's Encrypt emitido; issuer, JWKS e Login V2 respondem 200                         |
 
 Armadilhas encontradas:
 
