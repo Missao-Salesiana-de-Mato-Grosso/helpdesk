@@ -252,7 +252,7 @@ Tudo pelo `Makefile` da raiz, **numa janela do Terminal** (cada alvo pergunta an
 1. Google Cloud Console (projeto da organização) → APIs e serviços → Tela de consentimento OAuth: tipo **Interno** (só contas do Workspace).
 2. Credenciais → Criar ID do cliente OAuth → **Aplicativo da Web**. URI de redirecionamento autorizado: `https://auth.msmt.org.br/idps/callback`. ⚠️ Conferir na tela do IdP no console do Zitadel, que mostra a URL de callback exata.
 3. Console do Zitadel (como `zitadel-admin`) → Configurações padrão → Provedores de identidade → **Google**: client id e secret do passo 2; marcar criação automática, atualização automática e vinculação por e-mail.
-4. Configurações padrão → Configurações de login: permitir login com IdP externo. Manter o login por usuário e senha só enquanto o admin de emergência precisar.
+4. Configurações padrão → Configurações de login: permitir login com IdP externo e **desmarcar "Registro de usuários permitido"**. O padrão do Zitadel mostra "Cadastrar novo usuário" na tela de login, e qualquer pessoa da internet criaria uma conta e entraria no help desk como solicitante. Manter o login por usuário e senha só enquanto o admin de emergência precisar.
 5. Testar: abrir `https://suporte.msmt.org.br` em aba anônima e entrar com uma conta `@missaosalesiana.org.br`. Depois, passo 5 da tabela para dar a role `admin`.
 
 **E-mail (SMTP e IMAP):** opcional no 1º deploy. Sem o arquivo abaixo, o app sobe com notificações e leitura da caixa **desligadas** (o `make deploy` avisa). Para ligar, crie `../msmt-infra-automation/secrets/helpdesk-email.env` (permissão 600) e rode `make deploy` de novo:
