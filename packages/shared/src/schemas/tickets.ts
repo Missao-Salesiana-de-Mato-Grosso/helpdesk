@@ -197,4 +197,6 @@ export interface TicketDetail {
   updatedAt: string;
   messages: TicketMessage[];
   events: TicketEvent[];
+  /** Nomes dos ids citados em `events[].data` (responsável, grupo, unidade, categoria). */
+  refs: Record<string, string>;
 }

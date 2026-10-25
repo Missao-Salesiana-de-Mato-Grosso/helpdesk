@@ -28,6 +28,7 @@ interface Refs {
   companyId: string;
   departmentId: string;
   categoryId: string;
+  groupId: string;
   /** Ticket aberto pelo solicitante, no grupo do agente. */
   ticketId: string;
   /** Ticket de um terceiro, num grupo do qual o agente não participa. */
@@ -53,6 +54,13 @@ const MATRIX: RouteCase[] = [
   { method: 'get', path: '/api/companies', expected: AUTHENTICATED },
   { method: 'get', path: '/api/departments', expected: AUTHENTICATED },
   { method: 'get', path: '/api/categories', expected: AUTHENTICATED },
+  { method: 'get', path: '/api/groups', expected: AGENT_ONLY },
+  {
+    method: 'get',
+    path: (ref) => `/api/groups/${ref.groupId}/members`,
+    label: '/api/groups/:id/members',
+    expected: AGENT_ONLY,
+  },
   {
     method: 'post',
     path: '/api/tickets',
@@ -174,6 +182,7 @@ describe('matriz de permissões (e2e)', () => {
       companyId: company.id,
       departmentId: department.id,
       categoryId: category.id,
+      groupId: ownGroup.id,
       ticketId: (await ticket(userIds.get('solicitante')!, ownGroup.id)).id,
       foreignTicketId: (await ticket(external.id, otherGroup.id)).id,
     };

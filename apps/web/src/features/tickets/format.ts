@@ -1,4 +1,4 @@
-import type { TicketStatus } from '@helpdesk/shared';
+import type { TicketPriority, TicketStatus } from '@helpdesk/shared';
 
 export const STATUS_LABEL: Record<TicketStatus, string> = {
   open: 'Aberto',
@@ -12,6 +12,20 @@ export const STATUS_COLOR: Record<TicketStatus, string> = {
   pending: 'yellow',
   resolved: 'green',
   closed: 'gray',
+};
+
+export const PRIORITY_LABEL: Record<TicketPriority, string> = {
+  low: 'Baixa',
+  medium: 'Média',
+  high: 'Alta',
+  urgent: 'Urgente',
+};
+
+export const PRIORITY_COLOR: Record<TicketPriority, string> = {
+  low: 'gray',
+  medium: 'blue',
+  high: 'orange',
+  urgent: 'red',
 };
 
 // Mato Grosso: horário de Cuiabá, independente do fuso da máquina.

@@ -1,8 +1,10 @@
-import type { Role } from '@helpdesk/shared';
+import type { Role, TicketCounters, TicketView } from '@helpdesk/shared';
 
 export interface NavItem {
   label: string;
   to: string;
+  /** Contador de `GET /tickets/counters` mostrado ao lado do item. */
+  counter?: keyof TicketCounters;
 }
 
 export interface NavSection {
@@ -16,11 +18,14 @@ export const AGENT_ROLES: Role[] = ['agente', 'supervisor', 'admin'];
 
 /** Rotas das filas do agente. O segmento vira o parâmetro `view` da API (T08). */
 export const QUEUE_VIEWS = {
-  meus: { label: 'Meus', view: 'mine' },
-  grupo: { label: 'Do meu grupo', view: 'group' },
-  'sem-atribuicao': { label: 'Sem atribuição', view: 'unassigned' },
-  todos: { label: 'Todos', view: 'all' },
-} as const;
+  meus: { label: 'Meus', view: 'mine', counter: 'mine' },
+  grupo: { label: 'Do meu grupo', view: 'group', counter: 'group' },
+  'sem-atribuicao': { label: 'Sem atribuição', view: 'unassigned', counter: 'unassigned' },
+  todos: { label: 'Todos', view: 'all', counter: undefined },
+} as const satisfies Record<
+  string,
+  { label: string; view: TicketView; counter: keyof TicketCounters | undefined }
+>;
 
 export type QueueSlug = keyof typeof QUEUE_VIEWS;
 
@@ -28,7 +33,11 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: 'Atendimento',
     roles: AGENT_ROLES,
-    items: Object.entries(QUEUE_VIEWS).map(([slug, { label }]) => ({ label, to: `/fila/${slug}` })),
+    items: Object.entries(QUEUE_VIEWS).map(([slug, { label, counter }]) => ({
+      label,
+      to: `/fila/${slug}`,
+      ...(counter ? { counter } : {}),
+    })),
   },
   {
     title: 'Meus pedidos',

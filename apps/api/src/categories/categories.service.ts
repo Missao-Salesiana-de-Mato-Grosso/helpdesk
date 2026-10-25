@@ -21,6 +21,15 @@ export class CategoriesService {
     });
   }
 
+  /** Nomes por id (para o histórico do ticket); ids desconhecidos ficam de fora. */
+  namesByIds(ids: readonly string[]): Promise<NamedRef[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.prisma.category.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, name: true },
+    });
+  }
+
   /** Categoria ativa com o grupo padrão (que também precisa estar ativo para receber tickets). */
   findActive(id: string): Promise<ActiveCategory | null> {
     return this.prisma.category.findFirst({

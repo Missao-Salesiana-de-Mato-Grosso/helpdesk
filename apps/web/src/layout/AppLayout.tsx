@@ -1,6 +1,7 @@
 import {
   AppShell,
   Avatar,
+  Badge,
   Burger,
   Group,
   Menu,
@@ -15,6 +16,7 @@ import { APP_NAME } from '@helpdesk/shared';
 import { useAuth } from 'react-oidc-context';
 import { Link, Outlet, useLocation } from 'react-router';
 import { useMe } from '../auth/useMe.ts';
+import { useTicketCounters } from '../features/tickets/queries.ts';
 import { visibleSections } from './navigation.ts';
 
 const ROLE_LABELS: Record<string, string> = {
@@ -36,6 +38,7 @@ export function AppLayout() {
   const { data: me } = useMe();
   const location = useLocation();
   const [opened, { toggle, close }] = useDisclosure();
+  const counters = useTicketCounters(me?.isAgent ?? false);
 
   if (!me) return null;
   const roleLabel = me.roles.map((role) => ROLE_LABELS[role] ?? role).join(', ') || 'Solicitante';
@@ -101,6 +104,13 @@ export function AppLayout() {
                   component={Link}
                   to={item.to}
                   label={item.label}
+                  rightSection={
+                    item.counter && counters.data ? (
+                      <Badge size="sm" variant="light" circle={counters.data[item.counter] < 10}>
+                        {counters.data[item.counter]}
+                      </Badge>
+                    ) : undefined
+                  }
                   active={location.pathname === item.to}
                   onClick={close}
                 />

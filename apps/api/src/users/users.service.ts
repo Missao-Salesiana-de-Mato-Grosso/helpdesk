@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { NamedRef } from '@helpdesk/shared';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
@@ -33,6 +34,15 @@ export interface NewLoginUser {
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Nomes por id (para o histórico do ticket); ids desconhecidos ficam de fora. */
+  namesByIds(ids: readonly string[]): Promise<NamedRef[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.prisma.user.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, name: true },
+    });
+  }
 
   findById(id: string): Promise<UserWithGroupIds | null> {
     return this.prisma.user.findUnique({ where: { id }, ...userWithGroupIds });

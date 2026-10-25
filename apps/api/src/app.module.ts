@@ -7,6 +7,7 @@ import { CategoriesModule } from './categories/categories.module.js';
 import { CompaniesModule } from './companies/companies.module.js';
 import { ConfigModule } from './config/config.module.js';
 import { DepartmentsModule } from './departments/departments.module.js';
+import { GroupsModule } from './groups/groups.module.js';
 import { HealthModule } from './health/health.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { TicketsModule } from './tickets/tickets.module.js';
@@ -23,6 +24,7 @@ import { UsersModule } from './users/users.module.js';
     CompaniesModule,
     DepartmentsModule,
     CategoriesModule,
+    GroupsModule,
     TicketsModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: ApiExceptionFilter }],

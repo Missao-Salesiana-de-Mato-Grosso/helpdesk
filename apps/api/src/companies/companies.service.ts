@@ -15,6 +15,15 @@ export class CompaniesService {
     });
   }
 
+  /** Nomes por id (para o histórico do ticket); ids desconhecidos ficam de fora. */
+  namesByIds(ids: readonly string[]): Promise<NamedRef[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.prisma.company.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, name: true },
+    });
+  }
+
   async isActive(id: string): Promise<boolean> {
     const found = await this.prisma.company.findFirst({
       where: { id, active: true },

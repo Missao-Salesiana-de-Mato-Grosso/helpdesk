@@ -27,6 +27,7 @@ import {
   TicketsRepository,
   type LockedTicket,
   type NewEvent,
+  type TicketDetailRow,
   type TicketChanges,
   type Tx,
 } from './tickets.repository.js';
@@ -97,6 +98,14 @@ const forbidden = (message: string) =>
   new ApiException(HttpStatus.FORBIDDEN, ApiErrorCode.FORBIDDEN_ROLE, message);
 const inactiveReference = (message: string) =>
   new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, ApiErrorCode.INACTIVE_REFERENCE, message);
+
+/** Tipos de evento cujo `data.from`/`data.to` são ids, e de quê. */
+const REF_KIND: Partial<Record<string, 'users' | 'groups' | 'companies' | 'categories'>> = {
+  assigned: 'users',
+  group_changed: 'groups',
+  company_changed: 'companies',
+  category_changed: 'categories',
+};
 
 const notAssignable = () =>
   new ApiException(
@@ -242,7 +251,7 @@ export class TicketsService {
     });
 
     this.emitAll(emits);
-    return toTicketDetail(await this.tickets.loadAfterWrite(actor, id));
+    return this.toDetail(await this.tickets.loadAfterWrite(actor, id));
   }
 
   /** RN-31 a RN-39. */
@@ -335,7 +344,33 @@ export class TicketsService {
     });
 
     this.emitAll(emits);
-    return toTicketDetail(await this.tickets.loadAfterWrite(actor, id));
+    return this.toDetail(await this.tickets.loadAfterWrite(actor, id));
+  }
+
+  /** Detalhe com `refs`: nomes dos ids que os eventos citam, resolvidos na leitura. */
+  private async toDetail(row: TicketDetailRow): Promise<TicketDetail> {
+    const ids: Record<'users' | 'groups' | 'companies' | 'categories', Set<string>> = {
+      users: new Set(),
+      groups: new Set(),
+      companies: new Set(),
+      categories: new Set(),
+    };
+    for (const event of row.events) {
+      const kind = REF_KIND[event.type];
+      const data = event.data;
+      if (!kind || !data || typeof data !== 'object' || Array.isArray(data)) continue;
+      for (const value of [data.from, data.to]) {
+        if (typeof value === 'string') ids[kind].add(value);
+      }
+    }
+    const found = await Promise.all([
+      this.users.namesByIds([...ids.users]),
+      this.groups.namesByIds([...ids.groups]),
+      this.companies.namesByIds([...ids.companies]),
+      this.categories.namesByIds([...ids.categories]),
+    ]);
+    const refs = Object.fromEntries(found.flat().map((ref) => [ref.id, ref.name]));
+    return toTicketDetail(row, refs);
   }
 
   private async lockOrThrow(tx: Tx, actor: ScopeUser, id: string): Promise<LockedTicket> {
@@ -362,7 +397,7 @@ export class TicketsService {
     if (!UUID.test(id)) throw notFound();
     const row = await this.tickets.findDetail(viewer, id);
     if (!row) throw notFound();
-    return toTicketDetail(row);
+    return this.toDetail(row);
   }
 
   /** RN-04 a RN-11. */
@@ -437,7 +472,7 @@ export class TicketsService {
       source,
     } satisfies TicketCreatedEvent);
 
-    return toTicketDetail(await this.tickets.loadAfterWrite(actor, created.id));
+    return this.toDetail(await this.tickets.loadAfterWrite(actor, created.id));
   }
 
   /** RN-12 a RN-17. */

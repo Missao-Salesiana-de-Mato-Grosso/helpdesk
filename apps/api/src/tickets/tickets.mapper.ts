@@ -28,8 +28,12 @@ export function toTicketSummary(row: TicketSummaryRow): TicketSummary {
   };
 }
 
-export function toTicketDetail(row: TicketDetailRow): TicketDetail {
+export function toTicketDetail(
+  row: TicketDetailRow,
+  refs: Record<string, string> = {},
+): TicketDetail {
   return {
+    refs,
     id: row.id,
     number: row.number,
     subject: row.subject,
