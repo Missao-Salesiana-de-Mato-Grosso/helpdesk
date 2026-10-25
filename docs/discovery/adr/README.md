@@ -81,5 +81,5 @@ Formato curto: Contexto → Decisão → Consequências. O status de todos é **
 
 - **Login:** a tela de consentimento do Google passa de **Interno** para **Externo**. O auto-cadastro por usuário e senha do Zitadel continua **desligado**: só se entra pelo Google.
 - **Fila de aprovação:** quem entra pela primeira vez, interno ou externo, cai numa tela "aguardando liberação". O admin vê a fila, define unidade e departamento e aprova ou recusa. Até a aprovação, a API recusa tudo além do próprio perfil e do status.
-- **Transição:** até a fila existir no código, a tela de consentimento fica como **Interno**, aceitando só o Workspace.
-  **Consequências:** muda a regra "terceiros nunca fazem login" e o fluxo de 1º acesso. Precisa de spec própria (estado do usuário, tela e rotas do admin, testes na matriz de permissões) e de revisão da LGPD (`04-lgpd.md`), porque passam a existir dados pessoais de pessoas de fora que se cadastram sozinhas.
+- **Transição (decidida em 25/10/2026):** a tela de consentimento já está como **Externo**. Até a T22 entrar em produção, **qualquer conta Google entra como solicitante**, sem liberação. Risco aceito para avançar o go-live; os agentes acompanham a lista de usuários novos.
+  **Consequências:** muda a regra "terceiros nunca fazem login" e o fluxo de 1º acesso. Spec: `docs/specs/T22-onboarding-liberacao.md` (estado do usuário, tela e rotas do admin, testes na matriz de permissões) e de revisão da LGPD (`04-lgpd.md`), porque passam a existir dados pessoais de pessoas de fora que se cadastram sozinhas.
