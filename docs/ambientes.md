@@ -156,6 +156,28 @@ Decisões e confirmações em aberto que precisam estar resolvidas antes ou dura
 | P10 | Conferir que o DBaaS é alcançável **a partir dos nós do cluster** (mesma rede privada). O `make database` cria os bancos por um pod `psql` dentro do cluster                                            | 2     | desenvolvedor   | aberta |
 | P8  | Depois da virada: acompanhar `notifications` com `status = 'failed'` e `inbound_emails` com `failed`/`discarded` (rótulo `helpdesk/erro`) por 2 h, e incluir isso no monitoramento                      | 10–11 | desenvolvedor   | aberta |
 
+### 2.0.1 Execução da plataforma (`msmt-infra-automation`)
+
+Registro do que foi executado na conta **MISSAO SALESIANA DE MATO GROSSO** (região `br-se1`), em ordem.
+
+| Data       | Passo                                                         | Resultado                                                                     |
+| ---------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 2026-10-24 | `mgc` v0.48 → v0.67, `helm` 4.3, `kubectl` 1.37               | ok                                                                            |
+| 2026-10-24 | DBaaS `pg-msmt-prd-web` (PostgreSQL 17, BV1-4-10) pelo painel | **status Erro**; a excluir pelo painel e recriar com `make database`          |
+| 2026-10-25 | `make cluster`: `k8s-msmt-prd`, v1.34.2, 2 × BV2-4-40         | ok (~30 min); 3 nós de controle gerenciados + 2 de trabalho, IPs `172.18.x.x` |
+| 2026-10-25 | `make registry`: `cr-msmt-prd`                                | ok (já existia `cr-msmt-dev`, não usado aqui)                                 |
+| 2026-10-25 | `make storage`                                                | a executar                                                                    |
+| —          | `make database`, `make addons`, DNS                           | pendente                                                                      |
+
+Armadilhas encontradas:
+
+- A fórmula do Homebrew é **`mgccli`** (o comando é `mgc`), e o Homebrew recente exige `brew trust magalucloud/mgccli` antes de instalar ou atualizar.
+- O `mgc` v0.67 trocou os tipos de nó do Kubernetes pelos tipos de VM (`BV2-4-40` é o menor) e descontinuou `--enabled-server-group`.
+- **Rodar os `make` numa janela do Terminal**, um por vez. Pelo `!` do Claude Code não há terminal para a confirmação `[s/N]`. Colar várias linhas de uma vez faz a linha seguinte virar a resposta da pergunta (cancela).
+- Logo após o cluster ficar `running`, o `kube-user` do kubeconfig recebe "forbidden" por alguns minutos (permissões ainda sendo aplicadas). O script espera até 10 min.
+- `mgc dbaas instances list` **não mostra instâncias com erro**; só com `--status ERROR`.
+- Os comandos de bucket do `mgc` exigem uma chave do Object Storage selecionada no CLI (`msmt-infra-cli`, separada da chave do app). Os comandos `object-storage api-key` não aceitam `--region`.
+
 ### 2.1 Bucket de anexos (Object Storage)
 
 A preparar junto com a etapa 2. O código já está pronto (T13, driver `s3` com `@aws-sdk/client-s3`, `forcePathStyle`).
