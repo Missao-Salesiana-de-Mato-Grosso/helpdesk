@@ -73,3 +73,13 @@ Formato curto: Contexto → Decisão → Consequências. O status de todos é **
 **Decisão:** um cron de 1 min lê a caixa por **IMAP** (`imapflow`, senha de app), processa só UIDs novos, grava o `.eml` bruto no Object Storage, registra cada `Message-ID` em `inbound_emails` (idempotência) e resolve o ticket por `In-Reply-To`/`References` → `email_message_refs`, com fallback pela tag `[#1234]` no assunto. Auto-respostas e e-mails da própria caixa são descartados; há limite de 20 e-mails/h por remetente. Toda saída carrega `Message-ID` próprio, `In-Reply-To` e a tag no assunto. A caixa nunca é apagada: só recebe rótulos.
 **Alternativas descartadas:** Gmail API com push via Pub/Sub (tempo real, mas exige delegação em todo o domínio, tópico Pub/Sub e endpoint público: setup pesado para 25 e-mails/dia); provedores de inbound parsing como Mailgun, SendGrid ou Postmark (mudança de MX ou encaminhamento, mais um fornecedor com dados pessoais); encaminhamento para um endpoint HTTP (o Gmail não oferece).
 **Consequências:** latência de até 1 min, aceitável. Dependência de uma senha de app que precisa constar no runbook de rotação. Uma única caixa no MVP; outras caixas na Fase 2 exigem só configuração adicional. A virada do Freshdesk vira uma operação simples e reversível: remover ou recolocar o encaminhamento da caixa.
+
+## ADR-011 — Portal aberto a qualquer conta Google, com liberação pelo admin
+
+**Contexto:** a abertura de chamados passa a ser aberta ao público, e não só às contas `@missaosalesiana.org.br` (decisão de 2026-10-25). Mas só deve usar o portal quem o admin do suporte liberar.
+**Decisão:**
+
+- **Login:** a tela de consentimento do Google passa de **Interno** para **Externo**. O auto-cadastro por usuário e senha do Zitadel continua **desligado**: só se entra pelo Google.
+- **Fila de aprovação:** quem entra pela primeira vez, interno ou externo, cai numa tela "aguardando liberação". O admin vê a fila, define unidade e departamento e aprova ou recusa. Até a aprovação, a API recusa tudo além do próprio perfil e do status.
+- **Transição:** até a fila existir no código, a tela de consentimento fica como **Interno**, aceitando só o Workspace.
+  **Consequências:** muda a regra "terceiros nunca fazem login" e o fluxo de 1º acesso. Precisa de spec própria (estado do usuário, tela e rotas do admin, testes na matriz de permissões) e de revisão da LGPD (`04-lgpd.md`), porque passam a existir dados pessoais de pessoas de fora que se cadastram sozinhas.
