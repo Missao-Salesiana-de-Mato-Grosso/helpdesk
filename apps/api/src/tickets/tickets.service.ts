@@ -25,6 +25,7 @@ import { htmlHasContent, sanitizeHtml } from '../common/sanitize-html.js';
 import { CategoriesService } from '../categories/categories.service.js';
 import { CompaniesService } from '../companies/companies.service.js';
 import { GroupsService } from '../groups/groups.service.js';
+import { NotificationService, type NotifiedTicket } from '../notifications/notification.service.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { UsersService } from '../users/users.service.js';
 import { isAgent, seesAllTickets, type ScopeUser } from './ticket-scope.js';
@@ -162,6 +163,7 @@ export class TicketsService {
     private readonly companies: CompaniesService,
     private readonly groups: GroupsService,
     private readonly attachments: AttachmentsService,
+    private readonly notifications: NotificationService,
     private readonly emitter: EventEmitter2,
   ) {}
 
@@ -252,6 +254,18 @@ export class TicketsService {
       await this.tickets.update(tx, id, changes, true);
       for (const event of events) {
         await this.events.append(tx, { ...event, ticketId: id, actorId: actor.id, ip });
+      }
+      if (changes.status === 'resolved') {
+        await this.notifications.enqueue(tx, {
+          type: 'resolved',
+          ticket: notified(ticket, {
+            assigneeId: input.assigneeId === undefined ? ticket.assigneeId : input.assigneeId,
+            groupId,
+            companyId,
+            categoryId: input.categoryId ?? ticket.categoryId,
+          }),
+          actorId: actor.id,
+        });
       }
       pending.push({
         name: TicketDomainEvent.updated,
@@ -349,6 +363,23 @@ export class TicketsService {
         });
         if (statusEvent) {
           await this.events.append(tx, { ...statusEvent, ticketId: id, actorId: actor.id, ip });
+        }
+        // T14: nota interna nunca gera e-mail; resolver junto com a resposta sai num e-mail só.
+        const resolved = changes.status === 'resolved';
+        if (input.kind === 'public') {
+          await this.notifications.enqueue(tx, {
+            type: 'public_reply',
+            ticket: notified(ticket),
+            actorId: actor.id,
+            message: { bodyHtml, attachments: stored },
+            resolved,
+          });
+        } else if (resolved) {
+          await this.notifications.enqueue(tx, {
+            type: 'resolved',
+            ticket: notified(ticket),
+            actorId: actor.id,
+          });
         }
 
         pending.unshift({
@@ -521,6 +552,21 @@ export class TicketsService {
           data: input.relatedTicketId ? { relatedTicketId: input.relatedTicketId } : {},
           ip,
         });
+        await this.notifications.enqueue(tx, {
+          type: 'ticket_created',
+          ticket: {
+            id: ticket.id,
+            number: ticket.number,
+            subject: input.subject,
+            requesterId: requester.id,
+            assigneeId: null,
+            groupId: category.defaultGroup.id,
+            companyId,
+            categoryId: category.id,
+          },
+          actorId: actor.id,
+          message: { bodyHtml, attachments: stored },
+        });
         return ticket;
       }),
     );
@@ -608,6 +654,26 @@ export class TicketsService {
       companyId: user.companyId,
     };
   }
+}
+
+/** O ticket para as notificações, com o que mudou nesta transação por cima. */
+function notified(
+  ticket: LockedTicket,
+  overrides: Partial<
+    Pick<NotifiedTicket, 'assigneeId' | 'groupId' | 'companyId' | 'categoryId'>
+  > = {},
+): NotifiedTicket {
+  return {
+    id: ticket.id,
+    number: ticket.number,
+    subject: ticket.subject,
+    requesterId: ticket.requesterId,
+    assigneeId: ticket.assigneeId,
+    groupId: ticket.groupId,
+    companyId: ticket.companyId,
+    categoryId: ticket.categoryId,
+    ...overrides,
+  };
 }
 
 function isKnownRole(role: string): role is 'admin' | 'supervisor' | 'agente' {

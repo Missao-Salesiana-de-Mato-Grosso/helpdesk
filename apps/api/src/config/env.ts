@@ -7,6 +7,12 @@ const optionalText = z
   .optional()
   .transform((value) => value || undefined);
 
+const flag = (fallback: 'true' | 'false') =>
+  z
+    .enum(['true', 'false'])
+    .default(fallback)
+    .transform((value) => value === 'true');
+
 export const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -37,6 +43,28 @@ export const envSchema = z
     S3_BUCKET: optionalText,
     S3_ACCESS_KEY: optionalText,
     S3_SECRET_KEY: optionalText,
+
+    // E-mail de saída (T14). Dev: Mailpit; produção: smtp.gmail.com:587 com senha de app.
+    SMTP_HOST: z.string().min(1).default('localhost'),
+    SMTP_PORT: z.coerce.number().int().positive().default(1025),
+    /** `true` só para TLS direto (465). Na 587 o STARTTLS é negociado com `false`. */
+    SMTP_SECURE: flag('false'),
+    SMTP_USER: optionalText,
+    SMTP_PASSWORD: optionalText,
+    MAIL_FROM: z.string().min(3).default('Suporte MSMT <suporte@missaosalesiana.org.br>'),
+    PORTAL_URL: z
+      .url()
+      .default('http://localhost:5173')
+      .transform((url) => url.replace(/\/+$/, '')),
+    MAIL_MESSAGE_ID_DOMAIN: z.string().min(1).default('suporte.msmt.org.br'),
+    NOTIFICATIONS_ENABLED: flag('true'),
+    NOTIFICATIONS_BATCH_SIZE: z.coerce.number().int().positive().default(20),
+    NOTIFICATIONS_MAX_ATTEMPTS: z.coerce.number().int().positive().default(6),
+    NOTIFICATIONS_MAX_ATTACHMENT_BYTES: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .default(20 * 1024 * 1024),
   })
   .superRefine((env, ctx) => {
     if (env.STORAGE_DRIVER !== 's3') return;

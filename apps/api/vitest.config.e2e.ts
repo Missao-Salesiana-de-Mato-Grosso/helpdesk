@@ -29,6 +29,17 @@ export default defineConfig({
       // Anexos (T13) em disco, numa pasta temporária que a suíte de anexos limpa.
       STORAGE_DRIVER: 'local',
       STORAGE_LOCAL_PATH: E2E_STORAGE_PATH,
+      // Notificações (T14): o cron fica desligado; os testes chamam processOutbox() e o SMTP é o
+      // Mailpit do docker-compose.
+      NOTIFICATIONS_ENABLED: 'false',
+      SMTP_HOST: '127.0.0.1',
+      SMTP_PORT: '1025',
+      SMTP_SECURE: 'false',
+      SMTP_USER: '',
+      SMTP_PASSWORD: '',
+      MAIL_FROM: 'Suporte MSMT <suporte@missaosalesiana.org.br>',
+      PORTAL_URL: 'http://portal.test',
+      MAIL_MESSAGE_ID_DOMAIN: 'helpdesk.test',
     },
   },
 });

@@ -23,6 +23,14 @@ const userProfile = {
 
 export type UserProfile = Prisma.UserGetPayload<typeof userProfile>;
 
+export interface UserContact {
+  id: string;
+  name: string;
+  email: string;
+  active: boolean;
+  isExternal: boolean;
+}
+
 export interface NewLoginUser {
   zitadelSub: string;
   email: string;
@@ -41,6 +49,15 @@ export class UsersService {
     return this.prisma.user.findMany({
       where: { id: { in: [...ids] } },
       select: { id: true, name: true },
+    });
+  }
+
+  /** Dados de contato para as notificações (T14). */
+  contactsByIds(ids: readonly string[]): Promise<UserContact[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.prisma.user.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, name: true, email: true, active: true, isExternal: true },
     });
   }
 

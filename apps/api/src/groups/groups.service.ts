@@ -21,6 +21,23 @@ export class GroupsService {
       select: { id: true },
     });
     if (!group) return null;
+    return this.activeAgents(groupId);
+  }
+
+  /** Para quem vai o aviso ao grupo (T14): o e-mail do grupo, se houver, e os agentes ativos. */
+  async notificationTarget(
+    groupId: string,
+  ): Promise<{ name: string; email: string | null; memberIds: string[] } | null> {
+    const group = await this.prisma.group.findUnique({
+      where: { id: groupId },
+      select: { name: true, email: true },
+    });
+    if (!group) return null;
+    const members = await this.activeAgents(groupId);
+    return { ...group, memberIds: members.map((member) => member.id) };
+  }
+
+  private async activeAgents(groupId: string): Promise<NamedRef[]> {
     const members = await this.prisma.groupMember.findMany({
       where: {
         groupId,

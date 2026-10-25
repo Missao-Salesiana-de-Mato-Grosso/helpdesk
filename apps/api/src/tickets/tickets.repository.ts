@@ -82,6 +82,7 @@ export type TicketSummaryRow = Prisma.TicketGetPayload<{
 const lockedState = {
   id: true,
   number: true,
+  subject: true,
   status: true,
   priority: true,
   version: true,

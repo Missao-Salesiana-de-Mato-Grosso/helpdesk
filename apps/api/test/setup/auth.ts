@@ -98,6 +98,8 @@ export interface TestAppOptions {
   controllers?: Type[];
   /** Sobrescreve variáveis lidas pelo TokenVerifierService (ex.: ZITADEL_ORG_ID). */
   env?: Partial<Env>;
+  /** Troca providers por dublês (ex.: o MAILER nos testes de falha de SMTP). */
+  providers?: { provide: unknown; useValue: unknown }[];
 }
 
 /** Sobe a aplicação inteira com JWKS local e userinfo falso. */
@@ -114,6 +116,10 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
     .useValue(((header, token) => jwks(header, token)) satisfies JWTVerifyGetKey)
     .overrideProvider(USERINFO_CLIENT)
     .useValue(userinfo);
+
+  for (const { provide, useValue } of options.providers ?? []) {
+    builder.overrideProvider(provide).useValue(useValue);
+  }
 
   if (options.env) {
     const overrides = options.env;

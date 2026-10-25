@@ -96,7 +96,15 @@ done
 - Os testes e2e usam uma pasta temporária própria (`$TMPDIR/helpdesk-e2e-storage`, definida em `apps/api/vitest.config.e2e.ts`), que a suíte de anexos limpa.
 - `pnpm infra:reset` **não** apaga `apps/api/storage/`: depois de um reset os arquivos antigos ficam órfãos. Apague a pasta à mão se quiser começar do zero.
 
-### 1.9 Reset
+### 1.9 E-mails de saída (Mailpit)
+
+- Em dev, a API envia para o Mailpit (`SMTP_HOST=localhost`, `SMTP_PORT=1025`, sem usuário). Os e-mails aparecem em **http://localhost:8025**. Nada sai para a internet.
+- O cron da outbox roda a cada minuto (`NOTIFICATIONS_ENABLED=true`). Depois de abrir ou responder um chamado, o e-mail chega ao Mailpit em até 1 min.
+- Situação da fila: `docker compose exec -T postgres psql -U helpdesk -d helpdesk -c "select template, to_email, status, attempts, last_error, send_after from notifications order by created_at desc limit 20"`.
+- Os destinatários precisam ter e-mail real no banco. O seed põe `suporte@missaosalesiana.org.br` no grupo "Suporte TI", que é a própria caixa do help desk. Por isso o aviso de chamado novo vai para cada agente do grupo, nunca para `suporte@`. Para testar o aviso ao grupo, entre em `group_members` com o seu usuário.
+- Os testes e2e também usam o Mailpit (CTs 📬 da T14) e deixam e-mails com domínio `helpdesk.test` na caixa. Limpe pelo botão "Delete all" do Mailpit.
+
+### 1.10 Reset
 
 `pnpm infra:reset` apaga os volumes (Zitadel e bancos do zero). Depois: `pnpm infra:up`, `pnpm infra:bootstrap -- --admin <email>` (o projeto ganha um ID novo, e o script atualiza o `.env`), migrações e seed. Os usuários do Zitadel somem: crie de novo.
 
@@ -114,7 +122,7 @@ done
 | 4   | Zitadel v4.19.5 via Helm (`deploy/zitadel`): org, projeto, roles, app SPA (JWT), branding. Mesmos passos do 1.4, com redirects de produção e sem Development Mode    | pendente |
 | 5   | IdP Google: app OAuth "Internal" no Google Cloud + IdP na org do Zitadel                                                                                             | pendente |
 | 6   | Login real e claims do access token na §10 da spec T04–T05 (local já capturado; repetir em produção). **Decidir o Access Token Lifetime** (padrão 12 h × 1 h do ADR) | pendente |
-| 7   | Senha de app de `suporte@` (produção); anotar onde se desconecta a caixa no Freshdesk                                                                                | pendente |
+| 7   | Senha de app de `suporte@` (produção); anotar onde se desconecta a caixa no Freshdesk. SMTP: ver 2.2                                                                 | pendente |
 | 8   | Deploy do app (`make deploy`, T17), Secrets, migração                                                                                                                | pendente |
 | 9   | CronJob de backup e **teste de restore**                                                                                                                             | pendente |
 | 10  | Monitor de disponibilidade; verificação em 2 etapas obrigatória para os agentes no Workspace                                                                         | pendente |
@@ -129,3 +137,12 @@ A preparar junto com a etapa 2. O código já está pronto (T13, driver `s3` com
 - Par de chaves com acesso só a esse bucket. Valores no Secret do app: `STORAGE_DRIVER=s3`, `S3_ENDPOINT`, `S3_REGION=br-se1`, `S3_BUCKET=helpdesk-anexos`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`. Com `STORAGE_DRIVER=s3`, a API não sobe se faltar alguma delas.
 - Teste depois do deploy: anexar um arquivo num ticket, baixar e conferir o objeto em `attachments/<ano>/<mês>/<uuid>` no bucket.
 - O bucket também vai guardar os `.eml` brutos (T21) e os dumps do backup (etapa 9, possivelmente em outro bucket).
+
+### 2.2 E-mail de saída (SMTP do Gmail)
+
+A preparar com as etapas 1 e 7. O código já está pronto (T14).
+
+- A Magalu Cloud não tem serviço de envio de e-mail. Os termos de uso proíbem usar a infraestrutura para enviar e-mail transacional "diretamente via SMTP". A nossa leitura é que isso veta um servidor de e-mail próprio, e não o envio autenticado pelo Gmail. ⚠️ **Confirmar com o suporte da Magalu** e testar se o cluster consegue sair pela porta 587 antes da virada.
+- Valores no Secret do app: `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_SECURE=false` (STARTTLS), `SMTP_USER=suporte@missaosalesiana.org.br`, `SMTP_PASSWORD=<senha de app>`, `MAIL_FROM="Suporte MSMT <suporte@missaosalesiana.org.br>"`, `PORTAL_URL=https://suporte.msmt.org.br`, `MAIL_MESSAGE_ID_DOMAIN=suporte.msmt.org.br`.
+- Teste com `suporte-teste@` (etapa 1): abrir um chamado, conferir no Gmail do destinatário (menu "Mostrar original") se o `Message-ID` saiu como `<tk-…@suporte.msmt.org.br>`, e não reescrito pelo Gmail, e se as respostas seguintes ficam no mesmo thread.
+- Monitorar `notifications` com `status = 'failed'`. O `last_error` traz o código SMTP (sem conteúdo). Limite do Workspace: cerca de 2.000 envios por dia.
