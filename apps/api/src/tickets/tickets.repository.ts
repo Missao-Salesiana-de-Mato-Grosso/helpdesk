@@ -40,7 +40,13 @@ function detailInclude(viewer: Pick<ScopeUser, 'roles'>) {
     messages: {
       where: visible.messages,
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      include: { author: { select: { id: true, name: true, roles: true } } },
+      include: {
+        author: { select: { id: true, name: true, roles: true } },
+        attachments: {
+          select: { id: true, filename: true, mimeType: true, sizeBytes: true },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        },
+      },
     },
     events: {
       where: visible.events,
@@ -149,6 +155,15 @@ export class TicketsRepository {
   async existsInScope(viewer: ScopeUser, id: string): Promise<boolean> {
     const found = await this.prisma.ticket.findFirst({
       where: { AND: [ticketScope(viewer), { id }] },
+      select: { id: true },
+    });
+    return found !== null;
+  }
+
+  /** Mensagem num ticket do escopo e visível ao usuário (interna só para agente+). */
+  async messageVisibleTo(viewer: ScopeUser, messageId: string): Promise<boolean> {
+    const found = await this.prisma.ticketMessage.findFirst({
+      where: { id: messageId, ticket: ticketScope(viewer), ...visibility(viewer).messages },
       select: { id: true },
     });
     return found !== null;

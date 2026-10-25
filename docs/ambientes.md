@@ -90,7 +90,13 @@ done
 
 ℹ️ O access token local dura **12 h** (padrão do Zitadel). Ver spec T04–T05 §10.
 
-### 1.8 Reset
+### 1.8 Anexos (storage local)
+
+- Em dev, `STORAGE_DRIVER=local`: os arquivos vão para `STORAGE_LOCAL_PATH` (padrão `./storage`, relativo à pasta de onde a API roda, ou seja, `apps/api/storage/`). A pasta é criada sob demanda e está no `.gitignore`. Não há MinIO nem bucket local (ADR-009).
+- Os testes e2e usam uma pasta temporária própria (`$TMPDIR/helpdesk-e2e-storage`, definida em `apps/api/vitest.config.e2e.ts`), que a suíte de anexos limpa.
+- `pnpm infra:reset` **não** apaga `apps/api/storage/`: depois de um reset os arquivos antigos ficam órfãos. Apague a pasta à mão se quiser começar do zero.
+
+### 1.9 Reset
 
 `pnpm infra:reset` apaga os volumes (Zitadel e bancos do zero). Depois: `pnpm infra:up`, `pnpm infra:bootstrap -- --admin <email>` (o projeto ganha um ID novo, e o script atualiza o `.env`), migrações e seed. Os usuários do Zitadel somem: crie de novo.
 
@@ -103,7 +109,7 @@ done
 | #   | Etapa                                                                                                                                                                | Status   |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
 | 1   | Caixa `suporte-teste@missaosalesiana.org.br`: usuário no Workspace, verificação em 2 etapas, senha de app                                                            | pendente |
-| 2   | Cluster Kubernetes, DBaaS (bancos `zitadel` e `helpdesk`), registry, bucket de anexos                                                                                | pendente |
+| 2   | Cluster Kubernetes, DBaaS (bancos `zitadel` e `helpdesk`), registry, bucket de anexos (ver 2.1)                                                                      | pendente |
 | 3   | DNS (`suporte.msmt.org.br`, `auth.msmt.org.br`), Traefik, cert-manager                                                                                               | pendente |
 | 4   | Zitadel v4.19.5 via Helm (`deploy/zitadel`): org, projeto, roles, app SPA (JWT), branding. Mesmos passos do 1.4, com redirects de produção e sem Development Mode    | pendente |
 | 5   | IdP Google: app OAuth "Internal" no Google Cloud + IdP na org do Zitadel                                                                                             | pendente |
@@ -113,3 +119,13 @@ done
 | 9   | CronJob de backup e **teste de restore**                                                                                                                             | pendente |
 | 10  | Monitor de disponibilidade; verificação em 2 etapas obrigatória para os agentes no Workspace                                                                         | pendente |
 | 11  | Virada do e-mail (`05-plano-mvp.md` §5.4)                                                                                                                            | pendente |
+
+### 2.1 Bucket de anexos (Object Storage)
+
+A preparar junto com a etapa 2. O código já está pronto (T13, driver `s3` com `@aws-sdk/client-s3`, `forcePathStyle`).
+
+- Bucket **privado** `helpdesk-anexos` na região `br-se1`. Sem acesso público, sem CORS, sem URL pré-assinada: todo upload e download passa pela API (ADR-009).
+- Endpoint: `https://br-se1.magaluobjects.com` (visto na configuração de Magalu do rclone). ⚠️ Confirmar no painel da Magalu ao criar o bucket.
+- Par de chaves com acesso só a esse bucket. Valores no Secret do app: `STORAGE_DRIVER=s3`, `S3_ENDPOINT`, `S3_REGION=br-se1`, `S3_BUCKET=helpdesk-anexos`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`. Com `STORAGE_DRIVER=s3`, a API não sobe se faltar alguma delas.
+- Teste depois do deploy: anexar um arquivo num ticket, baixar e conferir o objeto em `attachments/<ano>/<mês>/<uuid>` no bucket.
+- O bucket também vai guardar os `.eml` brutos (T21) e os dumps do backup (etapa 9, possivelmente em outro bucket).

@@ -19,6 +19,32 @@ describe('createApiClient', () => {
     expect(headers.get('Content-Type')).toBe('application/json');
   });
 
+  it('FormData vai sem Content-Type (o navegador define o boundary)', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(201, {}));
+    vi.stubGlobal('fetch', fetchMock);
+    await createApiClient(() => 'tok')('/tickets', { method: 'POST', body: new FormData() });
+    const headers = new Headers(fetchMock.mock.calls[0]![1]?.headers);
+    expect(headers.has('Content-Type')).toBe(false);
+    expect(headers.get('Authorization')).toBe('Bearer tok');
+  });
+
+  it('responseType blob devolve o Blob; erro continua virando ApiRequestError', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('%PDF', { status: 200 }))
+      .mockResolvedValueOnce(
+        jsonResponse(404, { statusCode: 404, code: 'NOT_FOUND', message: 'Anexo não encontrado.' }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const api = createApiClient(() => 'tok');
+    const blob = await api<Blob>('/attachments/a1', { responseType: 'blob' });
+    expect(blob.size).toBe(4);
+    await expect(api('/attachments/a2', { responseType: 'blob' })).rejects.toMatchObject({
+      statusCode: 404,
+      code: 'NOT_FOUND',
+    });
+  });
+
   it('sem token não envia Authorization', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal('fetch', fetchMock);

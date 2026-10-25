@@ -5,7 +5,7 @@ import { useAuth } from 'react-oidc-context';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HtmlEditorProps } from '../../components/HtmlEditor.tsx';
 import { AppRoutes } from '../../routes.tsx';
-import { jsonBody, stubApi, type Handler } from '../../test/api.ts';
+import { callsTo, formBody, jsonBody, stubApi, type Handler } from '../../test/api.ts';
 import { fakeAuth, jsonResponse, renderWithProviders } from '../../test/render.tsx';
 import {
   CATEGORY,
@@ -140,6 +140,33 @@ describe('Solicitante — tickets (T11)', () => {
       });
     });
 
+    it('anexos: envia multipart com data e files; tipo recusado mostra o motivo', async () => {
+      let body: ReturnType<typeof formBody>;
+      stubApi({
+        ...formRoutes,
+        'POST /api/tickets': (init) => {
+          body = formBody(init);
+          return jsonResponse(201, detail());
+        },
+      });
+      const user = userEvent.setup({ applyAccept: false });
+      renderWithProviders(<AppRoutes />, { route: '/tickets/novo' });
+      await fillForm();
+      const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+      await user.upload(input, [
+        new File(['%PDF'], 'print.pdf', { type: 'application/pdf' }),
+        new File(['MZ'], 'programa.exe'),
+      ]);
+      expect(screen.getByText('programa.exe: tipo de arquivo não aceito.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remover print.pdf' })).toBeInTheDocument();
+      await submit();
+      await screen.findByRole('heading', { name: '#1001 · Impressora da secretaria' });
+      expect(body).toEqual({
+        data: expect.objectContaining({ subject: 'Impressora da secretaria' }),
+        files: ['print.pdf'],
+      });
+    });
+
     it('CT-07 erro da API aparece e o formulário mantém o que foi digitado', async () => {
       stubApi({
         ...formRoutes,
@@ -209,6 +236,32 @@ describe('Solicitante — tickets (T11)', () => {
       expect(screen.queryByText('Mensagem anterior')).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Mostrar texto citado' }));
       expect(screen.getByText('Mensagem anterior')).toBeInTheDocument();
+    });
+
+    it('anexos da mensagem: baixa pela API (com token) e salva com o nome original', async () => {
+      const ticket = detail({
+        messages: [
+          message({
+            attachments: [
+              { id: 'att1', filename: 'print.png', mimeType: 'image/png', sizeBytes: 2048 },
+            ],
+          }),
+        ],
+      });
+      const fetchMock = stubApi({
+        ...detailRoutes(ticket),
+        'GET /api/attachments/att1': () => new Response('png', { status: 200 }),
+      });
+      const createObjectURL = vi.fn(() => 'blob:anexo');
+      vi.stubGlobal('URL', Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() }));
+      const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      renderWithProviders(<AppRoutes />, { route: `/tickets/${TICKET_ID}` });
+      await userEvent.click(await screen.findByRole('button', { name: 'print.png (2 KB)' }));
+      await waitFor(() => expect(click).toHaveBeenCalled());
+      const [, init] = callsTo(fetchMock, 'GET /api/attachments/att1')[0]!;
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token-123');
+      expect(createObjectURL).toHaveBeenCalled();
+      expect(click.mock.contexts[0]).toMatchObject({ download: 'print.png', href: 'blob:anexo' });
     });
 
     it('CT-11 resposta envia mensagem pública e atualiza a conversa', async () => {

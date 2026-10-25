@@ -27,6 +27,11 @@ export const ApiErrorCode = {
   ASSIGNEE_NOT_IN_GROUP: 'ASSIGNEE_NOT_IN_GROUP',
   INACTIVE_REFERENCE: 'INACTIVE_REFERENCE',
   EMPTY_BODY: 'EMPTY_BODY',
+
+  // anexos (T13)
+  FILE_TOO_LARGE: 'FILE_TOO_LARGE',
+  UNSUPPORTED_FILE_TYPE: 'UNSUPPORTED_FILE_TYPE',
+  TOO_MANY_FILES: 'TOO_MANY_FILES',
 } as const;
 
 export type ApiErrorCode = (typeof ApiErrorCode)[keyof typeof ApiErrorCode];

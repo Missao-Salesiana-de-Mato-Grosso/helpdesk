@@ -62,7 +62,7 @@ export function toTicketDetail(
         name: message.author.name,
         isAgent: isAgent({ roles: message.author.roles.filter(isRole) }),
       },
-      attachments: [],
+      attachments: message.attachments,
       createdAt: message.createdAt.toISOString(),
     })),
     events: row.events.map((event) => ({

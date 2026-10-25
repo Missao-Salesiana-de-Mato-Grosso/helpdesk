@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useMe } from '../../auth/useMe.ts';
 import { HtmlEditor } from '../../components/HtmlEditor.tsx';
+import { AttachmentPicker } from '../attachments/AttachmentPicker.tsx';
 import { useCategories, useCompanies, useCreateTicket, useTicket } from './queries.ts';
 
 /** Texto do 04-lgpd.md §4.1, mitigação 1. */
@@ -56,6 +57,7 @@ export function NewTicketPage() {
   // `undefined` = ainda não mexeu: vale a unidade do cadastro.
   const [companyChoice, setCompanyChoice] = useState<string | null | undefined>(undefined);
   const [bodyHtml, setBodyHtml] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
   const [submitted, setSubmitted] = useState(false);
 
   const companyId = companyChoice === undefined ? (me?.company?.id ?? null) : companyChoice;
@@ -74,9 +76,12 @@ export function NewTicketPage() {
     event.preventDefault();
     setSubmitted(true);
     if (!validation.data || Object.keys(validation.errors).length > 0) return;
-    create.mutate(validation.data, {
-      onSuccess: (ticket) => void navigate(`/tickets/${ticket.id}`, { replace: true }),
-    });
+    create.mutate(
+      { data: validation.data, files },
+      {
+        onSuccess: (ticket) => void navigate(`/tickets/${ticket.id}`, { replace: true }),
+      },
+    );
   };
 
   const loadError = categories.error ?? companies.error;
@@ -150,6 +155,7 @@ export function NewTicketPage() {
               error={errors.bodyHtml}
               disabled={create.isPending}
             />
+            <AttachmentPicker files={files} onChange={setFiles} disabled={create.isPending} />
 
             {create.error && (
               <Alert color="red" title="Não foi possível abrir o chamado">

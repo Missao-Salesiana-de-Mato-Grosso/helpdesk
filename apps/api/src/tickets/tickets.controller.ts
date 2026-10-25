@@ -1,4 +1,17 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+/// <reference types="multer" />
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  Res,
+  StreamableFile,
+  UploadedFiles,
+} from '@nestjs/common';
 import {
   createMessageSchema,
   createTicketSchema,
@@ -12,7 +25,8 @@ import {
   type TicketListResponse,
   type UpdateTicketInput,
 } from '@helpdesk/shared';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
+import { AcceptsAttachments, JsonOrMultipartPipe, incomingFiles } from '../attachments/upload.js';
 import type { CurrentUser as CurrentUserType } from '../auth/current-user.js';
 import { CurrentUser, Roles } from '../auth/decorators.js';
 import { clientIp } from '../common/client-ip.js';
@@ -24,12 +38,14 @@ export class TicketsController {
   constructor(private readonly tickets: TicketsService) {}
 
   @Post()
+  @AcceptsAttachments()
   create(
     @CurrentUser() user: CurrentUserType,
-    @Body(new ZodValidationPipe(createTicketSchema)) body: CreateTicketData,
+    @Body(new JsonOrMultipartPipe(createTicketSchema)) body: CreateTicketData,
+    @UploadedFiles() files: Express.Multer.File[] | undefined,
     @Req() request: Request,
   ): Promise<TicketDetail> {
-    return this.tickets.create(user, body, clientIp(request));
+    return this.tickets.create(user, body, clientIp(request), incomingFiles(files));
   }
 
   @Get()
@@ -63,12 +79,42 @@ export class TicketsController {
   }
 
   @Post(':id/messages')
+  @AcceptsAttachments()
   addMessage(
     @CurrentUser() user: CurrentUserType,
     @Param('id') id: string,
-    @Body(new ZodValidationPipe(createMessageSchema)) body: CreateMessageInput,
+    @Body(new JsonOrMultipartPipe(createMessageSchema)) body: CreateMessageInput,
+    @UploadedFiles() files: Express.Multer.File[] | undefined,
     @Req() request: Request,
   ): Promise<TicketDetail> {
-    return this.tickets.addMessage(user, id, body, clientIp(request));
+    return this.tickets.addMessage(user, id, body, clientIp(request), incomingFiles(files));
+  }
+}
+
+/** `filename*` (RFC 5987) com o nome real e um `filename` ASCII de reserva. */
+function contentDisposition(filename: string): string {
+  const ascii = filename.replace(/[^\x20-\x7e]/g, '_').replace(/[\\"]/g, '_');
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
+@Controller('attachments')
+export class AttachmentsController {
+  constructor(private readonly tickets: TicketsService) {}
+
+  /** Download por stream, sempre como anexo e com `nosniff` (o navegador nunca renderiza). */
+  @Get(':id')
+  async download(
+    @CurrentUser() user: CurrentUserType,
+    @Param('id') id: string,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    const { attachment, stream } = await this.tickets.openAttachment(user, id);
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.setHeader('Cache-Control', 'private, no-store');
+    return new StreamableFile(stream, {
+      type: attachment.mimeType,
+      length: attachment.sizeBytes,
+      disposition: contentDisposition(attachment.filename),
+    });
   }
 }

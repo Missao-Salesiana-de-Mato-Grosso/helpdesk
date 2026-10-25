@@ -10,3 +10,4 @@ export {
   type UpdateMeInput,
 } from './schemas/me.js';
 export * from './schemas/tickets.js';
+export * from './attachments.js';

@@ -5,7 +5,7 @@ import { useAuth } from 'react-oidc-context';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HtmlEditorProps } from '../../components/HtmlEditor.tsx';
 import { AppRoutes } from '../../routes.tsx';
-import { callsTo, jsonBody, stubApi, type Handler } from '../../test/api.ts';
+import { callsTo, formBody, jsonBody, stubApi, type Handler } from '../../test/api.ts';
 import { fakeAuth, jsonResponse, renderWithProviders } from '../../test/render.tsx';
 import { CATEGORY, COMPANY, TICKET_ID, detail, me, page, summary } from '../../test/tickets.ts';
 
@@ -251,6 +251,30 @@ describe('Agente — filas e detalhe (T12)', () => {
       );
       await userEvent.click(screen.getByRole('button', { name: 'Salvar nota' }));
       await waitFor(() => expect(body).toEqual({ kind: 'internal', bodyHtml: 'Verificar cabo' }));
+    });
+
+    it('nota interna com anexo vai em multipart', async () => {
+      let body: ReturnType<typeof formBody>;
+      openTicket(detail(), {
+        [`POST /api/tickets/${TICKET_ID}/messages`]: (init) => {
+          body = formBody(init);
+          return jsonResponse(201, detail());
+        },
+      });
+      await userEvent.click(await screen.findByRole('tab', { name: 'Nota interna' }));
+      await userEvent.type(screen.getByLabelText('Nota interna (só a equipe vê)'), 'Log anexo');
+      const panel = screen.getByRole('tabpanel', { name: 'Nota interna' });
+      await userEvent.upload(
+        panel.querySelector<HTMLInputElement>('input[type="file"]')!,
+        new File(['log'], 'servidor.txt', { type: 'text/plain' }),
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Salvar nota' }));
+      await waitFor(() =>
+        expect(body).toEqual({
+          data: { kind: 'internal', bodyHtml: 'Log anexo' },
+          files: ['servidor.txt'],
+        }),
+      );
     });
 
     it('"Enviar e marcar como Pendente" envia status e version', async () => {

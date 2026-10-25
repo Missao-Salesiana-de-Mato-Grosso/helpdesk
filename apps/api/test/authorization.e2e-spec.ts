@@ -1,6 +1,7 @@
 // Matriz de permissões (01-escopo): toda rota da API × cada papel. Toda rota nova entra aqui.
 // Os usuários já passaram pelo 1º acesso; o bloqueio de onboarding é coberto em auth.e2e-spec.ts.
 import request from 'supertest';
+import { AttachmentsService } from '../src/attachments/attachments.service.js';
 import { createTestApp, type TestApp } from './setup/auth.js';
 import { truncateAll } from './setup/db.js';
 
@@ -33,6 +34,8 @@ interface Refs {
   ticketId: string;
   /** Ticket de um terceiro, num grupo do qual o agente não participa. */
   foreignTicketId: string;
+  attachmentId: string;
+  foreignAttachmentId: string;
 }
 
 const AUTHENTICATED = { anonimo: 401, solicitante: 200, agente: 200, supervisor: 200, admin: 200 };
@@ -55,6 +58,18 @@ const MATRIX: RouteCase[] = [
   { method: 'get', path: '/api/departments', expected: AUTHENTICATED },
   { method: 'get', path: '/api/categories', expected: AUTHENTICATED },
   { method: 'get', path: '/api/groups', expected: AGENT_ONLY },
+  {
+    method: 'get',
+    path: (ref) => `/api/attachments/${ref.attachmentId}`,
+    label: '/api/attachments/:id (do solicitante, grupo do agente)',
+    expected: AUTHENTICATED,
+  },
+  {
+    method: 'get',
+    path: (ref) => `/api/attachments/${ref.foreignAttachmentId}`,
+    label: '/api/attachments/:id (fora do escopo)',
+    expected: { anonimo: 401, solicitante: 404, agente: 404, supervisor: 200, admin: 200 },
+  },
   {
     method: 'get',
     path: (ref) => `/api/groups/${ref.groupId}/members`,
@@ -166,8 +181,11 @@ describe('matriz de permissões (e2e)', () => {
     const external = await t.prisma.user.create({
       data: { email: 'terceiro@exemplo.com', name: 'Terceiro', isExternal: true },
     });
-    const ticket = (requesterId: string, groupId: string) =>
-      t.prisma.ticket.create({
+    const attachments = t.app.get(AttachmentsService);
+    /** Ticket com uma mensagem pública que tem um anexo gravado no storage. */
+    const ticket = async (requesterId: string, groupId: string) => {
+      const stored = await attachments.storeFromBuffer(Buffer.from('x'), { filename: 'a.txt' });
+      const created = await t.prisma.ticket.create({
         data: {
           subject: 'Matriz',
           source: 'portal',
@@ -175,16 +193,31 @@ describe('matriz de permissões (e2e)', () => {
           groupId,
           categoryId: category.id,
           companyId: company.id,
+          messages: {
+            create: {
+              authorId: requesterId,
+              kind: 'public',
+              via: 'portal',
+              bodyHtml: '<p>x</p>',
+              attachments: { create: stored },
+            },
+          },
         },
-        select: { id: true },
+        select: { id: true, messages: { select: { attachments: { select: { id: true } } } } },
       });
+      return { id: created.id, attachmentId: created.messages[0]!.attachments[0]!.id };
+    };
+    const own = await ticket(userIds.get('solicitante')!, ownGroup.id);
+    const foreign = await ticket(external.id, otherGroup.id);
     refs = {
       companyId: company.id,
       departmentId: department.id,
       categoryId: category.id,
       groupId: ownGroup.id,
-      ticketId: (await ticket(userIds.get('solicitante')!, ownGroup.id)).id,
-      foreignTicketId: (await ticket(external.id, otherGroup.id)).id,
+      ticketId: own.id,
+      attachmentId: own.attachmentId,
+      foreignTicketId: foreign.id,
+      foreignAttachmentId: foreign.attachmentId,
     };
   });
 

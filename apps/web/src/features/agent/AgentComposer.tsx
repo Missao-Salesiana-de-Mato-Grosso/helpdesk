@@ -2,6 +2,7 @@ import { ActionIcon, Alert, Button, Group, Menu, Stack, Tabs } from '@mantine/co
 import type { CreateMessageInput, TicketDetail, TicketStatus } from '@helpdesk/shared';
 import { useState } from 'react';
 import { HtmlEditor } from '../../components/HtmlEditor.tsx';
+import { AttachmentPicker } from '../attachments/AttachmentPicker.tsx';
 import { STATUS_LABEL } from '../tickets/format.ts';
 import { useReply } from '../tickets/queries.ts';
 
@@ -19,6 +20,8 @@ export function AgentComposer({ ticket, onError, onCompanyRequired }: AgentCompo
   const [tab, setTab] = useState<'reply' | 'note'>('reply');
   const [replyHtml, setReplyHtml] = useState('');
   const [noteHtml, setNoteHtml] = useState('');
+  const [replyFiles, setReplyFiles] = useState<File[]>([]);
+  const [noteFiles, setNoteFiles] = useState<File[]>([]);
   const [emptyTab, setEmptyTab] = useState<'reply' | 'note' | null>(null);
 
   if (ticket.status === 'closed') {
@@ -44,10 +47,21 @@ export function AgentComposer({ ticket, onError, onCompanyRequired }: AgentCompo
     const body: CreateMessageInput = status
       ? { kind, bodyHtml, status, version: ticket.version }
       : { kind, bodyHtml };
-    send.mutate(body, {
-      onSuccess: () => (kind === 'public' ? setReplyHtml('') : setNoteHtml('')),
-      onError,
-    });
+    send.mutate(
+      { data: body, files: kind === 'public' ? replyFiles : noteFiles },
+      {
+        onSuccess: () => {
+          if (kind === 'public') {
+            setReplyHtml('');
+            setReplyFiles([]);
+          } else {
+            setNoteHtml('');
+            setNoteFiles([]);
+          }
+        },
+        onError,
+      },
+    );
   };
 
   const emptyError = (which: 'reply' | 'note') =>
@@ -69,6 +83,7 @@ export function AgentComposer({ ticket, onError, onCompanyRequired }: AgentCompo
             error={emptyError('reply')}
             disabled={send.isPending}
           />
+          <AttachmentPicker files={replyFiles} onChange={setReplyFiles} disabled={send.isPending} />
           <Group justify="flex-end" gap={4}>
             <Button onClick={() => submit('public')} loading={send.isPending}>
               Enviar
@@ -105,6 +120,7 @@ export function AgentComposer({ ticket, onError, onCompanyRequired }: AgentCompo
             error={emptyError('note')}
             disabled={send.isPending}
           />
+          <AttachmentPicker files={noteFiles} onChange={setNoteFiles} disabled={send.isPending} />
           <Group justify="flex-end">
             <Button color="yellow" onClick={() => submit('internal')} loading={send.isPending}>
               Salvar nota

@@ -1,6 +1,7 @@
 import { Badge, Button, Group, Paper, Stack, Text, Title, Typography } from '@mantine/core';
 import type { TicketDetail, TicketMessage } from '@helpdesk/shared';
 import { useState } from 'react';
+import { AttachmentList } from '../attachments/AttachmentList.tsx';
 import { StatusBadge } from './StatusBadge.tsx';
 import { formatDateTime } from './format.ts';
 
@@ -37,6 +38,7 @@ function MessageCard({ message }: { message: TicketMessage }) {
         </Text>
       </Group>
       <MessageHtml html={message.bodyHtml} />
+      <AttachmentList attachments={message.attachments} />
       {message.quotedHtml && (
         <Stack gap="xs" mt="xs" align="flex-start">
           <Button variant="subtle" size="compact-sm" onClick={() => setShowQuoted((v) => !v)}>

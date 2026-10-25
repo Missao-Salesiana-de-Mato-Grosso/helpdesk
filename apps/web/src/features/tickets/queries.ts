@@ -14,6 +14,7 @@ import type {
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useApi } from '../../api/api-context.ts';
 import { ApiRequestError } from '../../api/client.ts';
+import { requestBody } from '../attachments/attachments.ts';
 
 export const ticketKeys = {
   all: ['tickets'] as const,
@@ -186,8 +187,8 @@ export function useCreateTicket() {
   const api = useApi();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: CreateTicketInput) =>
-      api<TicketDetail>('/tickets', { method: 'POST', body: JSON.stringify(body) }),
+    mutationFn: ({ data, files = [] }: { data: CreateTicketInput; files?: readonly File[] }) =>
+      api<TicketDetail>('/tickets', { method: 'POST', body: requestBody(data, files) }),
     onSuccess: (ticket) => {
       queryClient.setQueryData(ticketKeys.detail(ticket.id), ticket);
       void queryClient.invalidateQueries({ queryKey: [...ticketKeys.all, 'list'] });
@@ -199,10 +200,10 @@ export function useReply(ticketId: string) {
   const api = useApi();
   const callbacks = useTicketWriteCallbacks();
   return useMutation({
-    mutationFn: (body: CreateMessageInput) =>
+    mutationFn: ({ data, files = [] }: { data: CreateMessageInput; files?: readonly File[] }) =>
       api<TicketDetail>(`/tickets/${ticketId}/messages`, {
         method: 'POST',
-        body: JSON.stringify(body),
+        body: requestBody(data, files),
       }),
     onSuccess: callbacks.onSuccess,
     onError: (error) => callbacks.reloadOnConflict(ticketId, error),

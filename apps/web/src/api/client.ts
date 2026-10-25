@@ -33,17 +33,30 @@ function parseJson(text: string): unknown {
   }
 }
 
-export type ApiFetch = <T>(path: string, init?: RequestInit) => Promise<T>;
+export interface ApiRequestInit extends RequestInit {
+  /** `blob` para downloads (anexos); o padrão é JSON. */
+  responseType?: 'json' | 'blob';
+}
+
+export type ApiFetch = <T>(path: string, init?: ApiRequestInit) => Promise<T>;
 
 /**
  * Cliente da API: prefixa `/api`, envia o Bearer do usuário logado e converte erros em
  * `ApiRequestError`. Falha de rede vira status 0; resposta sem o formato `ApiError`, `INTERNAL_ERROR`.
  */
 export function createApiClient(getAccessToken: () => string | undefined): ApiFetch {
-  return async <T>(path: string, init: RequestInit = {}): Promise<T> => {
+  return async <T>(
+    path: string,
+    { responseType = 'json', ...init }: ApiRequestInit = {},
+  ): Promise<T> => {
     const headers = new Headers(init.headers);
-    headers.set('Accept', 'application/json');
-    if (init.body !== undefined && !headers.has('Content-Type')) {
+    headers.set('Accept', responseType === 'blob' ? '*/*' : 'application/json');
+    // FormData: o navegador define o multipart com o boundary.
+    if (
+      init.body !== undefined &&
+      !(init.body instanceof FormData) &&
+      !headers.has('Content-Type')
+    ) {
       headers.set('Content-Type', 'application/json');
     }
     const token = getAccessToken();
@@ -60,6 +73,10 @@ export function createApiClient(getAccessToken: () => string | undefined): ApiFe
       );
     }
 
+    if (response.ok && responseType === 'blob') {
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- o chamador pediu `blob`.
+      return (await response.blob()) as T;
+    }
     const body = parseJson(await response.text());
     if (!response.ok) {
       if (isApiError(body)) throw new ApiRequestError(response.status, body.code, body.message);

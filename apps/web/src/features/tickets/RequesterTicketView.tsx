@@ -3,12 +3,14 @@ import type { TicketDetail } from '@helpdesk/shared';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { HtmlEditor } from '../../components/HtmlEditor.tsx';
+import { AttachmentPicker } from '../attachments/AttachmentPicker.tsx';
 import { Conversation, TicketHeader } from './Conversation.tsx';
 import { useReply } from './queries.ts';
 
 function ReplyForm({ ticket }: { ticket: TicketDetail }) {
   const reply = useReply(ticket.id);
   const [bodyHtml, setBodyHtml] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
   const [submitted, setSubmitted] = useState(false);
 
   if (ticket.status === 'closed') {
@@ -29,10 +31,11 @@ function ReplyForm({ ticket }: { ticket: TicketDetail }) {
     setSubmitted(true);
     if (bodyHtml === '') return;
     reply.mutate(
-      { kind: 'public', bodyHtml },
+      { data: { kind: 'public', bodyHtml }, files },
       {
         onSuccess: () => {
           setBodyHtml('');
+          setFiles([]);
           setSubmitted(false);
         },
       },
@@ -54,6 +57,7 @@ function ReplyForm({ ticket }: { ticket: TicketDetail }) {
           error={submitted && bodyHtml === '' ? 'Escreva a mensagem' : undefined}
           disabled={reply.isPending}
         />
+        <AttachmentPicker files={files} onChange={setFiles} disabled={reply.isPending} />
         {reply.error && (
           <Alert color="red" title="Não foi possível enviar a resposta">
             {reply.error.message}

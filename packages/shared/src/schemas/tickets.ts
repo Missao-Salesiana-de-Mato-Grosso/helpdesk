@@ -152,6 +152,13 @@ export interface TicketCounters {
   noCompany: number;
 }
 
+export interface TicketAttachment {
+  id: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
 export interface TicketMessage {
   id: string;
   kind: MessageKind;
@@ -159,8 +166,7 @@ export interface TicketMessage {
   bodyHtml: string;
   quotedHtml: string | null;
   author: TicketPerson & { isAgent: boolean };
-  /** Preenchido pela T13. */
-  attachments: never[];
+  attachments: TicketAttachment[];
   createdAt: string;
 }
 

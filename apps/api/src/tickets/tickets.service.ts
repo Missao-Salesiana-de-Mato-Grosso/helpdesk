@@ -1,4 +1,5 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import type { Readable } from 'node:stream';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   ApiErrorCode,
@@ -12,6 +13,13 @@ import {
   type TicketView,
   type UpdateTicketInput,
 } from '@helpdesk/shared';
+import {
+  AttachmentsService,
+  type AttachmentRecord,
+  type IncomingFile,
+  type StoredFile,
+} from '../attachments/attachments.service.js';
+import { StorageObjectNotFoundError } from '../attachments/storage/storage-driver.js';
 import { ApiException } from '../common/api-exception.js';
 import { htmlHasContent, sanitizeHtml } from '../common/sanitize-html.js';
 import { CategoriesService } from '../categories/categories.service.js';
@@ -107,6 +115,9 @@ const REF_KIND: Partial<Record<string, 'users' | 'groups' | 'companies' | 'categ
   category_changed: 'categories',
 };
 
+const attachmentNotFound = () =>
+  new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.NOT_FOUND, 'Anexo não encontrado.');
+
 const notAssignable = () =>
   new ApiException(
     HttpStatus.UNPROCESSABLE_ENTITY,
@@ -141,6 +152,8 @@ export function cleanBody(html: string): string {
 
 @Injectable()
 export class TicketsService {
+  private readonly logger = new Logger(TicketsService.name);
+
   constructor(
     private readonly tickets: TicketsRepository,
     private readonly events: TicketEventsRepository,
@@ -148,6 +161,7 @@ export class TicketsService {
     private readonly categories: CategoriesService,
     private readonly companies: CompaniesService,
     private readonly groups: GroupsService,
+    private readonly attachments: AttachmentsService,
     private readonly emitter: EventEmitter2,
   ) {}
 
@@ -260,6 +274,7 @@ export class TicketsService {
     id: string,
     input: CreateMessageInput,
     ip: string | null,
+    files: readonly IncomingFile[] = [],
   ): Promise<TicketDetail> {
     const agent = isAgent(actor);
     if (!agent && input.kind === 'internal') {
@@ -270,81 +285,122 @@ export class TicketsService {
     }
     if (!UUID.test(id)) throw notFound();
     const bodyHtml = cleanBody(input.bodyHtml);
+    this.attachments.validate(files);
+    // Antes de gravar arquivos: quem não vê o ticket recebe 404 sem tocar no storage.
+    if (files.length > 0 && !(await this.tickets.existsInScope(actor, id))) throw notFound();
+    const stored = await this.attachments.storeAll(files);
 
-    const emits = await this.tickets.transaction(async (tx) => {
-      const ticket = await this.lockOrThrow(tx, actor, id);
-      if (ticket.status === 'closed') throw ticketClosed();
-      if (input.version !== undefined && input.version !== ticket.version) {
-        throw versionConflict(ticket.version);
-      }
-
-      const authorIsRequester = actor.id === ticket.requesterId;
-      const changes: TicketChanges = {};
-      const pending: PendingEmit[] = [];
-      let statusEvent: Omit<NewEvent, 'ticketId' | 'actorId' | 'ip'> | null = null;
-
-      if (input.kind === 'public' && agent && !authorIsRequester && !ticket.firstResponseAt) {
-        changes.firstResponseAt = new Date();
-      }
-
-      if (input.status !== undefined) {
-        const plan = planStatusChange(ticket.status, input.status, ticket.companyId, new Date());
-        if (plan) {
-          Object.assign(changes, { status: plan.to }, plan.timestamps);
-          statusEvent = fromTo('status_changed', plan.from, plan.to);
-          pending.push(statusEmit(id, actor.id, plan.from, plan.to));
+    const emits = await this.withStoredFiles(stored, () =>
+      this.tickets.transaction(async (tx) => {
+        const ticket = await this.lockOrThrow(tx, actor, id);
+        if (ticket.status === 'closed') throw ticketClosed();
+        if (input.version !== undefined && input.version !== ticket.version) {
+          throw versionConflict(ticket.version);
         }
-      } else if (
-        input.kind === 'public' &&
-        authorIsRequester &&
-        (ticket.status === 'pending' || ticket.status === 'resolved')
-      ) {
-        const plan = planStatusChange(ticket.status, 'open', ticket.companyId, new Date());
-        if (plan) {
-          Object.assign(changes, { status: plan.to }, plan.timestamps);
-          statusEvent = {
-            type: 'status_changed',
-            data: { from: plan.from, to: plan.to, reason: 'requester_reply' },
-          };
-          pending.push(statusEmit(id, actor.id, plan.from, plan.to, 'requester_reply'));
+
+        const authorIsRequester = actor.id === ticket.requesterId;
+        const changes: TicketChanges = {};
+        const pending: PendingEmit[] = [];
+        let statusEvent: Omit<NewEvent, 'ticketId' | 'actorId' | 'ip'> | null = null;
+
+        if (input.kind === 'public' && agent && !authorIsRequester && !ticket.firstResponseAt) {
+          changes.firstResponseAt = new Date();
         }
-      }
 
-      const message = await this.tickets.addMessage(tx, {
-        ticketId: id,
-        authorId: actor.id,
-        kind: input.kind,
-        via: 'portal',
-        bodyHtml,
-      });
-      // Mudar o status muda o ticket: a versão sobe, para um PATCH concorrente dar 409.
-      await this.tickets.update(tx, id, changes, changes.status !== undefined);
-      await this.events.append(tx, {
-        ticketId: id,
-        actorId: actor.id,
-        type: 'message_added',
-        data: { messageId: message.id, kind: input.kind },
-        ip,
-      });
-      if (statusEvent) {
-        await this.events.append(tx, { ...statusEvent, ticketId: id, actorId: actor.id, ip });
-      }
+        if (input.status !== undefined) {
+          const plan = planStatusChange(ticket.status, input.status, ticket.companyId, new Date());
+          if (plan) {
+            Object.assign(changes, { status: plan.to }, plan.timestamps);
+            statusEvent = fromTo('status_changed', plan.from, plan.to);
+            pending.push(statusEmit(id, actor.id, plan.from, plan.to));
+          }
+        } else if (
+          input.kind === 'public' &&
+          authorIsRequester &&
+          (ticket.status === 'pending' || ticket.status === 'resolved')
+        ) {
+          const plan = planStatusChange(ticket.status, 'open', ticket.companyId, new Date());
+          if (plan) {
+            Object.assign(changes, { status: plan.to }, plan.timestamps);
+            statusEvent = {
+              type: 'status_changed',
+              data: { from: plan.from, to: plan.to, reason: 'requester_reply' },
+            };
+            pending.push(statusEmit(id, actor.id, plan.from, plan.to, 'requester_reply'));
+          }
+        }
 
-      pending.unshift({
-        name: TicketDomainEvent.messageAdded,
-        payload: {
+        const message = await this.tickets.addMessage(tx, {
           ticketId: id,
-          messageId: message.id,
-          kind: input.kind,
           authorId: actor.id,
-          authorIsRequester,
-        } satisfies TicketMessageAddedEvent,
-      });
-      return pending;
-    });
+          kind: input.kind,
+          via: 'portal',
+          bodyHtml,
+        });
+        await this.attachments.createRecords(tx, message.id, stored);
+        // Mudar o status muda o ticket: a versão sobe, para um PATCH concorrente dar 409.
+        await this.tickets.update(tx, id, changes, changes.status !== undefined);
+        await this.events.append(tx, {
+          ticketId: id,
+          actorId: actor.id,
+          type: 'message_added',
+          data: { messageId: message.id, kind: input.kind },
+          ip,
+        });
+        if (statusEvent) {
+          await this.events.append(tx, { ...statusEvent, ticketId: id, actorId: actor.id, ip });
+        }
+
+        pending.unshift({
+          name: TicketDomainEvent.messageAdded,
+          payload: {
+            ticketId: id,
+            messageId: message.id,
+            kind: input.kind,
+            authorId: actor.id,
+            authorIsRequester,
+          } satisfies TicketMessageAddedEvent,
+        });
+        return pending;
+      }),
+    );
 
     this.emitAll(emits);
     return this.toDetail(await this.tickets.loadAfterWrite(actor, id));
+  }
+
+  /**
+   * Anexo para download (T13): o ticket precisa estar no escopo e, para quem não é agente, a
+   * mensagem precisa ser pública. Qualquer falha → 404.
+   */
+  async openAttachment(
+    viewer: ScopeUser,
+    id: string,
+  ): Promise<{ attachment: AttachmentRecord; stream: Readable }> {
+    if (!UUID.test(id)) throw attachmentNotFound();
+    const attachment = await this.attachments.findById(id);
+    if (!attachment || !(await this.tickets.messageVisibleTo(viewer, attachment.messageId))) {
+      throw attachmentNotFound();
+    }
+    try {
+      return { attachment, stream: await this.attachments.open(attachment.storageKey) };
+    } catch (error) {
+      if (error instanceof StorageObjectNotFoundError) {
+        this.logger.error(`Anexo ${attachment.id} sem objeto no storage`);
+        throw attachmentNotFound();
+      }
+      throw error;
+    }
+  }
+
+  /** Se a gravação no banco falhar, os arquivos já gravados no storage são apagados. */
+  private async withStoredFiles<T>(stored: StoredFile[], write: () => Promise<T>): Promise<T> {
+    try {
+      return await write();
+    } catch (error) {
+      await this.attachments.discard(stored);
+      throw error;
+    }
   }
 
   /** Detalhe com `refs`: nomes dos ids que os eventos citam, resolvidos na leitura. */
@@ -405,6 +461,7 @@ export class TicketsService {
     actor: TicketActor,
     input: CreateTicketData,
     ip: string | null,
+    files: readonly IncomingFile[] = [],
   ): Promise<TicketDetail> {
     const requester = await this.resolveRequester(actor, input.requesterId);
     const source = requester.id === actor.id ? 'portal' : 'agent';
@@ -436,33 +493,37 @@ export class TicketsService {
     }
 
     const bodyHtml = cleanBody(input.bodyHtml);
+    const stored = await this.attachments.storeAll(files);
 
-    const created = await this.tickets.transaction(async (tx) => {
-      const ticket = await this.tickets.create(tx, {
-        subject: input.subject,
-        priority: input.priority,
-        source,
-        requesterId: requester.id,
-        groupId: category.defaultGroup.id,
-        categoryId: category.id,
-        companyId,
-      });
-      await this.tickets.addMessage(tx, {
-        ticketId: ticket.id,
-        authorId: actor.id,
-        kind: 'public',
-        via: 'portal',
-        bodyHtml,
-      });
-      await this.events.append(tx, {
-        ticketId: ticket.id,
-        actorId: actor.id,
-        type: 'created',
-        data: input.relatedTicketId ? { relatedTicketId: input.relatedTicketId } : {},
-        ip,
-      });
-      return ticket;
-    });
+    const created = await this.withStoredFiles(stored, () =>
+      this.tickets.transaction(async (tx) => {
+        const ticket = await this.tickets.create(tx, {
+          subject: input.subject,
+          priority: input.priority,
+          source,
+          requesterId: requester.id,
+          groupId: category.defaultGroup.id,
+          categoryId: category.id,
+          companyId,
+        });
+        const message = await this.tickets.addMessage(tx, {
+          ticketId: ticket.id,
+          authorId: actor.id,
+          kind: 'public',
+          via: 'portal',
+          bodyHtml,
+        });
+        await this.attachments.createRecords(tx, message.id, stored);
+        await this.events.append(tx, {
+          ticketId: ticket.id,
+          actorId: actor.id,
+          type: 'created',
+          data: input.relatedTicketId ? { relatedTicketId: input.relatedTicketId } : {},
+          ip,
+        });
+        return ticket;
+      }),
+    );
 
     this.emitter.emit(TicketDomainEvent.created, {
       ticketId: created.id,
