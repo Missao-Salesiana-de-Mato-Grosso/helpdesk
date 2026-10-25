@@ -52,7 +52,7 @@ flowchart TB
         end
 
         DB[(DBaaS PostgreSQL<br/>db: helpdesk<br/>db: zitadel)]
-        S3[(Object Storage<br/>bucket: helpdesk-anexos)]
+        S3[(Object Storage<br/>bucket: msmt-helpdesk)]
         CR[Container Registry]
     end
 

@@ -166,7 +166,7 @@ Registro do que foi executado na conta **MISSAO SALESIANA DE MATO GROSSO** (regi
 | 2026-10-24 | DBaaS `pg-msmt-prd-web` (PostgreSQL 17, BV1-4-10) pelo painel | **status Erro**; a excluir pelo painel e recriar com `make database`          |
 | 2026-10-25 | `make cluster`: `k8s-msmt-prd`, v1.34.2, 2 × BV2-4-40         | ok (~30 min); 3 nós de controle gerenciados + 2 de trabalho, IPs `172.18.x.x` |
 | 2026-10-25 | `make registry`: `cr-msmt-prd`                                | ok (já existia `cr-msmt-dev`, não usado aqui)                                 |
-| 2026-10-25 | `make storage`                                                | a executar                                                                    |
+| 2026-10-25 | Bucket `msmt-helpdesk` pelo painel (privado, versionado)      | ok; `make storage` ainda cria as chaves (CLI e app)                           |
 | —          | `make database`, `make addons`, DNS                           | pendente                                                                      |
 
 Armadilhas encontradas:
@@ -178,15 +178,24 @@ Armadilhas encontradas:
 - `mgc dbaas instances list` **não mostra instâncias com erro**; só com `--status ERROR`.
 - Os comandos de bucket do `mgc` exigem uma chave do Object Storage selecionada no CLI (`msmt-infra-cli`, separada da chave do app). Os comandos `object-storage api-key` não aceitam `--region`.
 
-### 2.1 Bucket de anexos (Object Storage)
+### 2.1 Bucket do help desk (Object Storage)
 
-A preparar junto com a etapa 2. O código já está pronto (T13, driver `s3` com `@aws-sdk/client-s3`, `forcePathStyle`).
+Criado pelo painel em 2026-10-25. O código já está pronto (T13, driver `s3` com `@aws-sdk/client-s3`, `forcePathStyle`).
 
-- Bucket **privado** `helpdesk-anexos` na região `br-se1`. Sem acesso público, sem CORS, sem URL pré-assinada: todo upload e download passa pela API (ADR-009).
+- Convenção do ecossistema MSMT (o help desk é o 1º produto): **um bucket por produto**, `msmt-<produto>`, e uma pasta (prefixo) por uso dentro dele. Novas necessidades viram pastas irmãs, não buckets novos.
+- Bucket **privado** `msmt-helpdesk` na região `br-se1`, com **versionamento** habilitado (protege contra exclusão ou sobrescrita acidental; versões antigas ocupam espaço). Sem acesso público, sem CORS, sem URL pré-assinada: todo upload e download passa pela API (ADR-009).
 - Endpoint: `https://br-se1.magaluobjects.com` (visto na configuração de Magalu do rclone). ⚠️ Confirmar no painel da Magalu ao criar o bucket.
-- Par de chaves gerado pelo `make storage` em `msmt-infra-automation/secrets/object-storage.env` (vale para a conta toda: ver P9). Valores no Secret do app: `STORAGE_DRIVER=s3`, `S3_ENDPOINT`, `S3_REGION=br-se1`, `S3_BUCKET=helpdesk-anexos`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`. Com `STORAGE_DRIVER=s3`, a API não sobe se faltar alguma delas.
+- Par de chaves gerado pelo `make storage` em `msmt-infra-automation/secrets/object-storage.env` (vale para a conta toda: ver P9). Valores no Secret do app: `STORAGE_DRIVER=s3`, `S3_ENDPOINT`, `S3_REGION=br-se1`, `S3_BUCKET=msmt-helpdesk`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`. Com `STORAGE_DRIVER=s3`, a API não sobe se faltar alguma delas.
 - Teste depois do deploy: anexar um arquivo num ticket, baixar e conferir o objeto em `attachments/<ano>/<mês>/<uuid>` no bucket.
-- O bucket também vai guardar os `.eml` brutos (T21) e os dumps do backup (etapa 9, possivelmente em outro bucket).
+- Pastas (criadas sozinhas no 1º upload; não é preciso criá-las no painel):
+
+  | Pasta          | Conteúdo                                 | Quem grava                           |
+  | -------------- | ---------------------------------------- | ------------------------------------ |
+  | `attachments/` | anexos dos tickets, `<ano>/<mês>/<uuid>` | API (T13)                            |
+  | `inbound/`     | e-mails brutos, `<ano>/<mês>/<uuid>.eml` | API (T21)                            |
+  | `backups/`     | dumps do PostgreSQL                      | CronJob de backup (etapa 9, a fazer) |
+
+- ⚠️ Com backups no mesmo bucket, a chave do app (que vale para a conta toda, P9) também consegue apagá-los. O versionamento mitiga; ao fazer a etapa 9, avaliar uma chave própria para o backup ou cópia fora do bucket.
 
 ### 2.2 E-mail de saída (SMTP do Gmail)
 
