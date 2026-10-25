@@ -49,6 +49,11 @@ export type NotificationEvent =
       type: 'public_reply';
       ticket: NotifiedTicket;
       actorId: string;
+      /**
+       * Decide o destino (T21 RN-22): resposta de agente vai ao solicitante; a de qualquer outra
+       * pessoa (o solicitante ou um terceiro no thread), ao responsável ou ao grupo.
+       */
+      authorIsAgent: boolean;
       message: NotifiedMessage;
       /** A mesma requisição resolveu o ticket (RN-04): um e-mail só. */
       resolved: boolean;
@@ -204,7 +209,8 @@ export class NotificationService {
           ...(await this.groupPlanned('ticket_created_group', group)),
         ];
       case 'public_reply':
-        if (event.actorId !== ticket.requesterId) return requester('reply');
+        // Agente que responde o chamado que ele mesmo abriu fala como solicitante.
+        if (event.authorIsAgent && event.actorId !== ticket.requesterId) return requester('reply');
         if (ticket.assigneeId) {
           return (await this.users.contactsByIds([ticket.assigneeId])).map((user) =>
             userPlanned('requester_reply', user, false),

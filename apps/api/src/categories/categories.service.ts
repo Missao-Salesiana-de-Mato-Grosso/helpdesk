@@ -30,6 +30,18 @@ export class CategoriesService {
     });
   }
 
+  /** Categoria ativa pelo nome (T21: tickets por e-mail entram em "Geral"). */
+  findActiveByName(name: string): Promise<ActiveCategory | null> {
+    return this.prisma.category.findFirst({
+      where: { name, active: true },
+      select: {
+        id: true,
+        name: true,
+        defaultGroup: { select: { id: true, name: true, active: true } },
+      },
+    });
+  }
+
   /** Categoria ativa com o grupo padrão (que também precisa estar ativo para receber tickets). */
   findActive(id: string): Promise<ActiveCategory | null> {
     return this.prisma.category.findFirst({

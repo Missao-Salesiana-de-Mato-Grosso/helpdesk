@@ -4,6 +4,7 @@ import { defineConfig } from 'vitest/config';
 import { TEST_DATABASE_URL } from './test/setup/test-database.js';
 
 export const E2E_STORAGE_PATH = join(tmpdir(), 'helpdesk-e2e-storage');
+export const E2E_INBOX_PATH = join(tmpdir(), 'helpdesk-e2e-inbox');
 
 // Testes e2e: test/**/*.e2e-spec.ts, sobem a aplicação Nest inteira contra o banco de testes.
 // Exigem a infra local no ar (pnpm infra:up). Os arquivos rodam em série porque compartilham o banco.
@@ -40,6 +41,13 @@ export default defineConfig({
       MAIL_FROM: 'Suporte MSMT <suporte@missaosalesiana.org.br>',
       PORTAL_URL: 'http://portal.test',
       MAIL_MESSAGE_ID_DOMAIN: 'helpdesk.test',
+      // E-mail de entrada (T21): driver `folder` numa pasta temporária; os testes chamam pollMailbox().
+      INBOUND_ENABLED: 'false',
+      MAILBOX_DRIVER: 'folder',
+      MAILBOX_FOLDER_PATH: E2E_INBOX_PATH,
+      MAILBOX_START_SINCE: '',
+      INTERNAL_EMAIL_DOMAINS: 'missaosalesiana.org.br',
+      INBOUND_RATE_LIMIT_PER_HOUR: '20',
     },
   },
 });

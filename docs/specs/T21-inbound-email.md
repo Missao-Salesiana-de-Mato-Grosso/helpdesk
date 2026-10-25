@@ -1,6 +1,6 @@
 # Spec T21 — E-mail de entrada (IMAP → tickets)
 
-> Status: rascunho · Tarefas: T21 · Depende de: T03 (tabelas), T10 (mensagens), T13 (anexos), T14 (notificações) · Consumida por: T20 (runbook), virada do e-mail (`05-plano-mvp.md` §5.4) · Revisada em: 24/10/2026
+> Status: implementada (24/10/2026) · Tarefas: T21 · Depende de: T03 (tabelas), T10 (mensagens), T13 (anexos), T14 (notificações) · Consumida por: T20 (runbook), virada do e-mail (`05-plano-mvp.md` §5.4) · Revisada em: 24/10/2026
 
 ## 1. Objetivo
 
@@ -202,7 +202,24 @@ O driver `imap` tem um teste unitário com o `ImapFlow` falso (cursor, `UIDVALID
 
 ## 10. Decisões tomadas na implementação
 
-_(preencher após a sessão)_
+- As 4 pendências da §12 foram aprovadas como recomendado:
+  - dependências `imapflow` 2, `mailparser` 3 e `@types/mailparser`, com separador de resposta próprio;
+  - só rotular e manter na INBOX (o `03-arquitetura` §3.3 foi corrigido);
+  - tag `[#n]` sem cabeçalho só do solicitante e de agentes;
+  - terceiro no thread entra como mensagem pública e avisa o responsável ou o grupo (ajuste `authorIsAgent` na T14).
+- **Falha de infraestrutura × falha do e-mail** (RN-04):
+  - o `.eml` bruto é gravado antes de tudo: storage fora do ar faz o ciclo parar sem gravar nada;
+  - qualquer outro erro vira `failed` com o motivo, e o cursor segue;
+  - se nem o `failed` consegue ser gravado (banco fora do ar), o erro sobe e o ciclo para.
+  - Assim, um e-mail com defeito nunca trava a caixa, e uma queda nunca perde e-mail.
+- **Idempotência e ticket na mesma transação:** a linha `processed` em `inbound_emails` e a ref `inbound` são gravadas pelo hook `EmailWrite` dentro da transação do ticket (antes do `enqueue`). Uma queda entre o commit e o avanço do cursor só gera um duplicado ignorado no ciclo seguinte.
+- **Usuário do remetente** criado fora da transação do ticket (`UsersService.findOrCreateFromEmail`, que tolera corrida pelo `unique`). Se a transação falhar, sobra um usuário sem ticket, o que é inofensivo e é reaproveitado no próximo e-mail.
+- **E-mail ilegível** (o parser lança erro) → `failed`/`parse_error`. **Sem `From:`** → `failed`/`no_sender`.
+- **Driver `folder`:** o progresso é a própria pasta (o que ficou na raiz ainda não foi processado). Os anteriores a `MAILBOX_START_SINCE` vão para `ignorado/`, e a data vem do `Date:` do arquivo.
+- **Driver `imap`:** o primeiro UID depois da virada é calculado pela data interna, porque o `SEARCH SINCE` só olha o dia. O cursor é gravado a cada e-mail. O logger do `imapflow` fica desligado (RN-20).
+- Imagens inline sem nome viram `imagem-<n>.<ext>`. O `<head>` (título e estilos) é removido antes de sanitizar.
+- Limite por remetente contado por `created_at` (hora de chegada no sistema), não pela data do e-mail, que o remetente controla.
+- Testes: `test/inbound-email.e2e-spec.ts` (28), unitários em `src/inbound-email/*.spec.ts` (43, incluindo o driver `imap` com cliente falso) e fixtures em `test/fixtures/inbound/`.
 
 ## 11. Prompt sugerido para a sessão
 
@@ -212,7 +229,7 @@ Leia docs/specs/T21-inbound-email.md. Antes de escrever código, apresente um pl
 
 ## 12. Pendências antes da sessão
 
-Decisões para o dono do produto, com a recomendação:
+Resolvidas em 24/10/2026 (ver §10). Ficam registradas as opções:
 
 1. **Dependências:** `imapflow`, `mailparser` e `@types/mailparser` (dev). O separador de resposta (RN-18) seria **heurística própria**, sem a lib `email-reply-parser`. Ela só trata texto puro, e o grosso dos e-mails que chegam é HTML do Gmail e do Outlook (recomendado).
 2. **Depois de processar** (RN-06): **só rotular e manter na INBOX** (recomendado) **ou** rotular e tirar da INBOX (arquivar), como está no `03-arquitetura` §3.3. Manter na INBOX deixa o rollback da virada simples: se o Freshdesk for reconectado, ele ainda enxerga tudo. A INBOX não é usada por pessoas depois da virada, então a bagunça não pesa. Se escolher só rotular, o `03-arquitetura` é corrigido na sessão.

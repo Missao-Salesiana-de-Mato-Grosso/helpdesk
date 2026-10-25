@@ -1,0 +1,20 @@
+From: =?UTF-8?B?Sm/Do28gTm92byBTaWx2YQ==?= <novo@missaosalesiana.org.br>
+To: Suporte MSMT <suporte@missaosalesiana.org.br>
+Subject: Impressora da secretaria parou
+Date: Sat, 24 Oct 2026 09:15:00 -0400
+Message-ID: <CAnovo001@mail.gmail.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="alt"
+Authentication-Results: mx.google.com; spf=pass smtp.mailfrom=missaosalesiana.org.br; dmarc=pass (p=QUARANTINE) header.from=missaosalesiana.org.br
+
+--alt
+Content-Type: text/plain; charset="UTF-8"
+
+Bom dia, a impressora da secretaria não liga.
+
+--alt
+Content-Type: text/html; charset="UTF-8"
+
+<html><head><title>Ignorar</title><style>p{color:red}</style></head><body><div dir="ltr"><p>Bom dia, a impressora da <b>secretaria</b> não liga.</p><script>alert(1)</script></div></body></html>
+
+--alt--

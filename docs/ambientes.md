@@ -104,7 +104,16 @@ done
 - Os destinatários precisam ter e-mail real no banco. O seed põe `suporte@missaosalesiana.org.br` no grupo "Suporte TI", que é a própria caixa do help desk. Por isso o aviso de chamado novo vai para cada agente do grupo, nunca para `suporte@`. Para testar o aviso ao grupo, entre em `group_members` com o seu usuário.
 - Os testes e2e também usam o Mailpit (CTs 📬 da T14) e deixam e-mails com domínio `helpdesk.test` na caixa. Limpe pelo botão "Delete all" do Mailpit.
 
-### 1.10 Reset
+### 1.10 E-mails de entrada (pasta `.inbox`)
+
+- Em dev, `MAILBOX_DRIVER=folder`: o cron (1 min) processa cada `*.eml` em `apps/api/.inbox/` (pasta no `.gitignore`) e o move para `processado/`, `descartado/` ou `erro/`, o equivalente aos rótulos do Gmail. Sem IMAP e sem caixa real.
+- Para simular um e-mail: copie uma fixture, trocando o `Message-ID` (o mesmo id duas vezes é ignorado) e o `Date:`. Exemplo: `sed "s/<CAnovo001@mail.gmail.com>/<teste-$(date +%s)@x>/; s/^Date: .*/Date: $(date -R)/" apps/api/test/fixtures/inbound/novo-interno.eml > apps/api/.inbox/teste.eml`. Em até 1 min vira ticket, e a confirmação aparece no Mailpit no ciclo seguinte da outbox.
+- Para responder a um ticket, use um `.eml` com `In-Reply-To:` igual ao `Message-ID` de um e-mail que o Mailpit recebeu dele (ou `Subject:` com `[#número]`, se o remetente for o solicitante ou um agente).
+- Situação: `docker compose exec -T postgres psql -U helpdesk -d helpdesk -c "select status, reason, from_email, ticket_id, created_at from inbound_emails order by created_at desc limit 20"`.
+- ⚠️ **Armadilha:** com `MAILBOX_START_SINCE` preenchido, os `.eml` com `Date:` anterior vão para `ignorado/` sem virar ticket. Em dev, deixe vazio.
+- Os testes e2e usam a pasta temporária `$TMPDIR/helpdesk-e2e-inbox` e nunca tocam o Gmail.
+
+### 1.11 Reset
 
 `pnpm infra:reset` apaga os volumes (Zitadel e bancos do zero). Depois: `pnpm infra:up`, `pnpm infra:bootstrap -- --admin <email>` (o projeto ganha um ID novo, e o script atualiza o `.env`), migrações e seed. Os usuários do Zitadel somem: crie de novo.
 
@@ -132,16 +141,16 @@ done
 
 Decisões e confirmações em aberto que precisam estar resolvidas antes ou durante a subida em produção. Ao resolver uma, marque a data e mova o detalhe para a seção da etapa.
 
-| #   | Pendência                                                                                                                                                                                           | Etapa | Quem            | Status |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | --------------- | ------ |
-| P1  | **Decidir o Access Token Lifetime do Zitadel:** padrão de 12 h ou 1 h (recomendado; ADR). Não alterar sem decisão explícita                                                                         | 6     | dono do produto | aberta |
-| P2  | **Confirmar com o suporte da Magalu** que o envio autenticado pelo Gmail (`smtp.gmail.com:587`) não fere os termos de uso ("e-mail transacional diretamente via SMTP"). Ver 2.2                     | 2, 7  | dono do produto | aberta |
-| P3  | Testar se o cluster sai pela porta **587** (SMTP) e pela **993** (IMAP) até o Gmail. Se a 587 estiver bloqueada, a alternativa é um provedor SMTP externo (só muda `SMTP_*`; exige SPF/DKIM no DNS) | 2     | desenvolvedor   | aberta |
-| P4  | Confirmar o **endpoint do Object Storage** (`https://br-se1.magaluobjects.com`) no painel ao criar o bucket. O driver `s3` só foi testado com cliente falso: validar upload e download reais        | 2, 8  | desenvolvedor   | aberta |
-| P5  | Com `suporte-teste@`: conferir se o Gmail **preserva o `Message-ID`** que enviamos (`<tk-…@suporte.msmt.org.br>`) e se as respostas ficam no mesmo thread. Se reescrever, a tag `[#n]` segura       | 1     | desenvolvedor   | aberta |
-| P6  | Com `suporte-teste@` (T21): conferir num e-mail real o cabeçalho `Authentication-Results: mx.google.com … dmarc=` e se copiar para o rótulo `helpdesk/processado` **mantém o e-mail na INBOX**      | 1     | desenvolvedor   | aberta |
-| P7  | Anotar no admin do Freshdesk (Admin → Canais → E-mail) **onde se desconecta a caixa** `suporte@`, para a virada e o rollback                                                                        | 7, 11 | dono do produto | aberta |
-| P8  | Depois da virada: acompanhar `notifications` com `status = 'failed'` e `inbound_emails` com `failed`/`discarded` (rótulo `helpdesk/erro`) por 2 h, e incluir isso no monitoramento                  | 10–11 | desenvolvedor   | aberta |
+| #   | Pendência                                                                                                                                                                                               | Etapa | Quem            | Status |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | --------------- | ------ |
+| P1  | **Decidir o Access Token Lifetime do Zitadel:** padrão de 12 h ou 1 h (recomendado; ADR). Não alterar sem decisão explícita                                                                             | 6     | dono do produto | aberta |
+| P2  | **Confirmar com o suporte da Magalu** que o envio autenticado pelo Gmail (`smtp.gmail.com:587`) não fere os termos de uso ("e-mail transacional diretamente via SMTP"). Ver 2.2                         | 2, 7  | dono do produto | aberta |
+| P3  | Testar se o cluster sai pela porta **587** (SMTP) e pela **993** (IMAP) até o Gmail. Se a 587 estiver bloqueada, a alternativa é um provedor SMTP externo (só muda `SMTP_*`; exige SPF/DKIM no DNS)     | 2     | desenvolvedor   | aberta |
+| P4  | Confirmar o **endpoint do Object Storage** (`https://br-se1.magaluobjects.com`) no painel ao criar o bucket. O driver `s3` só foi testado com cliente falso: validar upload e download reais            | 2, 8  | desenvolvedor   | aberta |
+| P5  | Com `suporte-teste@`: conferir se o Gmail **preserva o `Message-ID`** que enviamos (`<tk-…@suporte.msmt.org.br>`) e se as respostas ficam no mesmo thread. Se reescrever, a tag `[#n]` segura           | 1     | desenvolvedor   | aberta |
+| P6  | Com `suporte-teste@` (T21; ver 2.3): conferir num e-mail real o cabeçalho `Authentication-Results: mx.google.com … dmarc=` e se copiar para o rótulo `helpdesk/processado` **mantém o e-mail na INBOX** | 1     | desenvolvedor   | aberta |
+| P7  | Anotar no admin do Freshdesk (Admin → Canais → E-mail) **onde se desconecta a caixa** `suporte@`, para a virada e o rollback                                                                            | 7, 11 | dono do produto | aberta |
+| P8  | Depois da virada: acompanhar `notifications` com `status = 'failed'` e `inbound_emails` com `failed`/`discarded` (rótulo `helpdesk/erro`) por 2 h, e incluir isso no monitoramento                      | 10–11 | desenvolvedor   | aberta |
 
 ### 2.1 Bucket de anexos (Object Storage)
 
@@ -161,3 +170,14 @@ A preparar com as etapas 1 e 7. O código já está pronto (T14).
 - Valores no Secret do app: `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_SECURE=false` (STARTTLS), `SMTP_USER=suporte@missaosalesiana.org.br`, `SMTP_PASSWORD=<senha de app>`, `MAIL_FROM="Suporte MSMT <suporte@missaosalesiana.org.br>"`, `PORTAL_URL=https://suporte.msmt.org.br`, `MAIL_MESSAGE_ID_DOMAIN=suporte.msmt.org.br`.
 - Teste com `suporte-teste@` (etapa 1): abrir um chamado, conferir no Gmail do destinatário (menu "Mostrar original") se o `Message-ID` saiu como `<tk-…@suporte.msmt.org.br>`, e não reescrito pelo Gmail, e se as respostas seguintes ficam no mesmo thread.
 - Monitorar `notifications` com `status = 'failed'`. O `last_error` traz o código SMTP (sem conteúdo). Limite do Workspace: cerca de 2.000 envios por dia.
+
+### 2.3 E-mail de entrada (IMAP do Gmail)
+
+A preparar com as etapas 1, 7 e 11. O código já está pronto (T21).
+
+- Até a virada, a API lê `suporte-teste@`. **Nunca** apontar para `suporte@` enquanto o Freshdesk estiver conectado (os dois criariam tickets; §5.4 do plano).
+- Valores no Secret do app: `MAILBOX_DRIVER=imap`, `MAILBOX_HOST=imap.gmail.com`, `MAILBOX_PORT=993`, `MAILBOX_USER`, `MAILBOX_PASSWORD` (a mesma senha de app do SMTP), `MAILBOX_START_SINCE` (na virada, a hora da desconexão do Freshdesk, com fuso: `2026-10-27T07:15:00-04:00`), `INTERNAL_EMAIL_DOMAINS=missaosalesiana.org.br`. Com `MAILBOX_DRIVER=imap`, a API não sobe sem usuário e senha.
+- O IMAP precisa estar habilitado na conta (Gmail → Configurações → Encaminhamento e POP/IMAP). Os rótulos `helpdesk/processado`, `helpdesk/descartado` e `helpdesk/erro` são criados pela API na primeira vez.
+- Conferência depois do deploy: o log mostra `Cursor inicial da INBOX: UID …`. Enviar um e-mail de teste e ver o ticket, o rótulo `helpdesk/processado` no Gmail (com o e-mail ainda na INBOX) e a confirmação no thread (P5 e P6 em 2.0).
+- Monitorar `inbound_emails` com `status = 'failed'` e o rótulo `helpdesk/erro`. Para reprocessar um e-mail com falha: o runbook (T20) vai descrever o passo.
+- Para recomeçar a leitura do zero (por exemplo, ao trocar de `suporte-teste@` para `suporte@`), apague as chaves `mailbox.last_uid` e `mailbox.uid_validity` em `app_settings` antes do deploy. Sem isso, a API usaria o cursor da outra caixa.

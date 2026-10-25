@@ -225,6 +225,17 @@ export class TicketsRepository {
     return tx.ticket.create({ data, select: { id: true, number: true, status: true } });
   }
 
+  /** Ticket que um e-mail referencia (T21), por id ou número, dentro do escopo do leitor. */
+  findEmailTarget(
+    viewer: ScopeUser,
+    where: { id: string } | { number: number },
+  ): Promise<{ id: string; number: number; requesterId: string; status: TicketStatus } | null> {
+    return this.prisma.ticket.findFirst({
+      where: { AND: [ticketScope(viewer), where] },
+      select: { id: true, number: true, requesterId: true, status: true },
+    });
+  }
+
   async addMessage(tx: Tx, data: NewMessage): Promise<{ id: string }> {
     return tx.ticketMessage.create({ data, select: { id: true } });
   }

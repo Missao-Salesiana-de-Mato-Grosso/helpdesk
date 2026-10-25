@@ -74,6 +74,29 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { email }, ...userWithGroupIds });
   }
 
+  /**
+   * Remetente de e-mail (T21 RN-10): o usuário com esse e-mail ou um novo, sem login. Terceiro
+   * (`is_external`) quando o domínio não é institucional. Dois e-mails simultâneos do mesmo
+   * desconhecido: o segundo encontra o criado pelo primeiro.
+   */
+  async findOrCreateFromEmail(data: {
+    email: string;
+    name: string;
+    isExternal: boolean;
+  }): Promise<UserWithGroupIds> {
+    const existing = await this.findByEmail(data.email);
+    if (existing) return existing;
+    try {
+      return await this.prisma.user.create({ data, ...userWithGroupIds });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const created = await this.findByEmail(data.email);
+        if (created) return created;
+      }
+      throw error;
+    }
+  }
+
   createFromLogin(data: NewLoginUser, now: Date): Promise<UserWithGroupIds> {
     return this.prisma.user.create({
       data: { ...data, lastLoginAt: now, profileSyncedAt: now },

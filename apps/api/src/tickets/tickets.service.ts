@@ -98,6 +98,28 @@ export interface TicketMessageAddedEvent {
 
 type PendingEmit = { name: string; payload: object };
 
+/** Remetente de um e-mail (T21), já resolvido para um usuário. */
+export interface EmailAuthor {
+  id: string;
+  roles: readonly string[];
+  companyId: string | null;
+}
+
+/**
+ * Gravações do módulo de e-mail na transação do ticket (linha em `inbound_emails`, ref do
+ * `Message-ID`), antes das notificações: assim o e-mail e o ticket nascem juntos ou não nascem.
+ */
+export type EmailWrite = (tx: Tx, ticket: { id: string; number: number }) => Promise<void>;
+
+/**
+ * T21 RN-15: o remetente pode responder a um ticket fora do escopo dele (um agente de outro
+ * grupo, um colega em cópia). As entradas de e-mail leem e travam com escopo total; o autor da
+ * mensagem continua sendo o remetente.
+ */
+const EMAIL_SCOPE: ScopeUser = { id: 'inbound-email', roles: ['admin'], groupIds: [] };
+
+const toRoles = (roles: readonly string[]) => roles.filter(isKnownRole);
+
 const AGENT_DEFAULT_STATUSES: TicketStatus[] = ['open', 'pending'];
 const OPEN_STATUSES: TicketStatus[] = ['open', 'pending'];
 
@@ -371,6 +393,7 @@ export class TicketsService {
             type: 'public_reply',
             ticket: notified(ticket),
             actorId: actor.id,
+            authorIsAgent: agent,
             message: { bodyHtml, attachments: stored },
             resolved,
           });
@@ -582,6 +605,162 @@ export class TicketsService {
     return this.toDetail(await this.tickets.loadAfterWrite(actor, created.id));
   }
 
+  /** T21 RN-11: o ticket que um e-mail referencia (por id via refs, ou pelo número da tag). */
+  findEmailTarget(where: { id: string } | { number: number }) {
+    return this.tickets.findEmailTarget(EMAIL_SCOPE, where);
+  }
+
+  /** T21 RN-13 e RN-14: ticket novo a partir de um e-mail (`source = email`). */
+  async createFromEmail(
+    author: EmailAuthor,
+    input: {
+      subject: string;
+      categoryId: string;
+      groupId: string;
+      bodyHtml: string;
+      quotedHtml: string | null;
+      relatedTicketId?: string;
+    },
+    stored: StoredFile[],
+    write: EmailWrite,
+  ): Promise<{ id: string; number: number }> {
+    const created = await this.tickets.transaction(async (tx) => {
+      const ticket = await this.tickets.create(tx, {
+        subject: input.subject,
+        priority: 'medium',
+        source: 'email',
+        requesterId: author.id,
+        groupId: input.groupId,
+        categoryId: input.categoryId,
+        companyId: author.companyId,
+      });
+      const message = await this.tickets.addMessage(tx, {
+        ticketId: ticket.id,
+        authorId: author.id,
+        kind: 'public',
+        via: 'email',
+        bodyHtml: input.bodyHtml,
+        quotedHtml: input.quotedHtml,
+      });
+      await this.attachments.createRecords(tx, message.id, stored);
+      await this.events.append(tx, {
+        ticketId: ticket.id,
+        actorId: author.id,
+        type: 'created',
+        data: input.relatedTicketId ? { relatedTicketId: input.relatedTicketId } : {},
+      });
+      await write(tx, ticket);
+      await this.notifications.enqueue(tx, {
+        type: 'ticket_created',
+        ticket: {
+          id: ticket.id,
+          number: ticket.number,
+          subject: input.subject,
+          requesterId: author.id,
+          assigneeId: null,
+          groupId: input.groupId,
+          companyId: author.companyId,
+          categoryId: input.categoryId,
+        },
+        actorId: author.id,
+        message: { bodyHtml: input.bodyHtml, attachments: stored },
+      });
+      return ticket;
+    });
+
+    this.emitter.emit(TicketDomainEvent.created, {
+      ticketId: created.id,
+      number: created.number,
+      actorId: author.id,
+      requesterId: author.id,
+      source: 'email',
+    } satisfies TicketCreatedEvent);
+    return { id: created.id, number: created.number };
+  }
+
+  /**
+   * T21 RN-12: mensagem pública que chegou por e-mail num ticket existente. Ticket fechado →
+   * `closed`, sem gravar nada: quem chama abre um ticket novo (RN-13).
+   */
+  async addEmailMessage(
+    author: EmailAuthor,
+    ticketId: string,
+    input: { bodyHtml: string; quotedHtml: string | null },
+    stored: StoredFile[],
+    write: EmailWrite,
+  ): Promise<'added' | 'closed'> {
+    const agent = isAgent({ roles: toRoles(author.roles) });
+    const emits = await this.tickets.transaction(async (tx) => {
+      const ticket = await this.lockOrThrow(tx, EMAIL_SCOPE, ticketId);
+      if (ticket.status === 'closed') return null;
+
+      const changes: TicketChanges = {};
+      const pending: PendingEmit[] = [];
+      let statusEvent: Omit<NewEvent, 'ticketId' | 'actorId' | 'ip'> | null = null;
+      const fromRequesterSide = !agent || author.id === ticket.requesterId;
+
+      if (agent && author.id !== ticket.requesterId && !ticket.firstResponseAt) {
+        changes.firstResponseAt = new Date();
+      }
+      if (fromRequesterSide && (ticket.status === 'pending' || ticket.status === 'resolved')) {
+        const plan = planStatusChange(ticket.status, 'open', ticket.companyId, new Date());
+        if (plan) {
+          Object.assign(changes, { status: plan.to }, plan.timestamps);
+          statusEvent = {
+            type: 'status_changed',
+            data: { from: plan.from, to: plan.to, reason: 'requester_reply' },
+          };
+          pending.push(statusEmit(ticketId, author.id, plan.from, plan.to, 'requester_reply'));
+        }
+      }
+
+      const message = await this.tickets.addMessage(tx, {
+        ticketId,
+        authorId: author.id,
+        kind: 'public',
+        via: 'email',
+        bodyHtml: input.bodyHtml,
+        quotedHtml: input.quotedHtml,
+      });
+      await this.attachments.createRecords(tx, message.id, stored);
+      await this.tickets.update(tx, ticketId, changes, changes.status !== undefined);
+      await this.events.append(tx, {
+        ticketId,
+        actorId: author.id,
+        type: 'message_added',
+        data: { messageId: message.id, kind: 'public' },
+      });
+      if (statusEvent) {
+        await this.events.append(tx, { ...statusEvent, ticketId, actorId: author.id });
+      }
+      await write(tx, ticket);
+      await this.notifications.enqueue(tx, {
+        type: 'public_reply',
+        ticket: notified(ticket),
+        actorId: author.id,
+        authorIsAgent: agent,
+        message: { bodyHtml: input.bodyHtml, attachments: stored },
+        resolved: false,
+      });
+
+      pending.unshift({
+        name: TicketDomainEvent.messageAdded,
+        payload: {
+          ticketId,
+          messageId: message.id,
+          kind: 'public',
+          authorId: author.id,
+          authorIsRequester: author.id === ticket.requesterId,
+        } satisfies TicketMessageAddedEvent,
+      });
+      return pending;
+    });
+
+    if (emits === null) return 'closed';
+    this.emitAll(emits);
+    return 'added';
+  }
+
   /** RN-12 a RN-17. */
   async list(viewer: ScopeUser, query: ListTicketsQuery): Promise<TicketListResponse> {
     const view = query.view ?? this.defaultView(viewer);
@@ -647,9 +826,7 @@ export class TicketsService {
     if (!user) throw inactiveReference('Solicitante inexistente.');
     return {
       id: user.id,
-      roles: user.roles.filter(
-        (role) => role === 'admin' || role === 'supervisor' || role === 'agente',
-      ),
+      roles: toRoles(user.roles),
       groupIds: user.groupMemberships.map((m) => m.groupId),
       companyId: user.companyId,
     };

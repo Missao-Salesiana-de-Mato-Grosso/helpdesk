@@ -10,6 +10,7 @@ import { ConfigModule } from './config/config.module.js';
 import { DepartmentsModule } from './departments/departments.module.js';
 import { GroupsModule } from './groups/groups.module.js';
 import { HealthModule } from './health/health.module.js';
+import { InboundEmailModule } from './inbound-email/inbound-email.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { TicketsModule } from './tickets/tickets.module.js';
 import { UsersModule } from './users/users.module.js';
@@ -28,6 +29,7 @@ import { UsersModule } from './users/users.module.js';
     CategoriesModule,
     GroupsModule,
     TicketsModule,
+    InboundEmailModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: ApiExceptionFilter }],
 })

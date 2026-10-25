@@ -60,6 +60,29 @@ export const envSchema = z
     NOTIFICATIONS_ENABLED: flag('true'),
     NOTIFICATIONS_BATCH_SIZE: z.coerce.number().int().positive().default(20),
     NOTIFICATIONS_MAX_ATTEMPTS: z.coerce.number().int().positive().default(6),
+    // E-mail de entrada (T21). `folder` lê .eml de uma pasta (dev e testes); `imap`, a caixa real.
+    INBOUND_ENABLED: flag('true'),
+    MAILBOX_DRIVER: z.enum(['folder', 'imap']).default('folder'),
+    MAILBOX_FOLDER_PATH: z.string().min(1).default('./.inbox'),
+    MAILBOX_HOST: z.string().min(1).default('imap.gmail.com'),
+    MAILBOX_PORT: z.coerce.number().int().positive().default(993),
+    MAILBOX_USER: optionalText,
+    MAILBOX_PASSWORD: optionalText,
+    /** Data/hora da virada (ISO 8601). Vazio = começa no e-mail mais novo da caixa. */
+    MAILBOX_START_SINCE: optionalText.pipe(z.iso.datetime({ offset: true }).optional()),
+    MAILBOX_BATCH_SIZE: z.coerce.number().int().positive().default(50),
+    MAILBOX_LABEL_PREFIX: z.string().min(1).default('helpdesk'),
+    INTERNAL_EMAIL_DOMAINS: z
+      .string()
+      .default('missaosalesiana.org.br')
+      .transform((value) =>
+        value
+          .split(',')
+          .map((domain) => domain.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    INBOUND_RATE_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(20),
+
     NOTIFICATIONS_MAX_ATTACHMENT_BYTES: z.coerce
       .number()
       .int()
@@ -67,14 +90,24 @@ export const envSchema = z
       .default(20 * 1024 * 1024),
   })
   .superRefine((env, ctx) => {
-    if (env.STORAGE_DRIVER !== 's3') return;
-    for (const key of ['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY', 'S3_SECRET_KEY'] as const) {
-      if (!env[key])
-        ctx.addIssue({
-          code: 'custom',
-          path: [key],
-          message: `${key} é obrigatório com STORAGE_DRIVER=s3`,
-        });
+    const requireWith = (keys: readonly (keyof typeof env)[], condition: string) => {
+      for (const key of keys) {
+        if (!env[key])
+          ctx.addIssue({
+            code: 'custom',
+            path: [key],
+            message: `${key} é obrigatório com ${condition}`,
+          });
+      }
+    };
+    if (env.STORAGE_DRIVER === 's3') {
+      requireWith(
+        ['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY', 'S3_SECRET_KEY'],
+        'STORAGE_DRIVER=s3',
+      );
+    }
+    if (env.MAILBOX_DRIVER === 'imap') {
+      requireWith(['MAILBOX_USER', 'MAILBOX_PASSWORD'], 'MAILBOX_DRIVER=imap');
     }
   });
 

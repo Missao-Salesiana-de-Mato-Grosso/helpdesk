@@ -85,6 +85,33 @@ export class AttachmentsService {
     return stored;
   }
 
+  /**
+   * E-mail (T21 RN-19): um e-mail não pode ser recusado, então os arquivos fora das regras são
+   * separados em vez de gerar erro. Mesmas regras do portal: tipo, tamanho e quantidade.
+   */
+  partition(files: readonly IncomingFile[]): { accepted: IncomingFile[]; rejected: string[] } {
+    const accepted: IncomingFile[] = [];
+    const rejected: string[] = [];
+    for (const file of files) {
+      const ok =
+        attachmentMimeType(sanitizeFilename(file.filename)) !== null &&
+        file.buffer.length <= ATTACHMENT_MAX_BYTES &&
+        accepted.length < ATTACHMENT_MAX_FILES;
+      if (ok) accepted.push(file);
+      else rejected.push(sanitizeFilename(file.filename));
+    }
+    return { accepted, rejected };
+  }
+
+  /** `.eml` bruto de um e-mail recebido (T21 RN-07). Devolve a chave no storage. */
+  async storeRawEmail(raw: Buffer): Promise<string> {
+    const now = new Date();
+    const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+    const storageKey = `inbound/${now.getUTCFullYear()}/${month}/${randomUUID()}.eml`;
+    await this.storage.put(storageKey, raw, 'message/rfc822');
+    return storageKey;
+  }
+
   /** Também usado pela T21 para os anexos que chegam por e-mail. */
   async storeFromBuffer(buffer: Buffer, { filename }: { filename: string }): Promise<StoredFile> {
     const file = { filename: sanitizeFilename(filename), buffer };

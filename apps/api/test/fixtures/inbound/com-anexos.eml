@@ -1,0 +1,38 @@
+From: novo@missaosalesiana.org.br
+To: suporte@missaosalesiana.org.br
+Subject: Planilha e print do erro
+Date: Sat, 24 Oct 2026 11:00:00 -0400
+Message-ID: <anexos005@mail.gmail.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mix"
+
+--mix
+Content-Type: multipart/related; boundary="rel"
+
+--rel
+Content-Type: text/html; charset="UTF-8"
+
+<div>Segue o print: <img src="cid:print@inline"></div>
+
+--rel
+Content-Type: image/png
+Content-ID: <print@inline>
+Content-Disposition: inline
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgp0ZXN0ZQ==
+--rel--
+
+--mix
+Content-Type: application/pdf; name="relatório.pdf"
+Content-Disposition: attachment; filename*=UTF-8''relat%C3%B3rio.pdf
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQgdGVzdGU=
+--mix
+Content-Type: application/octet-stream; name="programa.exe"
+Content-Disposition: attachment; filename="programa.exe"
+Content-Transfer-Encoding: base64
+
+TVogdGVzdGU=
+--mix--
