@@ -46,8 +46,13 @@ ok "Secrets zitadel-masterkey, zitadel-login-cookie e zitadel-config aplicados"
 info "Helm"
 hlm repo add zitadel https://charts.zitadel.com >/dev/null 2>&1 || true
 hlm repo update zitadel >/dev/null
-hlm upgrade --install zitadel zitadel/zitadel --version "$ZITADEL_CHART_VERSION" -n zitadel \
-  -f "$ROOT/deploy/zitadel/values.yaml" --wait --timeout 15m
+if ! hlm upgrade --install zitadel zitadel/zitadel --version "$ZITADEL_CHART_VERSION" -n zitadel \
+  -f "$ROOT/deploy/zitadel/values.yaml" --wait --timeout 40m; then
+  warn "Helm falhou. Situação dos jobs e últimas linhas do setup:"
+  kctl -n zitadel get jobs,pods || true
+  kctl -n zitadel logs job/zitadel-setup -c zitadel-setup --tail=40 2>/dev/null || true
+  die "Zitadel não instalado (detalhes acima)."
+fi
 ok "Zitadel instalado"
 
 info "Certificado (Let's Encrypt)"

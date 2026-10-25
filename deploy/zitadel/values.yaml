@@ -73,6 +73,11 @@ zitadel:
 initJob:
   command: zitadel
 
+# O 1º setup com --init-projections passa de 5 min (padrão do chart) no DBaaS de 1 vCPU: o job era
+# encerrado por DeadlineExceeded. O setup é idempotente e retoma do passo em que parou.
+setupJob:
+  activeDeadlineSeconds: 1800
+
 ingress:
   enabled: true
   className: traefik
