@@ -63,7 +63,9 @@ O portal passa a aceitar **qualquer conta Google** (tela de consentimento **Exte
 - **RN-19** — **Lixeira:** pedido `pending` sem decisão há mais de `ACCESS_REQUEST_TRASH_DAYS` (30) dias desde `access_requested_at` vai para `trashed` (soft-delete: grava `trashed_at`, **nada é apagado**), por um cron diário. Sai da fila e aparece na aba **Lixeira** da tela de liberação. Só `pending` vai para a lixeira; `rejected` fica como está.
 - **RN-19a** — **Recuperar:** o admin restaura um item da lixeira para `pending` (volta para a fila com novo `access_requested_at`) ou o aprova direto (RN-11). Se a própria pessoa entrar de novo enquanto está na lixeira, o pedido volta para `pending` sozinho e os admins são avisados (RN-16), porque a demora foi do suporte.
 - **RN-19b** — Quem tem ticket ou já foi `approved` alguma vez nunca vai para a lixeira.
-- **RN-20** — O `04-lgpd.md` ganha a finalidade "pedido de acesso ao portal", a regra da lixeira e o prazo de exclusão definitiva da lixeira (⚠️ §12).
+- **RN-19c** — **A lixeira não tem prazo:** nada sai dela sozinho. A exclusão definitiva (hard delete) é sempre manual, só pelo papel `admin`: **excluir um item** ou **esvaziar a lixeira** (todos os itens de uma vez), ambos com confirmação na tela. A exclusão apaga o usuário local; a conta no Zitadel continua, e se a pessoa entrar de novo vira um pedido novo (`pending`).
+- **RN-19d** — A exclusão definitiva **pula** quem, entretanto, ganhou ticket pelo canal de e-mail (o ticket referencia o solicitante): o item volta para `pending` e a resposta informa quantos foram pulados. Cada exclusão vai para o log com o id do usuário e de quem excluiu.
+- **RN-20** — O `04-lgpd.md` ganha a finalidade "pedido de acesso ao portal" e a regra da lixeira: sem prazo automático, com exclusão definitiva manual (RN-19c), que também atende o pedido de exclusão do titular.
 
 ### Cadastro sem conta Google
 
@@ -71,7 +73,8 @@ O portal passa a aceitar **qualquer conta Google** (tela de consentimento **Exte
 - **RN-22** — O e-mail precisa estar **verificado** no Zitadel. O app recusa com `EMAIL_NOT_VERIFIED` (403) **qualquer** login com `email_verified = false`, não só o vínculo pelo e-mail como hoje.
 - **RN-23** — Depois de verificado, o fluxo é o mesmo do Google: 1º acesso → `pending` → fila (RN-05 a RN-19). O app não diferencia as duas origens além do indicador da RN-10 (lido do IdP do usuário no `userinfo`, ⚠️ confirmar o claim).
 - **RN-24** — **Ordem de ativação no Zitadel:** o registro só é ligado ("Registro de usuários permitido") **depois** que a T22 estiver em produção e o SMTP do Zitadel estiver configurado (P13). Antes disso, ligar o registro permitiria criar contas sem verificação útil e sem fila.
-- **RN-25** — E-mail de domínio institucional (`INTERNAL_EMAIL_DOMAINS`) no cadastro próprio: ⚠️ §12. Sugestão: o app recusa com `USE_GOOGLE_LOGIN` (403) e a mensagem "Use o botão Google com sua conta institucional", para não haver duas contas para a mesma pessoa.
+- **RN-25** — **E-mail institucional usa o Google.** Cadastro próprio com e-mail de `INTERNAL_EMAIL_DOMAINS` não é aceito: a pessoa é orientada a usar o botão Google. Onde barrar fica para o plano da sessão, conforme o que o Zitadel v4.19.5 permitir (⚠️ verificar, nesta ordem): (a) no próprio Zitadel, com o domínio `missaosalesiana.org.br` verificado na organização e o login desse domínio direcionado ao Google; (b) no app, recusando com `USE_GOOGLE_LOGIN` (403) o token desse domínio cujo login não veio do Google (claim `amr` ou IdP do usuário no `userinfo`).
+- **RN-26** — **Vínculo de conta já cadastrada.** Se a pessoa já tem conta própria no Zitadel (criada antes da RN-25, ou à mão pelo admin) e entra pelo Google com o **mesmo e-mail verificado**, o Zitadel **vincula** o Google à conta existente em vez de criar outra: opção **"Vinculação automática: e-mail"** no IdP Google (ligar junto com a T22; hoje está desligada). Assim o `sub` não muda e o app continua vendo o mesmo usuário, com o mesmo `access_status` e os mesmos tickets. ⚠️ Confirmar no Zitadel local, antes da sessão, se o v4.19.5 com Login V2 vincula direto ou pede confirmação ao usuário. Os dois servem.
 
 ## 5. Contrato da API
 
@@ -84,6 +87,8 @@ O portal passa a aceitar **qualquer conta Google** (tela de consentimento **Exte
 | `POST /users/:id/access/reject`             | `admin`, `supervisor`         | `{ note? }` (até 500 caracteres, só interno) | 200; 404; 409 se já `rejected`                                             |
 | `GET /users/access-requests?status=trashed` | `admin`, `supervisor`         | paginação                                    | lixeira (RN-19)                                                            |
 | `POST /users/:id/access/restore`            | `admin`, `supervisor`         | —                                            | 200 volta a `pending`; 409 se não está na lixeira                          |
+| `DELETE /users/:id/access/trash`            | `admin`                       | —                                            | 204; 404 se não está na lixeira; 409 se ganhou ticket (RN-19d)             |
+| `DELETE /users/access-requests/trash`       | `admin`                       | — (esvaziar lixeira)                         | 200 `{ deleted, skipped }` (RN-19c, RN-19d)                                |
 | Demais rotas autenticadas                   | conforme hoje                 | —                                            | 403 `ACCESS_PENDING` / `ACCESS_REJECTED` (RN-06)                           |
 
 Códigos novos em `ApiErrorCode`: `ACCESS_PENDING`, `ACCESS_REJECTED`, `USE_GOOGLE_LOGIN` (se a RN-25 for aprovada). Removido: `EXTERNAL_USER_CANNOT_LOGIN` (RN-09). Schemas zod em `packages/shared`.
@@ -109,35 +114,39 @@ Zitadel: depois da T22 em produção, configurar o SMTP do Zitadel (P13) e ligar
 - Usuário recusado manda e-mail: vira ticket normalmente (canal de e-mail aberto). O agente vê o ticket e pode pedir ao admin para rever (RN-13).
 - Agente recebe a role no Zitadel antes de ser aprovado: RN-04 aprova sozinho no próximo request.
 - Pessoa sem conta Google: usa "Solicitar cadastro" (RN-21). Se não receber o código de verificação, o Zitadel permite reenviar; sem SMTP do Zitadel, o cadastro não funciona (RN-24).
-- Pessoa se cadastra com senha e depois tenta entrar pelo Google com o mesmo e-mail: o Zitadel trata como outra conta; o app recusa a segunda com `WRONG_ORGANIZATION` (regra atual de e-mail já vinculado). O runbook (T20) explica como unir as contas no Zitadel.
+- Pessoa se cadastra com senha e depois entra pelo Google com o mesmo e-mail: o Zitadel vincula as contas (RN-26). Se a vinculação automática estiver desligada, o Zitadel cria outra conta e o app recusa a segunda com `WRONG_ORGANIZATION` (regra atual de e-mail já vinculado); o runbook (T20) explica como unir as contas no Zitadel.
 - Unidade sugerida errada: o admin corrige no ato de aprovar (RN-11).
 
 ## 9. Casos de teste
 
-| CT    | Dado                                                              | Quando                                              | Então                                                                                      | Cobre         |
-| ----- | ----------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------- |
-| CT-01 | Usuários existentes antes da migração                             | Migração aplicada                                   | Todos `approved`                                                                           | RN-02         |
-| CT-02 | Token válido de `sub` novo, sem role                              | 1º request                                          | Usuário criado `pending`                                                                   | RN-03         |
-| CT-03 | Usuário `pending`                                                 | `GET /tickets`, `POST /tickets`, `GET /tickets/:id` | 403 `ACCESS_PENDING`                                                                       | RN-06         |
-| CT-04 | Usuário `pending`                                                 | `GET /me`, `PATCH /me`, `GET /companies`            | 200                                                                                        | RN-06         |
-| CT-05 | Usuário `rejected`                                                | `PATCH /me` e `GET /tickets`                        | 403 `ACCESS_REJECTED`; `GET /me` 200 com `accessStatus = rejected`                         | RN-06, RN-08  |
-| CT-06 | Usuário `pending` com role `agente` no token                      | Qualquer request                                    | Passa e fica `approved`, com log de aprovação automática                                   | RN-04         |
-| CT-07 | Usuário criado pelo e-mail com `is_external = true`               | 1º login com o mesmo e-mail verificado              | Vinculado, `pending`, sem `EXTERNAL_USER_CANNOT_LOGIN`                                     | RN-09         |
-| CT-08 | Três `pending` em datas diferentes                                | Admin `GET /users/access-requests`                  | Ordem do mais antigo, com unidade e departamento sugeridos                                 | RN-10         |
-| CT-09 | Usuário `pending`                                                 | Admin aprova com outra unidade                      | `approved`, unidade trocada, decisor e data gravados; próxima request do usuário passa     | RN-11, RN-15  |
-| CT-10 | Usuário `pending`                                                 | Admin aprova sem departamento                       | 422; continua `pending`                                                                    | RN-11         |
-| CT-11 | Usuário `pending`                                                 | Admin recusa com nota                               | `rejected`; `GET /me` do usuário não expõe a nota                                          | RN-12         |
-| CT-12 | Usuário `approved`                                                | Admin aprova de novo                                | 409                                                                                        | §5            |
-| CT-13 | Solicitante e agente                                              | Rotas de liberação                                  | 403 `FORBIDDEN_ROLE` (matriz de permissões)                                                | §5            |
-| CT-14 | Usuário completa o 1º acesso                                      | `PATCH /me`                                         | Um e-mail para cada admin ativo na outbox; segundo `PATCH /me` não gera outro              | RN-16         |
-| CT-15 | Admin aprova                                                      | —                                                   | E-mail de liberação na outbox, sem `[#n]` e sem `email_message_refs`; recusa não gera      | RN-17, RN-18  |
-| CT-16 | `pending` há 31 dias sem ticket; outro há 29; um `rejected` há 40 | Cron da lixeira                                     | O primeiro vai para `trashed` com `trashed_at`; os outros não mudam; nenhuma linha apagada | RN-19, RN-19b |
-| CT-18 | Usuário na lixeira                                                | Admin restaura                                      | `pending`, volta à fila com novo `access_requested_at`                                     | RN-19a        |
-| CT-19 | Usuário na lixeira                                                | Ele mesmo faz login                                 | Volta a `pending`; e-mail aos admins e supervisores na outbox                              | RN-19a, RN-16 |
-| CT-20 | Supervisor                                                        | Aprova um `pending`                                 | 200 `approved`                                                                             | RN-10         |
-| CT-21 | Token com `email_verified = false`, `sub` novo                    | 1º request                                          | 403 `EMAIL_NOT_VERIFIED`; nenhum usuário criado                                            | RN-22         |
-| CT-22 | Cadastro próprio com e-mail verificado                            | 1º request e `PATCH /me`                            | `pending`, entra na fila com o indicador "conta própria"                                   | RN-23, RN-10  |
-| CT-17 | E-mail de remetente desconhecido                                  | Processado pela T21                                 | Ticket criado como hoje; usuário `pending`                                                 | RN-03         |
+| CT    | Dado                                                                                  | Quando                                              | Então                                                                                      | Cobre          |
+| ----- | ------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------ | -------------- |
+| CT-01 | Usuários existentes antes da migração                                                 | Migração aplicada                                   | Todos `approved`                                                                           | RN-02          |
+| CT-02 | Token válido de `sub` novo, sem role                                                  | 1º request                                          | Usuário criado `pending`                                                                   | RN-03          |
+| CT-03 | Usuário `pending`                                                                     | `GET /tickets`, `POST /tickets`, `GET /tickets/:id` | 403 `ACCESS_PENDING`                                                                       | RN-06          |
+| CT-04 | Usuário `pending`                                                                     | `GET /me`, `PATCH /me`, `GET /companies`            | 200                                                                                        | RN-06          |
+| CT-05 | Usuário `rejected`                                                                    | `PATCH /me` e `GET /tickets`                        | 403 `ACCESS_REJECTED`; `GET /me` 200 com `accessStatus = rejected`                         | RN-06, RN-08   |
+| CT-06 | Usuário `pending` com role `agente` no token                                          | Qualquer request                                    | Passa e fica `approved`, com log de aprovação automática                                   | RN-04          |
+| CT-07 | Usuário criado pelo e-mail com `is_external = true`                                   | 1º login com o mesmo e-mail verificado              | Vinculado, `pending`, sem `EXTERNAL_USER_CANNOT_LOGIN`                                     | RN-09          |
+| CT-08 | Três `pending` em datas diferentes                                                    | Admin `GET /users/access-requests`                  | Ordem do mais antigo, com unidade e departamento sugeridos                                 | RN-10          |
+| CT-09 | Usuário `pending`                                                                     | Admin aprova com outra unidade                      | `approved`, unidade trocada, decisor e data gravados; próxima request do usuário passa     | RN-11, RN-15   |
+| CT-10 | Usuário `pending`                                                                     | Admin aprova sem departamento                       | 422; continua `pending`                                                                    | RN-11          |
+| CT-11 | Usuário `pending`                                                                     | Admin recusa com nota                               | `rejected`; `GET /me` do usuário não expõe a nota                                          | RN-12          |
+| CT-12 | Usuário `approved`                                                                    | Admin aprova de novo                                | 409                                                                                        | §5             |
+| CT-13 | Solicitante e agente                                                                  | Rotas de liberação                                  | 403 `FORBIDDEN_ROLE` (matriz de permissões)                                                | §5             |
+| CT-14 | Usuário completa o 1º acesso                                                          | `PATCH /me`                                         | Um e-mail para cada admin ativo na outbox; segundo `PATCH /me` não gera outro              | RN-16          |
+| CT-15 | Admin aprova                                                                          | —                                                   | E-mail de liberação na outbox, sem `[#n]` e sem `email_message_refs`; recusa não gera      | RN-17, RN-18   |
+| CT-16 | `pending` há 31 dias sem ticket; outro há 29; um `rejected` há 40                     | Cron da lixeira                                     | O primeiro vai para `trashed` com `trashed_at`; os outros não mudam; nenhuma linha apagada | RN-19, RN-19b  |
+| CT-18 | Usuário na lixeira                                                                    | Admin restaura                                      | `pending`, volta à fila com novo `access_requested_at`                                     | RN-19a         |
+| CT-19 | Usuário na lixeira                                                                    | Ele mesmo faz login                                 | Volta a `pending`; e-mail aos admins e supervisores na outbox                              | RN-19a, RN-16  |
+| CT-20 | Supervisor                                                                            | Aprova um `pending`                                 | 200 `approved`                                                                             | RN-10          |
+| CT-21 | Token com `email_verified = false`, `sub` novo                                        | 1º request                                          | 403 `EMAIL_NOT_VERIFIED`; nenhum usuário criado                                            | RN-22          |
+| CT-22 | Cadastro próprio com e-mail verificado                                                | 1º request e `PATCH /me`                            | `pending`, entra na fila com o indicador "conta própria"                                   | RN-23, RN-10   |
+| CT-23 | Três usuários na lixeira, um deles com ticket criado por e-mail depois                | Admin esvazia a lixeira                             | `{ deleted: 2, skipped: 1 }`; o com ticket volta a `pending`; os outros somem do banco     | RN-19c, RN-19d |
+| CT-24 | Supervisor                                                                            | Exclui item ou esvazia a lixeira                    | 403 `FORBIDDEN_ROLE`                                                                       | RN-19c         |
+| CT-25 | Usuário na lixeira há 400 dias                                                        | Cron diário                                         | Continua na lixeira                                                                        | RN-19c         |
+| CT-26 | Token de e-mail institucional cujo login não veio do Google (se a RN-25 ficar no app) | 1º request                                          | 403 `USE_GOOGLE_LOGIN`; nenhum usuário criado                                              | RN-25          |
+| CT-17 | E-mail de remetente desconhecido                                                      | Processado pela T21                                 | Ticket criado como hoje; usuário `pending`                                                 | RN-03          |
 
 Front (Vitest + Testing Library): redireciona `pending` para "Aguardando liberação" e `rejected` para "Acesso não liberado"; fila do admin aprova e recusa; badge com a contagem.
 
@@ -149,15 +158,14 @@ Front (Vitest + Testing Library): redireciona `pending` para "Aguardando libera�
 
 - `CLAUDE.md`: a regra "usuários com `is_external = true` nunca fazem login" passa a "terceiros entram no portal só depois de liberados"; acrescentar a liberação nas regras de segurança.
 - `01-escopo.md`: fluxos 2 e a linha de terceiros; matriz de permissões com o papel "pendente".
-- `04-lgpd.md`: RN-19 e RN-20.
+- `04-lgpd.md`: RN-19, RN-19c e RN-20.
 - `ambientes.md`: P12 resolvida quando a T22 estiver em produção.
 
 ## 12. Perguntas em aberto
 
-Respondidas em 25/10/2026: `supervisor` também libera (RN-10); quem não tem Google faz cadastro próprio no Zitadel com os mesmos dados (RN-21 a RN-25); pedido sem resposta em 30 dias vai para a lixeira, recuperável (RN-19).
+Respondidas em 25/10/2026: `supervisor` também libera (RN-10); quem não tem Google faz cadastro próprio no Zitadel com os mesmos dados (RN-21 a RN-24); pedido sem resposta em 30 dias vai para a lixeira, recuperável (RN-19); a lixeira não tem prazo, com exclusão definitiva manual e "esvaziar lixeira" (RN-19c); e-mail institucional usa o Google, com vínculo da conta já cadastrada (RN-25, RN-26).
 
-1. ⚠️ A lixeira tem exclusão definitiva depois de algum prazo (ex.: 1 ano), ou guarda para sempre? A LGPD pede um prazo.
-2. ⚠️ RN-25: bloquear cadastro próprio com e-mail institucional, obrigando o botão Google?
+Pendentes de verificação técnica (não de decisão), antes da sessão: onde barrar a RN-25 e o comportamento da vinculação automática da RN-26 no Zitadel v4.19.5.
 
 ## 13. Prompt sugerido para a sessão
 
