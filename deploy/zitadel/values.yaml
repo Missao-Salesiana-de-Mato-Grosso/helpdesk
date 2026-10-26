@@ -1,0 +1,130 @@
+# Zitadel de produção (auth.msmt.org.br), chart oficial zitadel/zitadel 10.4.0, imagem fixada em v4.19.5.
+# Sem segredos: senha do banco, masterkey, senha do admin e cookie do login vêm de Secrets criados por
+# deploy/prod/zitadel.sh a partir de ../msmt-infra-automation/secrets/. Não alterar versão, tokens ou
+# roles sem pedido explícito (CLAUDE.md).
+image:
+  tag: v4.19.5
+
+replicaCount: 1
+
+zitadel:
+  masterkeySecretName: zitadel-masterkey
+  configmapConfig:
+    ExternalDomain: auth.msmt.org.br
+    ExternalPort: 443
+    ExternalSecure: true
+    TLS:
+      Enabled: false
+    Database:
+      Postgres:
+        # Host vem do Secret (DSN não é usado). Banco e usuário criados pelo `make database` do infra.
+        Port: 5432
+        Database: zitadel
+        MaxOpenConns: 10
+        MaxIdleConns: 5
+        User:
+          Username: zitadel
+          SSL:
+            Mode: prefer
+    # Login V2 (contêiner zitadel-login) obrigatório, como no ambiente local.
+    DefaultInstance:
+      Features:
+        LoginV2:
+          Required: true
+          BaseURI: https://auth.msmt.org.br/ui/v2/login/
+    OIDC:
+      DefaultLoginURLV2: https://auth.msmt.org.br/ui/v2/login/login?authRequest=
+      DefaultLogoutURLV2: https://auth.msmt.org.br/ui/v2/login/logout?post_logout_redirect=
+    SAML:
+      DefaultLoginURLV2: https://auth.msmt.org.br/ui/v2/login/login?samlRequest=
+    FirstInstance:
+      Org:
+        Name: Missão Salesiana de Mato Grosso
+        # Admin humano de emergência (o login do dia a dia é pelo Google). Senha no Secret.
+        Human:
+          UserName: zitadel-admin
+          FirstName: Admin
+          LastName: Zitadel
+          Email:
+            # Endereço fora do Workspace: não colide com a conta Google de ninguém ao ativar o IdP.
+            Address: zitadel-admin@msmt.org.br
+            Verified: true
+          PasswordChangeRequired: false
+        # Service user com PAT para o bootstrap (projeto, roles, app). O chart grava o PAT no Secret
+        # `iam-admin-pat` do namespace zitadel.
+        Machine:
+          Machine:
+            Username: iam-admin
+            Name: Bootstrap admin (deploy/prod)
+          MachineKey:
+            ExpirationDate: '2029-01-01T00:00:00Z'
+            Type: 1
+          Pat:
+            ExpirationDate: '2029-01-01T00:00:00Z'
+    LogStore:
+      Access:
+        Stdout:
+          Enabled: false
+  # Secret com Database.Postgres.Host/User.Password e FirstInstance.Org.Human.Password (zitadel.sh).
+  configSecretName: zitadel-config
+  configSecretKey: config-yaml
+
+# Banco e usuário já existem (criados pelo infra com o admin do DBaaS): o init só cria as tabelas.
+initJob:
+  command: zitadel
+
+# Folga para o 1º setup (--init-projections) no DBaaS de 1 vCPU. O setup é idempotente.
+setupJob:
+  activeDeadlineSeconds: 1800
+
+# O chart usa alpine/k8s com a versão do cluster (1.34.2), que NÃO existe no Docker Hub: o setup ficava
+# em ImagePullBackOff até estourar o prazo. Fixar uma tag existente da mesma minor.
+tools:
+  kubectl:
+    image:
+      tag: '1.34.12'
+
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: auth.msmt.org.br
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - hosts: [auth.msmt.org.br]
+      secretName: zitadel-tls
+
+login:
+  enabled: true
+  image:
+    tag: v4.19.5
+  sessionCookieSecretName: zitadel-login-cookie
+  ingress:
+    enabled: true
+    className: traefik
+    # Sem anotação do cert-manager: usa o mesmo certificado (zitadel-tls) emitido pelo Ingress principal.
+    hosts:
+      - host: auth.msmt.org.br
+        paths:
+          - path: /ui/v2/login
+            pathType: Prefix
+    tls:
+      - hosts: [auth.msmt.org.br]
+        secretName: zitadel-tls
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 384Mi
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 768Mi

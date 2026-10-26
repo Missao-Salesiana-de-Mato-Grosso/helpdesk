@@ -1,0 +1,31 @@
+{
+  "name": "helpdesk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Help desk interno da Missão Salesiana de Mato Grosso",
+  "packageManager": "pnpm@11.8.0",
+  "engines": {
+    "node": "^24.0.0",
+    "pnpm": ">=11"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --stream dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm --filter @helpdesk/shared build && pnpm -r typecheck",
+    "lint": "oxlint --type-aware",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "infra:up": "docker compose up -d --wait",
+    "infra:bootstrap": "node deploy/local/zitadel-bootstrap.mjs",
+    "infra:down": "docker compose down",
+    "infra:reset": "docker compose down -v",
+    "infra:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "oxlint": "^1.81.0",
+    "oxlint-tsgolint": "^7.0.2001",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.2"
+  }
+}

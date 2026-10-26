@@ -1,0 +1,43 @@
+{
+  "name": "@helpdesk/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@helpdesk/shared": "workspace:*",
+    "@mantine/core": "^9.7.3",
+    "@mantine/hooks": "^9.7.3",
+    "@mantine/tiptap": "^9.7.3",
+    "@tanstack/react-query": "^5.104.5",
+    "@tiptap/extension-link": "^3.32.0",
+    "@tiptap/pm": "^3.32.0",
+    "@tiptap/react": "^3.32.0",
+    "@tiptap/starter-kit": "^3.32.0",
+    "oidc-client-ts": "^3.5.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-oidc-context": "^3.3.1",
+    "react-router": "^8.5.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.0",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.8",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.2",
+    "jsdom": "^27.0.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^4.1.12"
+  }
+}
