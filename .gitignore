@@ -14,7 +14,6 @@ apps/api/src/generated/
 # env and secrets
 .env
 .env.*
-*.env
 !.env.example
 
 # local data

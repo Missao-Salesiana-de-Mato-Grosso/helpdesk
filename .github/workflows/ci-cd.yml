@@ -1,0 +1,110 @@
+name: CI/CD
+
+# Testa em toda PR/push; implanta em produção (Magalu Cloud) só em push na main.
+# Segredos necessários (Settings → Secrets and variables → Actions) — ver docs/ci-cd.md:
+#   MGC_API_KEY, KUBECONFIG_PROD, DB_HOST, DB_HELPDESK_PASSWORD, S3_ACCESS_KEY, S3_SECRET_KEY,
+#   SMTP_USER, SMTP_PASSWORD (opcional), MAILBOX_USER, MAILBOX_PASSWORD, MAILBOX_START_SINCE (opcional)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.10-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: helpdesk
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/helpdesk?schema=public
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.8.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm typecheck
+      - run: pnpm --filter @helpdesk/api exec prisma migrate deploy
+      - run: pnpm test
+      - run: pnpm build
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar mgc CLI
+        run: |
+          sudo gpg --yes --keyserver keyserver.ubuntu.com --recv-keys 0C59E21A5CB00594
+          sudo gpg --export --armor 0C59E21A5CB00594 | sudo gpg --dearmor -o /etc/apt/keyrings/magalu-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/magalu-archive-keyring.gpg] https://packages.magalu.cloud/apt stable main" |
+            sudo tee /etc/apt/sources.list.d/magalu.list
+          sudo apt-get update
+          sudo apt-get install -y mgccli
+
+      - name: Instalar kubectl
+        uses: azure/setup-kubectl@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Montar secrets/ do infra (efêmero, nunca commitado)
+        env:
+          KUBECONFIG_PROD: ${{ secrets.KUBECONFIG_PROD }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_HELPDESK_PASSWORD: ${{ secrets.DB_HELPDESK_PASSWORD }}
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          MAILBOX_USER: ${{ secrets.MAILBOX_USER }}
+          MAILBOX_PASSWORD: ${{ secrets.MAILBOX_PASSWORD }}
+          MAILBOX_START_SINCE: ${{ secrets.MAILBOX_START_SINCE }}
+        run: |
+          infra_dir="$RUNNER_TEMP/msmt-infra-automation"
+          mkdir -p "$infra_dir/secrets"
+          chmod 700 "$infra_dir/secrets"
+          printf '%s' "$KUBECONFIG_PROD" > "$infra_dir/secrets/kubeconfig-k8s-msmt-prd.yaml"
+          printf 'DB_HOST=%s\nDB_HELPDESK_PASSWORD=%s\n' "$DB_HOST" "$DB_HELPDESK_PASSWORD" > "$infra_dir/secrets/database.env"
+          printf 'S3_ACCESS_KEY=%s\nS3_SECRET_KEY=%s\n' "$S3_ACCESS_KEY" "$S3_SECRET_KEY" > "$infra_dir/secrets/object-storage.env"
+          {
+            [[ -n "$SMTP_USER" ]] && printf 'SMTP_USER=%s\nSMTP_PASSWORD=%s\n' "$SMTP_USER" "$SMTP_PASSWORD"
+            [[ -n "$MAILBOX_USER" ]] && printf 'MAILBOX_USER=%s\nMAILBOX_PASSWORD=%s\n' "$MAILBOX_USER" "$MAILBOX_PASSWORD"
+            [[ -n "$MAILBOX_START_SINCE" ]] && printf 'MAILBOX_START_SINCE=%s\n' "$MAILBOX_START_SINCE"
+          } > "$infra_dir/secrets/helpdesk-email.env"
+          chmod 600 "$infra_dir"/secrets/*
+          echo "INFRA_DIR=$infra_dir" >> "$GITHUB_ENV"
+
+      - name: Build, push e implanta (deploy/prod/app.sh)
+        env:
+          MGC_API_KEY: ${{ secrets.MGC_API_KEY }}
+          ASSUME_YES: '1'
+        run: ./deploy/prod/app.sh
