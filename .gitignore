@@ -16,9 +16,10 @@ apps/api/src/generated/
 .env.*
 !.env.example
 
-# local data
+# local data (anchored: apps/api/src/attachments/storage/ is source code)
 .inbox/
-storage/
+/storage/
+apps/api/storage/
 .local/
 *.log
 

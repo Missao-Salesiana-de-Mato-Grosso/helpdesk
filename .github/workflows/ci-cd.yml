@@ -31,6 +31,13 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
+      # Testes e2e marcados com 📬 (T14) entregam de verdade: SMTP :1025, API :8025 (igual ao docker-compose).
+      mailpit:
+        image: axllent/mailpit:v1.31.6
+        env:
+          MP_SMTP_AUTH_ACCEPT_ANY: '1'
+          MP_SMTP_AUTH_ALLOW_INSECURE: '1'
+        ports: ['1025:1025', '8025:8025']
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/helpdesk?schema=public
       # e2e (apps/api/test/setup): o padrão aponta para o Postgres local do docker (:5434).
