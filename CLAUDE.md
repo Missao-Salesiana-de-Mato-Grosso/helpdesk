@@ -35,6 +35,10 @@ pnpm --filter @helpdesk/api prisma:migrate -- --name <nome>   # nova migração 
 pnpm --filter @helpdesk/api prisma:seed                      # dados de referência (idempotente)
 ```
 
+## Fluxo de mudança (issue → PR → deploy)
+
+Repositório: `github.com/Missao-Salesiana-de-Mato-Grosso/helpdesk`. Toda mudança nasce de uma **issue**. Trabalhe numa branch (`<tipo>/<n>-<resumo>`, ex.: `feat/12-admin-usuarios`), nunca direto na `main`, e abra um **Pull Request** que cite a issue (`Closes #12`). O CI (`test`) precisa passar. O merge na `main` dispara o job `deploy`, que espera a aprovação de um revisor no ambiente `production`. Detalhes em `docs/ci-cd.md`.
+
 Antes de dar uma tarefa como concluída, **sempre** rode `pnpm typecheck`, `pnpm lint`, `pnpm test` e `pnpm format:check`.
 
 ## Convenções
@@ -92,6 +96,6 @@ Antes de dar uma tarefa como concluída, **sempre** rode `pnpm typecheck`, `pnpm
 - Não editar migrações já aplicadas. Crie uma nova.
 - Não desabilitar o guard, o ESLint ou testes para "fazer passar".
 - Não enviar e-mail diretamente de um service nem chamar o IMAP fora do módulo `inbound-email`.
-- Não executar `kubectl`, `helm` ou comandos contra produção. O deploy é feito pelo desenvolvedor via `make deploy`.
+- Não executar `kubectl`, `helm` ou comandos contra produção. O deploy da aplicação é feito pelo pipeline (`.github/workflows/ci-cd.yml`) ao fazer merge na `main`, com aprovação manual no ambiente `production`. `make deploy` fica como contingência do desenvolvedor.
 - Não alterar a versão do Zitadel, as configurações de token ou a estrutura de roles sem pedido explícito.
 - Não implementar itens marcados como Fase 2 ou Fora em `docs/discovery/01-escopo.md`, salvo se pedido.

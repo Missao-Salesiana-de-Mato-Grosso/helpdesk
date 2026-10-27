@@ -12,6 +12,21 @@ O job `deploy` usa o ambiente do GitHub `production` — configure regras de pro
 (Settings → Environments → production → "Required reviewers") se quiser um aprovador humano antes
 de cada deploy automático.
 
+## Fluxo de mudança
+
+1. **Issue** descrevendo a mudança (bug, tarefa do backlog, spec).
+2. **Branch** a partir da `main`: `<tipo>/<n>-<resumo>` (ex.: `feat/12-admin-usuarios`, `fix/15-login-externo`).
+3. **Pull Request** para a `main`, citando a issue (`Closes #12`). O template lista as verificações.
+4. O job **test** roda no PR e precisa passar.
+5. **Merge** na `main` → o job **deploy** fica aguardando aprovação no ambiente `production` → um revisor aprova → a imagem é publicada e implantada.
+
+`make deploy` (local) continua existindo como contingência, por exemplo se o GitHub Actions estiver fora.
+
+### Configuração no GitHub (uma vez, pelo dono do repositório)
+
+- Settings → Environments → **production** → **Required reviewers**: quem aprova os deploys.
+- Settings → Branches → regra para a `main`: **exigir Pull Request** antes do merge, **exigir o status check `test`** e bloquear push direto e force push.
+
 ## Segredos necessários (Settings → Secrets and variables → Actions)
 
 | Secret                                                      | Origem                                                                                                       | Observação                                                                                                                                                |
