@@ -31,7 +31,9 @@ export class S3StorageDriver implements StorageDriver {
   async get(key: string): Promise<Readable> {
     assertSafeKey(key);
     try {
-      const output = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+      const output = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
       if (!(output.Body instanceof Readable)) throw new StorageObjectNotFoundError(key);
       return output.Body;
     } catch (error) {

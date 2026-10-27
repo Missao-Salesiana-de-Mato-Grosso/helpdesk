@@ -1,4 +1,9 @@
-import { DeleteObjectCommand, GetObjectCommand, NoSuchKey, PutObjectCommand } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  NoSuchKey,
+  PutObjectCommand,
+} from '@aws-sdk/client-s3';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -39,7 +44,9 @@ describe('LocalStorageDriver', () => {
   it.each(['../fora', 'attachments/../../fora', '/etc/passwd', 'a/./b', 'a\\b', ''])(
     'recusa a chave %j (path traversal)',
     async (key) => {
-      await expect(driver.put(key, Buffer.from('x'), 'text/plain')).rejects.toThrow(/inválida|fora/);
+      await expect(driver.put(key, Buffer.from('x'), 'text/plain')).rejects.toThrow(
+        /inválida|fora/,
+      );
     },
   );
 });
