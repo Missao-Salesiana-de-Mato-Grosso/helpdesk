@@ -2,8 +2,8 @@
 
 Pipeline em `.github/workflows/ci-cd.yml` (GitHub Actions), com dois jobs:
 
-- **test** — em toda PR e push: lint, format check, typecheck, migração do Prisma contra um
-  Postgres de serviço, testes (`pnpm test`, inclui e2e) e build. Não toca em produção.
+- **test** — em toda PR e push: build, lint, format check, typecheck e testes (`pnpm test`, inclui
+  e2e contra o Postgres de serviço, no banco `helpdesk_test`). Não toca em produção.
 - **deploy** — só em push na `main`, depois do `test` passar: faz o que `make deploy`
   (`deploy/prod/app.sh`) faz localmente, mas de forma não interativa (`ASSUME_YES=1`), publicando
   a imagem em `cr-msmt-prd` e implantando em `k8s-msmt-prd` (https://suporte.msmt.org.br).
@@ -14,15 +14,15 @@ de cada deploy automático.
 
 ## Segredos necessários (Settings → Secrets and variables → Actions)
 
-| Secret | Origem | Observação |
-|---|---|---|
-| `MGC_API_KEY` | Console da Magalu Cloud → API Keys | Autentica o `mgc` CLI sem login interativo. Escopo mínimo: Container Registry (ler credenciais) e Kubernetes (ler cluster/kubeconfig) na região `br-se1`. |
-| `KUBECONFIG_PROD` | `../msmt-infra-automation/secrets/kubeconfig-k8s-msmt-prd.yaml` (gerado por `make cluster` no repo de infra) | Cole o conteúdo do arquivo inteiro. Se o cluster for recriado, atualize este secret. |
-| `DB_HOST` | `../msmt-infra-automation/secrets/database.env` → `DB_HOST` | |
-| `DB_HELPDESK_PASSWORD` | idem → `DB_HELPDESK_PASSWORD` | |
-| `S3_ACCESS_KEY` / `S3_SECRET_KEY` | `../msmt-infra-automation/secrets/object-storage.env` | |
-| `SMTP_USER` / `SMTP_PASSWORD` | `secrets/helpdesk-email.env` local | Opcional — vazio desliga notificações por e-mail. |
-| `MAILBOX_USER` / `MAILBOX_PASSWORD` / `MAILBOX_START_SINCE` | idem | Opcional — vazio desliga a leitura da caixa de entrada. |
+| Secret                                                      | Origem                                                                                                       | Observação                                                                                                                                                |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MGC_API_KEY`                                               | Console da Magalu Cloud → API Keys                                                                           | Autentica o `mgc` CLI sem login interativo. Escopo mínimo: Container Registry (ler credenciais) e Kubernetes (ler cluster/kubeconfig) na região `br-se1`. |
+| `KUBECONFIG_PROD`                                           | `../msmt-infra-automation/secrets/kubeconfig-k8s-msmt-prd.yaml` (gerado por `make cluster` no repo de infra) | Cole o conteúdo do arquivo inteiro. Se o cluster for recriado, atualize este secret.                                                                      |
+| `DB_HOST`                                                   | `../msmt-infra-automation/secrets/database.env` → `DB_HOST`                                                  |                                                                                                                                                           |
+| `DB_HELPDESK_PASSWORD`                                      | idem → `DB_HELPDESK_PASSWORD`                                                                                |                                                                                                                                                           |
+| `S3_ACCESS_KEY` / `S3_SECRET_KEY`                           | `../msmt-infra-automation/secrets/object-storage.env`                                                        |                                                                                                                                                           |
+| `SMTP_USER` / `SMTP_PASSWORD`                               | `secrets/helpdesk-email.env` local                                                                           | Opcional — vazio desliga notificações por e-mail.                                                                                                         |
+| `MAILBOX_USER` / `MAILBOX_PASSWORD` / `MAILBOX_START_SINCE` | idem                                                                                                         | Opcional — vazio desliga a leitura da caixa de entrada.                                                                                                   |
 
 Nenhum desses valores deve ser colado em chat, ticket ou log. O job monta os arquivos em
 `secrets/` dentro de um diretório temporário do runner (nunca commitado) só para a duração do job,
@@ -38,19 +38,9 @@ dinamicamente (evitando esse secret de longa duração), ajuste o passo "Montar 
 rodar `mgc kubernetes cluster get-id` + `mgc kubernetes cluster kubeconfig` como faz
 `../msmt-infra-automation/scripts/30-kubernetes.sh`.
 
-## Lacunas conhecidas (bloqueiam uma execução real hoje)
+## Situação em 27/10/2026
 
-No momento em que este pipeline foi criado, o repositório estava com conteúdo ausente por um
-problema anterior (não relacionado ao CI/CD — ver histórico do repositório). Até serem
-restaurados, o job `test` falha no install/build e o `deploy` não encontra o overlay de produção:
-
-- `apps/api/src/`, `apps/api/test/`, `apps/api/prisma/` (schema e migrations) e `apps/web/src/`
-  — código-fonte e testes da aplicação.
-- `deploy/k8s/overlays/prod/` (`kustomization.yaml`, `config.env`, `zitadel.env`) — overlay de
-  produção que `deploy/prod/app.sh` lê para os IDs do Zitadel e para montar os manifests finais.
-  Recriar com `make zitadel-bootstrap` depois que o Zitadel estiver implantado (`make zitadel`).
-- `deploy/local/postgres/init.sql` — usado só em dev local (`docker compose up`), não afeta o CI
-  (o job `test` cria o banco `helpdesk` direto no serviço Postgres).
-
-Assim que esses arquivos voltarem a existir no repositório, o pipeline deve funcionar sem
-alterações adicionais.
+O conteúdo que faltava (código, testes, migrações, overlay de produção) foi restaurado ao juntar o
+histórico completo do repositório local com o do GitHub. Ainda **não verificado** em execução real:
+se o `mgc` autenticado por `MGC_API_KEY` consegue `container-registry credentials get` (a
+credencial do registry é por usuário e por região; ver `docs/ambientes.md` §2.4).
