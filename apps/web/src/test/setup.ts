@@ -1,6 +1,9 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
+
+// O padrão de 1 s do findBy/waitFor estoura no runner do GitHub Actions (mais lento que a máquina local).
+configure({ asyncUtilTimeout: 5000 });
 
 // Sem `globals: true`, o Testing Library não desmonta sozinho entre os testes.
 afterEach(() => {
