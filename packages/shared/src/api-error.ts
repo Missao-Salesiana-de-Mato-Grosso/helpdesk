@@ -7,6 +7,7 @@ export const ApiErrorCode = {
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   NOT_FOUND: 'NOT_FOUND',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
+  RATE_LIMITED: 'RATE_LIMITED',
 
   // autenticação e autorização (spec T04–T05)
   AUTH_MISSING: 'AUTH_MISSING',

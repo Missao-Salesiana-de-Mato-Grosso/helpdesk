@@ -18,6 +18,9 @@ export const envSchema = z
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     PORT: z.coerce.number().int().positive().default(3000),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+    // Limite de requisições por IP (T18). Escolas atrás de um NAT dividem o IP: o padrão é folgado.
+    THROTTLE_TTL_SECONDS: z.coerce.number().int().positive().default(60),
+    THROTTLE_LIMIT: z.coerce.number().int().positive().default(600),
     DATABASE_URL: z
       .string()
       .startsWith('postgresql://', 'DATABASE_URL precisa começar com postgresql://'),

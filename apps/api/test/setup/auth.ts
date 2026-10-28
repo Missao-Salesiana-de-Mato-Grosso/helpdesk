@@ -11,6 +11,7 @@ import {
   type JWTPayload,
   type JWTVerifyGetKey,
 } from 'jose';
+import { Logger } from 'nestjs-pino';
 import type { App } from 'supertest/types.js';
 import type { Mock } from 'vitest';
 import { AppModule } from '../../src/app.module.js';
@@ -21,6 +22,7 @@ import {
 } from '../../src/auth/auth.tokens.js';
 import { TokenVerifierService } from '../../src/auth/token-verifier.service.js';
 import { UserCache } from '../../src/auth/user-cache.js';
+import { applySecurityHeaders } from '../../src/common/security.js';
 import type { Env } from '../../src/config/env.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
 
@@ -139,7 +141,10 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
 
   const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication<INestApplication<App>>();
+  // Como no main.ts: logger pino e headers de segurança (T18).
+  app.useLogger(app.get(Logger));
   app.setGlobalPrefix('api');
+  applySecurityHeaders(app, { zitadelIssuer: TEST_ISSUER, production: false });
   await app.init();
 
   return {
