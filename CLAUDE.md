@@ -2,6 +2,7 @@
 
 Help desk interno da Missão Salesiana de Mato Grosso, que substitui o Freshdesk. Atende cerca de 20 agentes e 500 tickets/mês. A autenticação é feita pelo Zitadel self-hosted, federado com o Google (qualquer conta Google, ADR-011; antes era só `@missaosalesiana.org.br`). **O canal principal é o e-mail:** mensagens para `suporte@missaosalesiana.org.br` viram tickets e as respostas por e-mail caem no mesmo ticket. O portal é o canal secundário. **Acesso ao portal é liberado pelo admin ou supervisor** (T22, `docs/specs/T22-onboarding-liberacao.md`): todo usuário novo fica `pending` até alguém aprovar.
 Discovery, escopo e decisões: `docs/discovery/` (leia `README.md` e `adr/README.md` antes de mudanças estruturais).
+Operação de produção (deploy, rollback, agentes, desligamento, virada do e-mail): `docs/runbook.md`.
 Montagem dos ambientes: `docs/ambientes.md`. **Todo passo executado para montar ou alterar o ambiente local ou o de produção (Magalu) é registrado lá na mesma sessão**, com as armadilhas encontradas.
 
 ## Stack
