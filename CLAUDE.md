@@ -1,6 +1,6 @@
 # Help Desk MSMT
 
-Help desk interno da Missão Salesiana de Mato Grosso, que substitui o Freshdesk. Atende cerca de 20 agentes e 500 tickets/mês. A autenticação é feita pelo Zitadel self-hosted, federado com o Google Workspace (contas `@missaosalesiana.org.br`). **O canal principal é o e-mail:** mensagens para `suporte@missaosalesiana.org.br` viram tickets e as respostas por e-mail caem no mesmo ticket. O portal é o canal secundário.
+Help desk interno da Missão Salesiana de Mato Grosso, que substitui o Freshdesk. Atende cerca de 20 agentes e 500 tickets/mês. A autenticação é feita pelo Zitadel self-hosted, federado com o Google (qualquer conta Google, ADR-011; antes era só `@missaosalesiana.org.br`). **O canal principal é o e-mail:** mensagens para `suporte@missaosalesiana.org.br` viram tickets e as respostas por e-mail caem no mesmo ticket. O portal é o canal secundário. **Acesso ao portal é liberado pelo admin ou supervisor** (T22, `docs/specs/T22-onboarding-liberacao.md`): todo usuário novo fica `pending` até alguém aprovar.
 Discovery, escopo e decisões: `docs/discovery/` (leia `README.md` e `adr/README.md` antes de mudanças estruturais).
 Montagem dos ambientes: `docs/ambientes.md`. **Todo passo executado para montar ou alterar o ambiente local ou o de produção (Magalu) é registrado lá na mesma sessão**, com as armadilhas encontradas.
 
@@ -48,7 +48,7 @@ Antes de dar uma tarefa como concluída, **sempre** rode `pnpm typecheck`, `pnpm
 - DTOs e validação: schemas **zod** em `packages/shared`, reutilizados no front e no back (pipe de validação zod no Nest).
 - Um módulo Nest por domínio (`tickets`, `users`, `groups`, `categories`, `companies`, `departments`, `attachments`, `notifications`, `inbound-email`, `auth`, `health`).
 - `companies` são as unidades (escolas/obras; na UI, "Unidade") e `departments` os setores. `company_id` do ticket vem do solicitante e pode ser nulo quando o ticket chega por e-mail de alguém sem unidade; **resolver exige unidade**. Quem faz login precisa informar unidade e departamento antes de abrir ticket (tela de 1º acesso).
-- Usuários com `is_external = true` (terceiros) nunca fazem login e só interagem por e-mail. Usuários sem `zitadel_sub` criados pelo canal de e-mail são vinculados pelo e-mail no 1º login. Um módulo não acessa as tabelas de outro diretamente: usa o service exportado.
+- Usuários com `is_external = true` (terceiros) também podem logar (T22): entram na fila de liberação como qualquer pessoa, em vez de nunca acessar o portal. Usuários sem `zitadel_sub` criados pelo canal de e-mail são vinculados pelo e-mail no 1º login, mantendo o `access_status` que já tinham. Um módulo não acessa as tabelas de outro diretamente: usa o service exportado.
 - Prisma só dentro de services e repositories, nunca em controllers.
 - Prisma 7: o client é **gerado em TypeScript** em `apps/api/src/generated/prisma` (gitignored; `prisma generate` roda no `postinstall` e antes de build, typecheck e test). Importe de `../generated/prisma/client.js`. Config da CLI em `apps/api/prisma.config.ts`; migrações em `apps/api/prisma/migrations`. Os enums do Prisma (`TicketStatus` etc.) são os enums de domínio.
 - Migrações já aplicadas não se editam: crie uma nova com `prisma:migrate -- --name <nome>` e revise o SQL gerado antes de commitar.
@@ -62,6 +62,7 @@ Antes de dar uma tarefa como concluída, **sempre** rode `pnpm typecheck`, `pnpm
   - agente: os próprios, os dos seus grupos e os atribuídos a ele;
   - supervisor e admin: todos.
 - Ticket fora do escopo → **404** (não 403), para não revelar a existência.
+- **Liberação de acesso** (T22): `access_status` diferente de `approved` (`pending`, `rejected`, `trashed`) é bloqueado no guard global em toda rota, exceto `GET`/`PATCH /me`, `GET /companies` e `GET /departments` (`@AllowWhilePending()`). Quem tem role no Zitadel é aprovado automaticamente (RN-04) — nunca remova essa auto-aprovação, ou o admin fica trancado fora do próprio sistema.
 - Solicitante **nunca** recebe mensagens `internal`, nem por listagem, nem por include do Prisma.
 - HTML do usuário é sanitizado no backend (`sanitize-html`, allowlist) **antes** de gravar.
 - `PATCH` de ticket exige `version`. Versão desatualizada → 409.
@@ -74,7 +75,7 @@ Antes de dar uma tarefa como concluída, **sempre** rode `pnpm typecheck`, `pnpm
 
 ## Autenticação (Zitadel)
 
-- O login é federado com o Google Workspace, configurado no próprio Zitadel. O app **não lida com senhas, cadastro nem MFA**: só com tokens.
+- O login é federado com o Google (qualquer conta, ADR-011), configurado no próprio Zitadel. O app **não lida com senhas, cadastro nem MFA**: só com tokens.
 - Token de acesso é **JWT**, validado localmente via JWKS (`<ISSUER>/oauth/v2/keys`). Verificar `iss`, `aud` (contém `ZITADEL_PROJECT_ID`) e `exp`.
 - Roles vêm do claim `urn:zitadel:iam:org:project:<ZITADEL_PROJECT_ID>:roles` (objeto; as roles são as **chaves**): `admin`, `supervisor`, `agente`. Sem role = solicitante.
 - Usuário local é criado ou atualizado por JIT (`zitadel_sub`) em cada request autenticado, via cache curto. **Nome e e-mail vêm do endpoint `userinfo` do Zitadel**, não do access token. Usuário criado pelo canal de e-mail é vinculado pelo e-mail.
