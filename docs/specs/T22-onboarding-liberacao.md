@@ -1,6 +1,6 @@
 # Spec T22 — Onboarding com liberação assistida
 
-> Status: implementada (RN-01 a RN-20; RN-21 a RN-26 adiadas, ver §10) · Tarefas: T22 · Depende de: T05 (JIT), T15 (admin de usuários), T16 (1º acesso), T14 (outbox) · Origem: ADR-011 · Revisada em: 25/10/2026 (respostas do §12 incorporadas) · Implementada em: 28/10/2026, [PR #4](https://github.com/Missao-Salesiana-de-Mato-Grosso/helpdesk/pull/4) (aguardando revisão e merge)
+> Status: implementada (RN-01 a RN-20; RN-21 a RN-26 adiadas, ver §10) · Tarefas: T22 · Depende de: T05 (JIT), T15 (admin de usuários), T16 (1º acesso), T14 (outbox) · Origem: ADR-011 · Revisada em: 25/10/2026 (respostas do §12 incorporadas) · Implementada e em produção desde 28/10/2026, [PR #4](https://github.com/Missao-Salesiana-de-Mato-Grosso/helpdesk/pull/4)
 
 ## 1. Objetivo
 
@@ -168,7 +168,7 @@ Todos atualizados em 28/10/2026 (PR #4):
 - `CLAUDE.md`: a regra "usuários com `is_external = true` nunca fazem login" passa a "terceiros também podem logar"; liberação de acesso acrescentada às regras de segurança.
 - `01-escopo.md`: resumo do MVP, linha de terceiros, regras do canal de e-mail e matriz de permissões, com o papel "Pendente".
 - `04-lgpd.md`: nova finalidade "pedido de acesso ao portal" e a regra da lixeira (RN-19, RN-19c, RN-20) — sinalizado como ainda não validado pelo DPO.
-- `ambientes.md`: P12 **não** marcada como resolvida ainda — só quando o PR #4 for mesclado e implantado em produção.
+- `ambientes.md`: P12 marcada como resolvida (mesclada e implantada em produção em 28/10/2026).
 - `02-identidade-zitadel.md` (não estava nesta lista, mas ficou contraditório): nota em §2.1 sobre "terceiros não entram no Zitadel" e "app Internal", que não valem mais desde o ADR-011/T22.
 - `docs/specs/README.md`: status da linha do T22.
 
