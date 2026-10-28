@@ -202,14 +202,16 @@ describe('liberação de acesso (spec T22, e2e)', () => {
     });
 
     it('CT-11 recusa com nota → rejected; nota não aparece na resposta ao usuário', async () => {
-      const target = await pendingUser('alvo3@missaosalesiana.org.br');
+      const target = await pendingUser('alvo3@missaosalesiana.org.br', { zitadelSub: 'sub-alvo3' });
       const res = await post(`/api/users/${target.id}/access/reject`, await adminToken())
         .send({ note: 'E-mail não confere com o cadastro' })
         .expect(200);
       expect(res.body.accessStatus).toBe('rejected');
-      expect(JSON.stringify(res.body)).not.toContain('não confere');
       const updated = await t.prisma.user.findUniqueOrThrow({ where: { id: target.id } });
       expect(updated.accessNote).toBe('E-mail não confere com o cadastro');
+      // RN-12: a nota é só do registro do admin; o próprio usuário nunca a vê (ex.: no /me dele).
+      const me = await get('/api/me', await t.tokens.sign({ sub: 'sub-alvo3' })).expect(200);
+      expect(JSON.stringify(me.body)).not.toContain('não confere');
     });
 
     it('CT-12 aprovar quem já está approved → 409', async () => {
@@ -329,7 +331,9 @@ describe('liberação de acesso (spec T22, e2e)', () => {
       expect(await t.prisma.emailMessageRef.count()).toBe(0);
 
       const rejected = await pendingUser('recusar@exemplo.com');
-      await post(`/api/users/${rejected.id}/access/reject`, await adminToken()).expect(200);
+      await post(`/api/users/${rejected.id}/access/reject`, await adminToken())
+        .send({})
+        .expect(200);
       expect(await t.prisma.notification.count({ where: { toEmail: 'recusar@exemplo.com' } })).toBe(
         0,
       );
