@@ -2,13 +2,22 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   ApiErrorCode,
+  ROLES,
   type AccessRequestListResponse,
   type AccessRequestSummary,
   type ListAccessRequestsQuery,
+  type ListUsersQuery,
   type NamedRef,
+  type Role,
+  type UpdateUserInput,
+  type UserListResponse,
+  type UserSummary,
 } from '@helpdesk/shared';
 import { ApiException } from '../common/api-exception.js';
+import { isUuid } from '../common/uuid.js';
+import { CompaniesService } from '../companies/companies.service.js';
 import type { Env } from '../config/env.js';
+import { DepartmentsService } from '../departments/departments.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { systemEmailMessageId, systemNotificationPayload } from '../notifications/templates.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -32,6 +41,64 @@ const userProfile = {
 } satisfies Prisma.UserDefaultArgs;
 
 export type UserProfile = Prisma.UserGetPayload<typeof userProfile>;
+
+const userSummary = {
+  select: {
+    id: true,
+    name: true,
+    email: true,
+    roles: true,
+    isExternal: true,
+    active: true,
+    accessStatus: true,
+    lastLoginAt: true,
+    zitadelSub: true,
+    company: { select: { id: true, name: true } },
+    department: { select: { id: true, name: true } },
+    groupMemberships: {
+      where: { group: { active: true } },
+      select: { group: { select: { id: true, name: true } } },
+      orderBy: { group: { name: 'asc' } },
+    },
+  },
+} satisfies Prisma.UserDefaultArgs;
+
+type UserSummaryRow = Prisma.UserGetPayload<typeof userSummary>;
+
+/** Papéis de atendimento: quem pode ser membro de grupo e receber tickets. */
+export const AGENT_ROLES: readonly Role[] = ['agente', 'supervisor', 'admin'];
+
+export const isAgentRole = (role: string): boolean =>
+  (AGENT_ROLES as readonly string[]).includes(role);
+
+const isRole = (role: string): role is Role => (ROLES as readonly string[]).includes(role);
+
+function toUserSummary(row: UserSummaryRow): UserSummary {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    roles: row.roles.filter(isRole),
+    company: row.company,
+    department: row.department,
+    groups: row.groupMemberships.map((membership) => membership.group),
+    isExternal: row.isExternal,
+    active: row.active,
+    accessStatus: row.accessStatus,
+    lastLoginAt: row.lastLoginAt?.toISOString() ?? null,
+  };
+}
+
+const userNotFound = () =>
+  new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.NOT_FOUND, 'Usuário não encontrado.');
+const inactiveReference = (message: string) =>
+  new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, ApiErrorCode.INACTIVE_REFERENCE, message);
+
+export interface MembershipCandidate {
+  id: string;
+  active: boolean;
+  roles: string[];
+}
 
 export interface UserContact {
   id: string;
@@ -57,6 +124,8 @@ export class UsersService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly companies: CompaniesService,
+    private readonly departments: DepartmentsService,
     config: ConfigService<Env, true>,
   ) {
     this.portalUrl = config.get('PORTAL_URL', { infer: true });
@@ -193,6 +262,82 @@ export class UsersService {
       }
       return profile;
     });
+  }
+
+  // ───────────────────────────── administração (T15) ─────────────────────────────
+
+  /** Busca por nome ou e-mail, em ordem alfabética. A lixeira da T22 tem tela própria. */
+  async listUsers(query: ListUsersQuery): Promise<UserListResponse> {
+    const filters: Prisma.UserWhereInput[] = [{ accessStatus: { not: 'trashed' } }];
+    if (query.q) {
+      filters.push({
+        OR: [
+          { name: { contains: query.q, mode: 'insensitive' } },
+          { email: { contains: query.q, mode: 'insensitive' } },
+        ],
+      });
+    }
+    if (query.role === 'agent') filters.push({ roles: { hasSome: [...AGENT_ROLES] } });
+    const where: Prisma.UserWhereInput = { AND: filters };
+    const [rows, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        orderBy: [{ name: 'asc' }, { email: 'asc' }],
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+        ...userSummary,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+    return { items: rows.map(toUserSummary), total, page: query.page, pageSize: query.pageSize };
+  }
+
+  /**
+   * Unidade, departamento, terceiro e `active`. Papéis vêm do Zitadel e não se editam aqui.
+   * Devolve também o `sub`, para o controller invalidar o cache (o efeito é imediato).
+   */
+  async updateByAdmin(
+    id: string,
+    input: UpdateUserInput,
+    actorId: string,
+  ): Promise<{ user: UserSummary; zitadelSub: string | null }> {
+    if (!isUuid(id)) throw userNotFound();
+    if (input.active === false && id === actorId) {
+      throw new ApiException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        ApiErrorCode.CANNOT_DEACTIVATE_SELF,
+        'Você não pode inativar a própria conta.',
+      );
+    }
+    if (input.companyId && !(await this.companies.isActive(input.companyId))) {
+      throw inactiveReference('Unidade inexistente ou inativa.');
+    }
+    if (input.departmentId && !(await this.departments.isActive(input.departmentId))) {
+      throw inactiveReference('Departamento inexistente ou inativo.');
+    }
+    const exists = await this.prisma.user.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) throw userNotFound();
+    const row = await this.prisma.user.update({ where: { id }, data: input, ...userSummary });
+    return { user: toUserSummary(row), zitadelSub: row.zitadelSub };
+  }
+
+  /** Para validar a troca de membros de um grupo (T15). Ids desconhecidos ficam de fora. */
+  membershipCandidates(ids: readonly string[]): Promise<MembershipCandidate[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.prisma.user.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, active: true, roles: true },
+    });
+  }
+
+  /** `sub` de quem já fez login, para invalidar o cache depois de uma mudança de grupo. */
+  async subsByIds(ids: readonly string[]): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.user.findMany({
+      where: { id: { in: [...ids] }, zitadelSub: { not: null } },
+      select: { zitadelSub: true },
+    });
+    return rows.flatMap((row) => (row.zitadelSub ? [row.zitadelSub] : []));
   }
 
   // ───────────────────────────── liberação de acesso (T22) ─────────────────────────────

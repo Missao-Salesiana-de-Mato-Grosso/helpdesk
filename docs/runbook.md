@@ -98,14 +98,7 @@ O papel vem do **Zitadel**, o grupo vem do **help desk**. Sem grupo, o agente s�
    - Terminal: `make zitadel-bootstrap ARGS="--admin <email>"` concede `admin`. ⚠️ Para `agente` ou `supervisor`, use o console: `https://auth.msmt.org.br/ui/console` → Projetos → **Help Desk** → **Autorizações** → Nova → usuário → marcar `agente` (ou `supervisor`).
    - Quem ganha papel no Zitadel é **aprovado automaticamente** na fila de liberação (T22, RN-04).
 3. A pessoa sai e entra de novo (o papel vem no token novo). Para efeito imediato no app, basta o próximo login; o cache de usuário dura 60 s.
-4. **Pôr no grupo.** ⚠️ A tela de administração de grupos (T15) **ainda não existe**. Até lá, por SQL (seção 10):
-
-   ```sql
-   INSERT INTO group_members (group_id, user_id)
-   SELECT g.id, u.id FROM groups g, users u
-   WHERE g.name = '<nome do grupo>' AND u.email = '<email>'
-   ON CONFLICT DO NOTHING;
-   ```
+4. **Pôr no grupo** ⚠️: portal → Administração → **Grupos** → escolher o grupo → acrescentar a pessoa em **Membros** → **Salvar membros**. Só aparecem agentes ativos: se a pessoa não estiver na lista, ela ainda não entrou de novo depois de ganhar o papel (passo 3). A mudança vale na hora (T15).
 
 5. Pedir que a pessoa confira a fila "Do grupo" no portal.
 
@@ -117,12 +110,7 @@ Faça os três passos no mesmo dia. Desde o ADR-011 o login aceita qualquer cont
 
 1. **Workspace** (contas `@missaosalesiana.org.br`): Admin do Google → Usuários → **Suspender**. A conta deixa de entrar no Google e, portanto, no Zitadel.
 2. **Zitadel** ⚠️: console → Usuários → a pessoa → **Desativar**. Remova também as autorizações do projeto Help Desk.
-3. **Help desk** ⚠️: inativar o usuário. A API passa a responder `403 USER_INACTIVE` em até 60 s (cache), mesmo com token ainda válido. Sem a tela da T15, por SQL (seção 10):
-
-   ```sql
-   UPDATE users SET active = false WHERE email = '<email>';
-   DELETE FROM group_members WHERE user_id = (SELECT id FROM users WHERE email = '<email>');
-   ```
+3. **Help desk** ⚠️: portal → Administração → **Usuários** → buscar a pessoa → **Editar** → desmarcar **Ativo** → Salvar. A API passa a responder `403 USER_INACTIVE` já na próxima requisição, mesmo com token ainda válido, e a pessoa deixa de receber tickets e avisos de grupo. Ela some da tela de membros dos grupos; ao salvar os membros de um grupo, ela sai dele de vez.
 
 4. Tickets atribuídos à pessoa: no portal, a fila "Todos" (supervisor) filtrada pelo responsável. Reatribuir um a um.
 

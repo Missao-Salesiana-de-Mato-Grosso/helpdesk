@@ -13,4 +13,5 @@ export {
 } from './schemas/me.js';
 export * from './schemas/access-requests.js';
 export * from './schemas/tickets.js';
+export * from './schemas/users.js';
 export * from './attachments.js';
