@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 export const NOTIFICATION_TEMPLATES = [
@@ -6,6 +7,9 @@ export const NOTIFICATION_TEMPLATES = [
   'reply',
   'requester_reply',
   'resolved',
+  // T22 (RN-16 a RN-18): avisos sem ticket, da liberação de acesso.
+  'access_request_created',
+  'access_granted',
 ] as const;
 
 export type NotificationTemplate = (typeof NOTIFICATION_TEMPLATES)[number];
@@ -17,6 +21,14 @@ export const AUTO_SUBMITTED: Record<NotificationTemplate, boolean> = {
   reply: false,
   requester_reply: true,
   resolved: true,
+  access_request_created: true,
+  access_granted: true,
+};
+
+/** Assunto fixo dos templates sem ticket (T22 RN-16, RN-17): sem `[#n]`. */
+const SYSTEM_SUBJECT: Partial<Record<NotificationTemplate, string>> = {
+  access_request_created: 'Novo pedido de acesso ao help desk',
+  access_granted: 'Seu acesso ao help desk foi liberado',
 };
 
 const payloadAttachment = z.object({
@@ -31,9 +43,10 @@ const payloadAttachment = z.object({
  * schema, para não confiar no formato gravado.
  */
 export const notificationPayload = z.object({
-  ticketId: z.string(),
-  ticketNumber: z.number(),
-  ticketSubject: z.string(),
+  /** `null` nos templates sem ticket (T22: `access_request_created`, `access_granted`). */
+  ticketId: z.string().nullable(),
+  ticketNumber: z.number().nullable(),
+  ticketSubject: z.string().nullable(),
   recipientName: z.string(),
   /** Link do ticket no portal; `null` para quem não faz login (RN-07). */
   portalUrl: z.string().nullable(),
@@ -44,12 +57,53 @@ export const notificationPayload = z.object({
   resolved: z.boolean(),
   groupName: z.string().nullable(),
   requesterName: z.string(),
+  /** Só em `access_request_created` (T22 RN-16). */
+  requesterEmail: z.string().nullable().optional(),
   companyName: z.string().nullable(),
   categoryName: z.string().nullable(),
 });
 
 export type NotificationPayload = z.infer<typeof notificationPayload>;
 export type PayloadAttachment = z.infer<typeof payloadAttachment>;
+
+/** Quem recebe um aviso sem ticket (T22). */
+export interface SystemNotificationRecipient {
+  email: string;
+  name: string;
+}
+
+/**
+ * Payload de um aviso sem ticket (T22, RN-16 a RN-18): pedido de acesso novo ou liberação.
+ * Quem grava a linha na outbox (`UsersService`) monta este payload sem depender do
+ * `NotificationService` — só o `processOutbox` (aqui mesmo) sabe como entregá-lo.
+ */
+export function systemNotificationPayload(
+  recipientName: string,
+  portalUrl: string,
+  data: { requesterName?: string; requesterEmail?: string } = {},
+): NotificationPayload {
+  return {
+    ticketId: null,
+    ticketNumber: null,
+    ticketSubject: null,
+    recipientName,
+    portalUrl,
+    authorName: '',
+    bodyHtml: null,
+    attachments: [],
+    resolved: false,
+    groupName: null,
+    requesterName: data.requesterName ?? '',
+    requesterEmail: data.requesterEmail ?? null,
+    companyName: null,
+    categoryName: null,
+  };
+}
+
+/** Message-ID de um aviso sem ticket (T22): prefixo `sys-`, nunca `tk-`. */
+export function systemEmailMessageId(domain: string): string {
+  return `<sys-${randomUUID()}@${domain}>`;
+}
 
 export interface RenderedMail {
   subject: string;
@@ -91,10 +145,14 @@ export function renderNotification(
       ),
     );
   }
-  blocks.push(text(REPLY_LINE));
+  // RN-18: avisos sem ticket não são conversas — nada para responder.
+  if (payload.ticketNumber !== null) blocks.push(text(REPLY_LINE));
 
   return {
-    subject: `[#${payload.ticketNumber}] ${payload.ticketSubject}`,
+    subject:
+      payload.ticketNumber !== null
+        ? `[#${payload.ticketNumber}] ${payload.ticketSubject}`
+        : (SYSTEM_SUBJECT[template] ?? template),
     html: toHtml(blocks, payload.portalUrl),
     text: toText(blocks, payload.portalUrl),
   };
@@ -128,6 +186,18 @@ function intro(template: NotificationTemplate, p: NotificationPayload): Block[] 
       ];
     case 'requester_reply':
       return [text(`${p.requesterName} respondeu no chamado ${ticket}:`)];
+    case 'access_request_created':
+      return [
+        text('Novo pedido de acesso ao help desk.'),
+        text([`Nome: ${p.requesterName}`, `E-mail: ${p.requesterEmail ?? '—'}`].join(' · ')),
+      ];
+    case 'access_granted':
+      return [
+        text(`Olá, ${p.recipientName}.`),
+        text(
+          'Seu acesso ao help desk foi liberado. Você já pode abrir e acompanhar chamados pelo portal.',
+        ),
+      ];
     default: // resolved
       return [
         text(`Olá, ${p.recipientName}.`),

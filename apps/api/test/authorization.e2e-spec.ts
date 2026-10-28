@@ -5,13 +5,17 @@ import { AttachmentsService } from '../src/attachments/attachments.service.js';
 import { createTestApp, type TestApp } from './setup/auth.js';
 import { truncateAll } from './setup/db.js';
 
-type Actor = 'anonimo' | 'solicitante' | 'agente' | 'supervisor' | 'admin';
+// T22: 'pendente' é um solicitante cujo access_status ainda é pending (RN-06) — bloqueado em
+// tudo, exceto /me, /companies e /departments. Não tem papel no Zitadel, por isso não é
+// auto-aprovado pela RN-04.
+type Actor = 'anonimo' | 'solicitante' | 'agente' | 'supervisor' | 'admin' | 'pendente';
 
-const ACTORS: { actor: Actor; roles: string[] }[] = [
-  { actor: 'solicitante', roles: [] },
-  { actor: 'agente', roles: ['agente'] },
-  { actor: 'supervisor', roles: ['supervisor'] },
-  { actor: 'admin', roles: ['admin'] },
+const ACTORS: { actor: Actor; roles: string[]; accessStatus: 'approved' | 'pending' }[] = [
+  { actor: 'solicitante', roles: [], accessStatus: 'approved' },
+  { actor: 'agente', roles: ['agente'], accessStatus: 'approved' },
+  { actor: 'supervisor', roles: ['supervisor'], accessStatus: 'approved' },
+  { actor: 'admin', roles: ['admin'], accessStatus: 'approved' },
+  { actor: 'pendente', roles: [], accessStatus: 'pending' },
 ];
 const ALL_ACTORS: Actor[] = ['anonimo', ...ACTORS.map((a) => a.actor)];
 
@@ -36,26 +40,61 @@ interface Refs {
   foreignTicketId: string;
   attachmentId: string;
   foreignAttachmentId: string;
+  /** Pedido de acesso pending recém-criado, para os testes de liberação (T22). */
+  pendingUserId: string;
 }
 
-const AUTHENTICATED = { anonimo: 401, solicitante: 200, agente: 200, supervisor: 200, admin: 200 };
-const AGENT_ONLY = { anonimo: 401, solicitante: 403, agente: 200, supervisor: 200, admin: 200 };
+// pendente: 403 ACCESS_PENDING por padrão (RN-06); as rotas isentas (/me, /companies,
+// /departments) sobrescrevem com `{ ...AUTHENTICATED, pendente: 200 }`.
+const AUTHENTICATED = {
+  anonimo: 401,
+  solicitante: 200,
+  agente: 200,
+  supervisor: 200,
+  admin: 200,
+  pendente: 403,
+};
+const AGENT_ONLY = {
+  anonimo: 401,
+  solicitante: 403,
+  agente: 200,
+  supervisor: 200,
+  admin: 200,
+  pendente: 403,
+};
+/** Rotas de liberação (T22): só admin e supervisor; "admin" nesta spec inclui supervisor. */
+const ADMIN_OR_SUPERVISOR = {
+  anonimo: 401,
+  solicitante: 403,
+  agente: 403,
+  supervisor: 200,
+  admin: 200,
+  pendente: 403,
+};
 
 const MATRIX: RouteCase[] = [
   {
     method: 'get',
     path: '/api/health',
-    expected: { anonimo: 200, solicitante: 200, agente: 200, supervisor: 200, admin: 200 },
+    expected: {
+      anonimo: 200,
+      solicitante: 200,
+      agente: 200,
+      supervisor: 200,
+      admin: 200,
+      pendente: 200,
+    },
   },
-  { method: 'get', path: '/api/me', expected: AUTHENTICATED },
+  // T22 RN-06: /me, /companies e /departments são as únicas rotas abertas a quem está pending.
+  { method: 'get', path: '/api/me', expected: { ...AUTHENTICATED, pendente: 200 } },
   {
     method: 'patch',
     path: '/api/me',
     body: (ref) => ({ companyId: ref.companyId, departmentId: ref.departmentId }),
-    expected: AUTHENTICATED,
+    expected: { ...AUTHENTICATED, pendente: 200 },
   },
-  { method: 'get', path: '/api/companies', expected: AUTHENTICATED },
-  { method: 'get', path: '/api/departments', expected: AUTHENTICATED },
+  { method: 'get', path: '/api/companies', expected: { ...AUTHENTICATED, pendente: 200 } },
+  { method: 'get', path: '/api/departments', expected: { ...AUTHENTICATED, pendente: 200 } },
   { method: 'get', path: '/api/categories', expected: AUTHENTICATED },
   { method: 'get', path: '/api/groups', expected: AGENT_ONLY },
   {
@@ -68,7 +107,14 @@ const MATRIX: RouteCase[] = [
     method: 'get',
     path: (ref) => `/api/attachments/${ref.foreignAttachmentId}`,
     label: '/api/attachments/:id (fora do escopo)',
-    expected: { anonimo: 401, solicitante: 404, agente: 404, supervisor: 200, admin: 200 },
+    expected: {
+      anonimo: 401,
+      solicitante: 404,
+      agente: 404,
+      supervisor: 200,
+      admin: 200,
+      pendente: 403,
+    },
   },
   {
     method: 'get',
@@ -80,7 +126,14 @@ const MATRIX: RouteCase[] = [
     method: 'post',
     path: '/api/tickets',
     body: (ref) => ({ subject: 'Teste', bodyHtml: '<p>x</p>', categoryId: ref.categoryId }),
-    expected: { anonimo: 401, solicitante: 201, agente: 201, supervisor: 201, admin: 201 },
+    expected: {
+      anonimo: 401,
+      solicitante: 201,
+      agente: 201,
+      supervisor: 201,
+      admin: 201,
+      pendente: 403,
+    },
   },
   { method: 'get', path: '/api/tickets', expected: AUTHENTICATED },
   { method: 'get', path: '/api/tickets/counters', expected: AGENT_ONLY },
@@ -95,7 +148,14 @@ const MATRIX: RouteCase[] = [
     method: 'get',
     path: (ref) => `/api/tickets/${ref.foreignTicketId}`,
     label: '/api/tickets/:id (fora do escopo)',
-    expected: { anonimo: 401, solicitante: 404, agente: 404, supervisor: 200, admin: 200 },
+    expected: {
+      anonimo: 401,
+      solicitante: 404,
+      agente: 404,
+      supervisor: 200,
+      admin: 200,
+      pendente: 403,
+    },
   },
   {
     method: 'patch',
@@ -109,28 +169,74 @@ const MATRIX: RouteCase[] = [
     path: (ref) => `/api/tickets/${ref.foreignTicketId}`,
     label: 'PATCH /api/tickets/:id (fora do escopo)',
     body: () => ({ version: 1, priority: 'high' }),
-    expected: { anonimo: 401, solicitante: 403, agente: 404, supervisor: 200, admin: 200 },
+    expected: {
+      anonimo: 401,
+      solicitante: 403,
+      agente: 404,
+      supervisor: 200,
+      admin: 200,
+      pendente: 403,
+    },
   },
   {
     method: 'post',
     path: (ref) => `/api/tickets/${ref.ticketId}/messages`,
     label: '/api/tickets/:id/messages (do solicitante, grupo do agente)',
     body: () => ({ kind: 'public', bodyHtml: '<p>oi</p>' }),
-    expected: { anonimo: 401, solicitante: 201, agente: 201, supervisor: 201, admin: 201 },
+    expected: {
+      anonimo: 401,
+      solicitante: 201,
+      agente: 201,
+      supervisor: 201,
+      admin: 201,
+      pendente: 403,
+    },
   },
   {
     method: 'post',
     path: (ref) => `/api/tickets/${ref.ticketId}/messages`,
     label: '/api/tickets/:id/messages (nota interna)',
     body: () => ({ kind: 'internal', bodyHtml: '<p>oi</p>' }),
-    expected: { anonimo: 401, solicitante: 403, agente: 201, supervisor: 201, admin: 201 },
+    expected: {
+      anonimo: 401,
+      solicitante: 403,
+      agente: 201,
+      supervisor: 201,
+      admin: 201,
+      pendente: 403,
+    },
   },
   {
     method: 'post',
     path: (ref) => `/api/tickets/${ref.foreignTicketId}/messages`,
     label: '/api/tickets/:id/messages (fora do escopo)',
     body: () => ({ kind: 'public', bodyHtml: '<p>oi</p>' }),
-    expected: { anonimo: 401, solicitante: 404, agente: 404, supervisor: 201, admin: 201 },
+    expected: {
+      anonimo: 401,
+      solicitante: 404,
+      agente: 404,
+      supervisor: 201,
+      admin: 201,
+      pendente: 403,
+    },
+  },
+  // T22: fila de liberação — só admin e supervisor.
+  { method: 'get', path: '/api/users/access-requests', expected: ADMIN_OR_SUPERVISOR },
+  {
+    method: 'post',
+    path: (ref) => `/api/users/${ref.pendingUserId}/access/approve`,
+    label: '/api/users/:id/access/approve',
+    body: (ref) => ({ companyId: ref.companyId, departmentId: ref.departmentId }),
+    expected: ADMIN_OR_SUPERVISOR,
+  },
+  {
+    method: 'post',
+    path: (ref) => `/api/users/${ref.pendingUserId}/access/reject`,
+    label: '/api/users/:id/access/reject',
+    // Corpo vazio explícito: rejectAccessSchema aceita {} (note é opcional), mas sem corpo
+    // nenhum o ZodValidationPipe recebe `undefined` e falha com 422 antes de chegar na role.
+    body: () => ({}),
+    expected: ADMIN_OR_SUPERVISOR,
   },
 ];
 
@@ -158,7 +264,7 @@ describe('matriz de permissões (e2e)', () => {
       data: { name: 'Geral', defaultGroupId: ownGroup.id },
     });
     const userIds = new Map<Actor, string>();
-    for (const { actor, roles } of ACTORS) {
+    for (const { actor, roles, accessStatus } of ACTORS) {
       const sub = `sub-${actor}`;
       const user = await t.prisma.user.create({
         data: {
@@ -170,6 +276,8 @@ describe('matriz de permissões (e2e)', () => {
           departmentId: department.id,
           lastLoginAt: new Date(),
           profileSyncedAt: new Date(),
+          // T22: 'pendente' fica pending de propósito; os demais já fazem parte do sistema.
+          accessStatus,
         },
       });
       userIds.set(actor, user.id);
@@ -179,7 +287,12 @@ describe('matriz de permissões (e2e)', () => {
       data: { groupId: ownGroup.id, userId: userIds.get('agente')! },
     });
     const external = await t.prisma.user.create({
-      data: { email: 'terceiro@exemplo.com', name: 'Terceiro', isExternal: true },
+      data: {
+        email: 'terceiro@exemplo.com',
+        name: 'Terceiro',
+        isExternal: true,
+        accessStatus: 'approved',
+      },
     });
     const attachments = t.app.get(AttachmentsService);
     /** Ticket com uma mensagem pública que tem um anexo gravado no storage. */
@@ -209,6 +322,14 @@ describe('matriz de permissões (e2e)', () => {
     };
     const own = await ticket(userIds.get('solicitante')!, ownGroup.id);
     const foreign = await ticket(external.id, otherGroup.id);
+    // T22: pedido de acesso novo, alvo dos testes de aprovar/recusar.
+    const pending = await t.prisma.user.create({
+      data: {
+        email: 'pendente-alvo@missaosalesiana.org.br',
+        name: 'Pendente',
+        accessStatus: 'pending',
+      },
+    });
     refs = {
       companyId: company.id,
       departmentId: department.id,
@@ -218,6 +339,7 @@ describe('matriz de permissões (e2e)', () => {
       attachmentId: own.attachmentId,
       foreignTicketId: foreign.id,
       foreignAttachmentId: foreign.attachmentId,
+      pendingUserId: pending.id,
     };
   });
 

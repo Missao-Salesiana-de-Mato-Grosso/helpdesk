@@ -88,6 +88,9 @@ export const envSchema = z
       .int()
       .nonnegative()
       .default(20 * 1024 * 1024),
+
+    // Liberação de acesso ao portal (T22). Pedido pending sem decisão há N dias vai para a lixeira (RN-19).
+    ACCESS_REQUEST_TRASH_DAYS: z.coerce.number().int().positive().default(30),
   })
   .superRefine((env, ctx) => {
     const requireWith = (keys: readonly (keyof typeof env)[], condition: string) => {

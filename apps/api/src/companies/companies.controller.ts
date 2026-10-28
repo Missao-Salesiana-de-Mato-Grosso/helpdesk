@@ -1,6 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import type { NamedRef } from '@helpdesk/shared';
-import { AllowDuringOnboarding } from '../auth/decorators.js';
+import { AllowDuringOnboarding, AllowWhilePending } from '../auth/decorators.js';
 import { CompaniesService } from './companies.service.js';
 
 @Controller('companies')
@@ -9,6 +9,7 @@ export class CompaniesController {
 
   @Get()
   @AllowDuringOnboarding()
+  @AllowWhilePending()
   list(): Promise<NamedRef[]> {
     return this.companies.listActive();
   }

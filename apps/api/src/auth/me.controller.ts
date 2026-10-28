@@ -12,11 +12,12 @@ import { CompaniesService } from '../companies/companies.service.js';
 import { DepartmentsService } from '../departments/departments.service.js';
 import { UsersService, type UserProfile } from '../users/users.service.js';
 import type { CurrentUser as CurrentUserType } from './current-user.js';
-import { AllowDuringOnboarding, CurrentUser } from './decorators.js';
+import { AllowDuringOnboarding, AllowWhilePending, CurrentUser } from './decorators.js';
 import { UserCache } from './user-cache.js';
 
 @Controller('me')
 @AllowDuringOnboarding()
+@AllowWhilePending()
 export class MeController {
   constructor(
     private readonly users: UsersService,
@@ -75,5 +76,6 @@ function toMeResponse(profile: UserProfile, user: CurrentUserType): MeResponse {
     department: profile.department,
     groups: user.isAgent ? profile.groupMemberships.map((m) => m.group) : [],
     needsOnboarding: profile.companyId === null || profile.departmentId === null,
+    accessStatus: user.accessStatus,
   };
 }

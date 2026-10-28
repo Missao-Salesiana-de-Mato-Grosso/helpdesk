@@ -371,7 +371,9 @@ export class NotificationService {
       messageId,
       ...(references.length > 0 ? { inReplyTo: references.at(-1), references } : {}),
       headers: {
-        'X-Helpdesk-Ticket': String(payload.ticketNumber),
+        ...(payload.ticketNumber !== null
+          ? { 'X-Helpdesk-Ticket': String(payload.ticketNumber) }
+          : {}),
         ...(AUTO_SUBMITTED[row.template] ? { 'Auto-Submitted': 'auto-generated' } : {}),
       },
       attachments: attachments ?? [],

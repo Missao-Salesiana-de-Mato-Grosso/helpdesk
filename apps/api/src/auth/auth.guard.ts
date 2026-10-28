@@ -3,7 +3,12 @@ import { Reflector } from '@nestjs/core';
 import { ApiErrorCode, type Role } from '@helpdesk/shared';
 import { ApiException } from '../common/api-exception.js';
 import type { AuthenticatedRequest, CurrentUser } from './current-user.js';
-import { ALLOW_DURING_ONBOARDING_KEY, IS_PUBLIC_KEY, ROLES_KEY } from './decorators.js';
+import {
+  ALLOW_DURING_ONBOARDING_KEY,
+  ALLOW_WHILE_PENDING_KEY,
+  IS_PUBLIC_KEY,
+  ROLES_KEY,
+} from './decorators.js';
 import { JitService } from './jit.service.js';
 import { TokenVerifierService } from './token-verifier.service.js';
 
@@ -12,7 +17,7 @@ const BEARER = /^Bearer ([A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+)$/;
 
 /**
  * Guard global (RN-01). Ordem: @Public → token (401/503) → organização (403) → JIT →
- * usuário ativo (403) → onboarding (403) → @Roles (403).
+ * usuário ativo (403) → onboarding (403) → liberação de acesso (403, T22) → @Roles (403).
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -59,6 +64,7 @@ export class AuthGuard implements CanActivate {
       departmentId: local.departmentId,
       groupIds: local.groupIds,
       needsOnboarding: local.companyId === null || local.departmentId === null,
+      accessStatus: local.accessStatus,
     };
     request.user = user;
 
@@ -70,6 +76,22 @@ export class AuthGuard implements CanActivate {
         HttpStatus.FORBIDDEN,
         ApiErrorCode.ONBOARDING_REQUIRED,
         'Informe unidade e departamento para continuar.',
+      );
+    }
+
+    // T22 RN-06/RN-07: pending, rejected ou trashed não acessam nada além do que opta explicitamente.
+    if (
+      user.accessStatus !== 'approved' &&
+      !this.reflector.getAllAndOverride<boolean>(ALLOW_WHILE_PENDING_KEY, targets)
+    ) {
+      throw new ApiException(
+        HttpStatus.FORBIDDEN,
+        user.accessStatus === 'rejected'
+          ? ApiErrorCode.ACCESS_REJECTED
+          : ApiErrorCode.ACCESS_PENDING,
+        user.accessStatus === 'rejected'
+          ? 'Seu acesso ao help desk não foi liberado.'
+          : 'Seu acesso ao help desk ainda não foi liberado.',
       );
     }
 

@@ -54,6 +54,12 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Grupos', to: '/admin/grupos' },
     ],
   },
+  {
+    // T22 RN-10: "admin" aqui inclui supervisor — diferente da seção "Administração" acima.
+    title: 'Liberação',
+    roles: ['admin', 'supervisor'],
+    items: [{ label: 'Pedidos de acesso', to: '/admin/liberacao' }],
+  },
 ];
 
 /** Seções visíveis para quem tem estas roles. Só UI: a autorização é da API. */

@@ -80,6 +80,8 @@ export async function createTicketsFixture(t: TestApp): Promise<TicketsFixture> 
         departmentId: external ? null : D1.id,
         lastLoginAt: new Date(),
         profileSyncedAt: new Date(),
+        // T22: fixture representa gente que já fazia parte do sistema, não um pedido novo.
+        accessStatus: 'approved',
       },
     });
     return user.id;
