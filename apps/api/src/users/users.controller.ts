@@ -6,18 +6,25 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
 import {
   approveAccessSchema,
   listAccessRequestsQuerySchema,
+  listUsersQuerySchema,
   rejectAccessSchema,
+  updateUserSchema,
   type AccessRequestListResponse,
   type ApproveAccessInput,
   type EmptyTrashResponse,
   type ListAccessRequestsQuery,
+  type ListUsersQuery,
   type RejectAccessInput,
+  type UpdateUserInput,
+  type UserListResponse,
+  type UserSummary,
 } from '@helpdesk/shared';
 import { CurrentUser, Roles } from '../auth/decorators.js';
 import type { CurrentUser as CurrentUserType } from '../auth/current-user.js';
@@ -26,7 +33,10 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import type { UserProfile } from './users.service.js';
 import { UsersService } from './users.service.js';
 
-/** Liberação de acesso ao portal (T22, ADR-011). "Admin" aqui inclui `supervisor` (RN-10). */
+/**
+ * Liberação de acesso ao portal (T22, ADR-011): "admin" aqui inclui `supervisor` (RN-10).
+ * Administração de usuários (T15): só `admin`.
+ */
 @Controller('users')
 @Roles('admin', 'supervisor')
 export class UsersController {
@@ -34,6 +44,27 @@ export class UsersController {
     private readonly users: UsersService,
     private readonly cache: UserCache,
   ) {}
+
+  @Get()
+  @Roles('admin')
+  listUsers(
+    @Query(new ZodValidationPipe(listUsersQuerySchema)) query: ListUsersQuery,
+  ): Promise<UserListResponse> {
+    return this.users.listUsers(query);
+  }
+
+  /** T15: o efeito é imediato (o cache do usuário é invalidado), inclusive `active = false`. */
+  @Patch(':id')
+  @Roles('admin')
+  async update(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(updateUserSchema)) body: UpdateUserInput,
+    @CurrentUser() admin: CurrentUserType,
+  ): Promise<UserSummary> {
+    const { user, zitadelSub } = await this.users.updateByAdmin(id, body, admin.id);
+    if (zitadelSub) this.cache.invalidate(zitadelSub);
+    return user;
+  }
 
   @Get('access-requests')
   list(

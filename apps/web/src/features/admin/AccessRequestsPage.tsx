@@ -15,15 +15,14 @@ import {
   Title,
 } from '@mantine/core';
 import type { AccessRequestSummary, NamedRef } from '@helpdesk/shared';
-import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useApi } from '../../api/api-context.ts';
 import { useMe } from '../../auth/useMe.ts';
 import { useCompanies } from '../tickets/queries.ts';
 import { formatDateTime } from '../tickets/format.ts';
 import {
   useAccessRequests,
   useApproveAccess,
+  useDepartments,
   useEmptyTrash,
   useRejectAccess,
   useRestoreAccess,
@@ -36,15 +35,6 @@ const toOptions = (items: NamedRef[] | undefined) =>
 
 const isAccessRequestsStatus = (value: string | null): value is AccessRequestsStatus =>
   value === 'pending' || value === 'trashed';
-
-function useDepartments() {
-  const api = useApi();
-  return useQuery({
-    queryKey: ['departments'],
-    queryFn: () => api<NamedRef[]>('/departments'),
-    staleTime: 5 * 60_000,
-  });
-}
 
 /** T22 RN-10: fila de liberação de acesso. "Admin" na spec inclui `supervisor`; excluir/esvaziar a lixeira é só `admin`. */
 export function AccessRequestsPage() {

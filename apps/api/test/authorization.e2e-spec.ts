@@ -33,7 +33,7 @@ const ACTORS: { actor: Actor; roles: string[]; accessStatus: 'approved' | 'pendi
 const ALL_ACTORS: Actor[] = ['anonimo', ...ACTORS.map((a) => a.actor)];
 
 interface RouteCase {
-  method: 'get' | 'patch' | 'post' | 'delete';
+  method: 'get' | 'patch' | 'post' | 'put' | 'delete';
   /** Pode depender dos dados criados no beforeEach (ex.: id de um ticket). */
   path: string | ((ref: Refs) => string);
   /** Rota como o Nest a registra (`/api/tickets/:id`). Obrigatória quando `path` é uma função. */
@@ -91,7 +91,7 @@ const ADMIN_OR_SUPERVISOR = {
   pendente: 403,
 };
 
-/** Lixeira (T22): só admin. */
+/** Lixeira (T22) e administração (T15): só admin. */
 const ADMIN_ONLY = {
   anonimo: 401,
   solicitante: 403,
@@ -294,6 +294,24 @@ const MATRIX: RouteCase[] = [
     expected: { ...ADMIN_ONLY, admin: 204 },
   },
   { method: 'delete', path: '/api/users/access-requests/trash', expected: ADMIN_ONLY },
+  // T15: administração de usuários e membros de grupo — só admin.
+  { method: 'get', path: '/api/users', expected: ADMIN_ONLY },
+  {
+    method: 'patch',
+    path: (ref) => `/api/users/${ref.pendingUserId}`,
+    template: '/api/users/:id',
+    label: 'PATCH /api/users/:id',
+    body: () => ({ isExternal: false }),
+    expected: ADMIN_ONLY,
+  },
+  {
+    method: 'put',
+    path: (ref) => `/api/groups/${ref.groupId}/members`,
+    template: '/api/groups/:id/members',
+    label: 'PUT /api/groups/:id/members',
+    body: () => ({ userIds: [] }),
+    expected: ADMIN_ONLY,
+  },
 ];
 
 /** Rotas que o Express tem registradas, no formato `GET /api/tickets/:id`. */
