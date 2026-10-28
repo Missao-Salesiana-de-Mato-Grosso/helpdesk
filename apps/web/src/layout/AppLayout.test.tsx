@@ -22,6 +22,7 @@ function me(roles: Role[]): MeResponse {
     department: { id: 'd1', name: 'Secretaria' },
     groups: [],
     needsOnboarding: false,
+    accessStatus: 'approved',
   };
 }
 

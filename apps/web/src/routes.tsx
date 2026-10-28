@@ -1,11 +1,19 @@
 import { Navigate, Outlet, Route, Routes } from 'react-router';
+import { AccessRejectedPage } from './auth/AccessRejectedPage.tsx';
 import { AuthCallback } from './auth/AuthCallback.tsx';
 import { CALLBACK_PATH } from './auth/oidc-config.ts';
 import { OnboardingPage } from './auth/OnboardingPage.tsx';
-import { ONBOARDING_PATH, RequireAuth } from './auth/RequireAuth.tsx';
+import {
+  ACCESS_REJECTED_PATH,
+  ONBOARDING_PATH,
+  RequireAuth,
+  WAITING_APPROVAL_PATH,
+} from './auth/RequireAuth.tsx';
 import { RequireRole } from './auth/RequireRole.tsx';
 import { useMe } from './auth/useMe.ts';
+import { WaitingApprovalPage } from './auth/WaitingApprovalPage.tsx';
 import { StatusScreen } from './components/StatusScreen.tsx';
+import { AccessRequestsPage } from './features/admin/AccessRequestsPage.tsx';
 import { GroupsPage, UsersPage } from './features/admin/pages.tsx';
 import { QueuePage } from './features/queue/QueuePage.tsx';
 import { MyTicketsPage } from './features/tickets/MyTicketsPage.tsx';
@@ -31,6 +39,8 @@ export function AppRoutes() {
         }
       >
         <Route path={ONBOARDING_PATH} element={<OnboardingPage />} />
+        <Route path={WAITING_APPROVAL_PATH} element={<WaitingApprovalPage />} />
+        <Route path={ACCESS_REJECTED_PATH} element={<AccessRejectedPage />} />
         <Route element={<AppLayout />}>
           <Route index element={<HomeRedirect />} />
           <Route path="tickets" element={<MyTicketsPage />} />
@@ -57,6 +67,15 @@ export function AppRoutes() {
             <Route path="usuarios" element={<UsersPage />} />
             <Route path="grupos" element={<GroupsPage />} />
           </Route>
+          {/* T22 RN-10: liberação de acesso é "admin ou supervisor", diferente do bloco acima. */}
+          <Route
+            path="admin/liberacao"
+            element={
+              <RequireRole roles={['admin', 'supervisor']}>
+                <AccessRequestsPage />
+              </RequireRole>
+            }
+          />
           <Route path="*" element={<StatusScreen title="Página não encontrada" />} />
         </Route>
       </Route>

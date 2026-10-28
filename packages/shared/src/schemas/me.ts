@@ -19,6 +19,10 @@ export interface NamedRef {
   name: string;
 }
 
+/** Liberação de acesso ao portal (T22, ADR-011). Independente de `active`. */
+export const ACCESS_STATUSES = ['pending', 'approved', 'rejected', 'trashed'] as const;
+export type AccessStatus = (typeof ACCESS_STATUSES)[number];
+
 /** Resposta de `GET /api/me` e `PATCH /api/me`. */
 export interface MeResponse {
   id: string;
@@ -30,4 +34,5 @@ export interface MeResponse {
   department: NamedRef | null;
   groups: NamedRef[];
   needsOnboarding: boolean;
+  accessStatus: AccessStatus;
 }

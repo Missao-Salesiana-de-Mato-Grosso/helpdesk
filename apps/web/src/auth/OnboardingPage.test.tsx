@@ -22,6 +22,7 @@ const pending: MeResponse = {
   department: null,
   groups: [],
   needsOnboarding: true,
+  accessStatus: 'pending',
 };
 
 async function choose(label: string, option: string) {
@@ -74,6 +75,7 @@ describe('Primeiro acesso (T16)', () => {
           company: COMPANY,
           department: DEPARTMENT,
           needsOnboarding: false,
+          accessStatus: 'approved',
         });
       },
     });
@@ -116,6 +118,7 @@ describe('Primeiro acesso (T16)', () => {
           company: COMPANY,
           department: DEPARTMENT,
           needsOnboarding: false,
+          accessStatus: 'approved',
         }),
       'GET /api/companies': () => jsonResponse(200, [COMPANY]),
       'GET /api/departments': () => jsonResponse(200, [DEPARTMENT]),

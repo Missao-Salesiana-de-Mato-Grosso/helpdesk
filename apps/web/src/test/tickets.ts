@@ -23,6 +23,7 @@ export const me: MeResponse = {
   department: { id: 'd1', name: 'Secretaria' },
   groups: [],
   needsOnboarding: false,
+  accessStatus: 'approved',
 };
 
 export function message(overrides: Partial<TicketMessage> = {}): TicketMessage {

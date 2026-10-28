@@ -78,6 +78,16 @@ enum EmailDirection {
   @@map("email_direction")
 }
 
+/// Liberação de acesso ao portal (T22, ADR-011). Independente de `active`, que desliga quem já foi liberado.
+enum UserAccessStatus {
+  pending
+  approved
+  rejected
+  trashed
+
+  @@map("user_access_status")
+}
+
 // ───────────────────────────── pessoas e organização ─────────────────────────────
 
 /// Colaboradores (com login pelo Zitadel), contatos criados por e-mail e terceiros.
@@ -97,11 +107,23 @@ model User {
   active          Boolean   @default(true)
   lastLoginAt     DateTime? @map("last_login_at") @db.Timestamptz(6)
   profileSyncedAt DateTime? @map("profile_synced_at") @db.Timestamptz(6)
+  /// Liberação de acesso ao portal (T22). `approved` para quem já existia antes da T22 (migração).
+  accessStatus      UserAccessStatus @default(pending) @map("access_status")
+  /// Quando entrou na fila (1ª vez com unidade e departamento preenchidos). Nulo até lá.
+  accessRequestedAt DateTime?        @map("access_requested_at") @db.Timestamptz(6)
+  accessDecidedAt   DateTime?        @map("access_decided_at") @db.Timestamptz(6)
+  accessDecidedById String?          @map("access_decided_by") @db.Uuid
+  /// Nota interna da recusa. Nunca exposta ao usuário.
+  accessNote        String?          @map("access_note")
+  /// Soft-delete da lixeira (RN-19): só pedidos `pending` sem decisão há 30 dias.
+  trashedAt         DateTime?        @map("trashed_at") @db.Timestamptz(6)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   company          Company?        @relation(fields: [companyId], references: [id])
   department       Department?     @relation(fields: [departmentId], references: [id])
+  accessDecidedBy  User?           @relation("AccessDecisions", fields: [accessDecidedById], references: [id])
+  accessDecisions  User[]          @relation("AccessDecisions")
   groupMemberships GroupMember[]
   requestedTickets Ticket[]        @relation("TicketRequester")
   assignedTickets  Ticket[]        @relation("TicketAssignee")
@@ -109,6 +131,7 @@ model User {
   events           TicketEvent[]
 
   @@index([companyId])
+  @@index([accessRequestedAt], map: "users_access_requested_at_pending_idx")
   @@map("users")
 }
 

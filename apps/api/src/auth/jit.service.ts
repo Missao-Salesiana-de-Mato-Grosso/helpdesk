@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
-import { ApiErrorCode, type Role } from '@helpdesk/shared';
+import { ApiErrorCode, type AccessStatus, type Role } from '@helpdesk/shared';
 import { ApiException } from '../common/api-exception.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { UsersService, type UserWithGroupIds } from '../users/users.service.js';
@@ -21,6 +21,7 @@ export interface CachedUser {
   companyId: string | null;
   departmentId: string | null;
   groupIds: string[];
+  accessStatus: AccessStatus;
 }
 
 const sameRoles = (a: readonly string[], b: readonly string[]): boolean =>
@@ -52,6 +53,19 @@ export class JitService {
       ? await this.refresh(existing, roles, accessToken)
       : await this.provision(sub, roles, accessToken);
 
+    // T22 RN-04: quem tem role no Zitadel está liberado, mesmo que ainda não tenha sido aprovado.
+    // RN-19a: sem role, mas a pessoa voltou a entrar enquanto estava na lixeira — volta para a fila.
+    let accessStatus: AccessStatus = user.accessStatus;
+    if (roles.length > 0 && (accessStatus === 'pending' || accessStatus === 'trashed')) {
+      await this.users.autoApproveByRole(user.id);
+      this.logger.log(`Acesso liberado automaticamente por role do Zitadel (user ${user.id})`);
+      accessStatus = 'approved';
+    } else if (accessStatus === 'trashed') {
+      await this.users.restoreAccess(user.id);
+      this.logger.log(`Pedido de acesso voltou para a fila por novo login (user ${user.id})`);
+      accessStatus = 'pending';
+    }
+
     const value: CachedUser = {
       id: user.id,
       zitadelSub: sub,
@@ -61,6 +75,7 @@ export class JitService {
       companyId: user.companyId,
       departmentId: user.departmentId,
       groupIds: user.groupMemberships.map((m) => m.groupId),
+      accessStatus,
     };
     this.cache.set(sub, value);
     return value;
@@ -84,14 +99,8 @@ export class JitService {
     const data = { zitadelSub: sub, email: profile.email, name: profile.name, roles };
     const byEmail = await this.users.findByEmail(profile.email);
 
-    if (byEmail?.isExternal) {
-      this.logger.warn(`Login de usuário marcado como terceiro bloqueado (user ${byEmail.id})`);
-      throw new ApiException(
-        HttpStatus.FORBIDDEN,
-        ApiErrorCode.EXTERNAL_USER_CANNOT_LOGIN,
-        'Este e-mail está cadastrado como terceiro e não pode acessar o portal. Procure o suporte.',
-      );
-    }
+    // T22 RN-09: terceiro pode logar e entra na fila de liberação como qualquer pessoa
+    // (o access_status já existente é preservado por linkToLogin).
     if (byEmail?.zitadelSub) {
       this.logger.error(
         `E-mail já vinculado a outro sub do Zitadel (user ${byEmail.id}); conta duplicada no Zitadel?`,

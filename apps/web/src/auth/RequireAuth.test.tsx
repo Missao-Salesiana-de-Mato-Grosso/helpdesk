@@ -21,6 +21,7 @@ const ME: MeResponse = {
   department: { id: 'd1', name: 'Secretaria' },
   groups: [],
   needsOnboarding: false,
+  accessStatus: 'approved',
 };
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -51,6 +52,22 @@ function renderApp(route = '/') {
         element={
           <RequireAuth>
             <p>tela de primeiro acesso</p>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/aguardando-liberacao"
+        element={
+          <RequireAuth>
+            <p>tela de espera</p>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/acesso-nao-liberado"
+        element={
+          <RequireAuth>
+            <p>tela de acesso recusado</p>
           </RequireAuth>
         }
       />
@@ -94,6 +111,32 @@ describe('RequireAuth', () => {
     mockedUseAuth.mockReturnValue(fakeAuth());
     fetchMock.mockImplementation(async () =>
       jsonResponse(200, { ...ME, company: null, needsOnboarding: true }),
+    );
+    renderApp();
+    expect(await screen.findByText('tela de primeiro acesso')).toBeInTheDocument();
+  });
+
+  // T22
+  it('accessStatus pending → vai para /aguardando-liberacao', async () => {
+    mockedUseAuth.mockReturnValue(fakeAuth());
+    fetchMock.mockImplementation(async () => jsonResponse(200, { ...ME, accessStatus: 'pending' }));
+    renderApp();
+    expect(await screen.findByText('tela de espera')).toBeInTheDocument();
+  });
+
+  it('accessStatus rejected → vai para /acesso-nao-liberado', async () => {
+    mockedUseAuth.mockReturnValue(fakeAuth());
+    fetchMock.mockImplementation(async () =>
+      jsonResponse(200, { ...ME, accessStatus: 'rejected' }),
+    );
+    renderApp();
+    expect(await screen.findByText('tela de acesso recusado')).toBeInTheDocument();
+  });
+
+  it('needsOnboarding tem prioridade sobre accessStatus pending (RN-05)', async () => {
+    mockedUseAuth.mockReturnValue(fakeAuth());
+    fetchMock.mockImplementation(async () =>
+      jsonResponse(200, { ...ME, company: null, needsOnboarding: true, accessStatus: 'pending' }),
     );
     renderApp();
     expect(await screen.findByText('tela de primeiro acesso')).toBeInTheDocument();

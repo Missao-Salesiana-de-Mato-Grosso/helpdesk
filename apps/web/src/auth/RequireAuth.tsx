@@ -9,6 +9,10 @@ import { StatusScreen } from '../components/StatusScreen.tsx';
 import { useMe } from './useMe.ts';
 
 export const ONBOARDING_PATH = '/primeiro-acesso';
+/** T22: tela de espera enquanto `accessStatus === 'pending'`. */
+export const WAITING_APPROVAL_PATH = '/aguardando-liberacao';
+/** T22: tela fixa para `accessStatus === 'rejected'`. */
+export const ACCESS_REJECTED_PATH = '/acesso-nao-liberado';
 
 const REAUTH_KEY = 'helpdesk:reauth-at';
 const REAUTH_WINDOW_MS = 30_000;
@@ -120,8 +124,19 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     );
   }
 
-  if (me.data.needsOnboarding && location.pathname !== ONBOARDING_PATH) {
-    return <Navigate to={ONBOARDING_PATH} replace />;
+  // T22 RN-05: onboarding primeiro — um pedido pending ainda precisa informar unidade/departamento.
+  // `else if` de propósito: enquanto needsOnboarding for true, o bloco de pending/rejected nem
+  // avalia, senão as duas rotas se redirecionariam uma pra outra em loop.
+  if (me.data.needsOnboarding) {
+    if (location.pathname !== ONBOARDING_PATH) return <Navigate to={ONBOARDING_PATH} replace />;
+  } else if (me.data.accessStatus === 'pending') {
+    if (location.pathname !== WAITING_APPROVAL_PATH) {
+      return <Navigate to={WAITING_APPROVAL_PATH} replace />;
+    }
+  } else if (me.data.accessStatus === 'rejected') {
+    if (location.pathname !== ACCESS_REJECTED_PATH) {
+      return <Navigate to={ACCESS_REJECTED_PATH} replace />;
+    }
   }
 
   return <>{children}</>;

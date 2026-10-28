@@ -67,7 +67,7 @@ describe('auth e JIT (spec T04–T05, e2e)', () => {
     return { company, department };
   }
 
-  /** Usuário já vinculado e com onboarding feito. */
+  /** Usuário já vinculado, com onboarding feito e liberado (T22) — já fazia parte do sistema. */
   async function onboardedUser(sub = 'sub-1', extra: Record<string, unknown> = {}) {
     const { company, department } = await reference();
     const user = await t.prisma.user.create({
@@ -79,6 +79,7 @@ describe('auth e JIT (spec T04–T05, e2e)', () => {
         departmentId: department.id,
         lastLoginAt: new Date(),
         profileSyncedAt: new Date(),
+        accessStatus: 'approved',
         ...extra,
       },
     });
@@ -300,17 +301,9 @@ describe('auth e JIT (spec T04–T05, e2e)', () => {
       );
     });
 
-    it('CT-18 mesmo e-mail com is_external = true → 403 EXTERNAL_USER_CANNOT_LOGIN, nada alterado', async () => {
-      const existing = await t.prisma.user.create({
-        data: { email: PROFILE.email, name: 'Terceiro', isExternal: true },
-      });
-      const res = await get('/api/me', await t.tokens.sign()).expect(403);
-      expect(res.body.code).toBe('EXTERNAL_USER_CANNOT_LOGIN');
-      expect(await t.prisma.user.findUniqueOrThrow({ where: { id: existing.id } })).toEqual(
-        existing,
-      );
-      expect(await t.prisma.user.count()).toBe(1);
-    });
+    // CT-18 (bloquear terceiro no login) foi substituído pelo CT-07 da spec T22
+    // (docs/specs/T22-onboarding-liberacao.md, access-requests.e2e-spec.ts): RN-09 removeu esse
+    // bloqueio — terceiro pode logar e entra na fila de liberação como qualquer pessoa.
 
     it('CT-19 mesmo e-mail com outro zitadel_sub → 403 WRONG_ORGANIZATION', async () => {
       await t.prisma.user.create({
