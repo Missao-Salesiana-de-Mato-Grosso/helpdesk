@@ -11,11 +11,11 @@ import { JWKS_PROVIDER, USERINFO_CLIENT } from './auth.tokens.js';
 import { JitService } from './jit.service.js';
 import { MeController } from './me.controller.js';
 import { TokenVerifierService } from './token-verifier.service.js';
-import { UserCache } from './user-cache.js';
+import { UserCacheModule } from './user-cache.module.js';
 import { HttpUserinfoClient } from './userinfo.client.js';
 
 @Module({
-  imports: [UsersModule, CompaniesModule, DepartmentsModule],
+  imports: [UsersModule, CompaniesModule, DepartmentsModule, UserCacheModule],
   controllers: [MeController],
   providers: [
     {
@@ -38,10 +38,8 @@ import { HttpUserinfoClient } from './userinfo.client.js';
         new HttpUserinfoClient(config.get('ZITADEL_ISSUER', { infer: true })),
     },
     TokenVerifierService,
-    UserCache,
     JitService,
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
-  exports: [UserCache],
 })
 export class AuthModule {}
