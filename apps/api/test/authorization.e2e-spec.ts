@@ -303,8 +303,10 @@ function registeredRoutes(app: INestApplication): string[] {
   const express = app.getHttpAdapter().getInstance() as {
     router: { stack: { route?: { path: string; methods: Record<string, boolean> } }[] };
   };
+  // Middlewares de módulo (ex.: o log do nestjs-pino) entram como `/api{/*splat}` em todos os
+  // métodos; nenhum controller usa curinga, então rotas com `*` ficam de fora.
   return express.router.stack.flatMap(({ route }) =>
-    route
+    route && !route.path.includes('*')
       ? Object.keys(route.methods)
           .filter((method) => method !== '_all')
           .map((method) => `${method.toUpperCase()} ${route.path}`)
