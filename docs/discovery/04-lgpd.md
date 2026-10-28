@@ -4,14 +4,15 @@
 
 ## 4.1 Dados pessoais tratados
 
-| Dado                                                        | Titular                                   | Origem                           | Finalidade                                 |
-| ----------------------------------------------------------- | ----------------------------------------- | -------------------------------- | ------------------------------------------ |
-| Nome, e-mail, identificador do Zitadel                      | Colaboradores                             | Zitadel (JIT)                    | Identificação e comunicação no atendimento |
-| Empresa (escola/obra) e departamento                        | Colaboradores                             | Informado no 1º acesso           | Roteamento, filtros e relatórios           |
-| Conteúdo dos tickets e anexos                               | Colaboradores e **terceiros mencionados** | Digitado ou enviado pelo usuário | Prestação do suporte                       |
-| Nome e e-mail de terceiros (externos)                       | Terceiros                                 | E-mail recebido                  | Atendimento do chamado aberto por eles     |
-| E-mails recebidos (cabeçalhos, corpo, anexos, `.eml` bruto) | Colaboradores e terceiros                 | Caixa `suporte@`                 | Prestação do suporte e rastreabilidade     |
-| IP e timestamps de ações                                    | Colaboradores                             | Gerado pelo sistema              | Segurança e auditoria (art. 46)            |
+| Dado                                                                               | Titular                                   | Origem                           | Finalidade                                 |
+| ---------------------------------------------------------------------------------- | ----------------------------------------- | -------------------------------- | ------------------------------------------ |
+| Nome, e-mail, identificador do Zitadel                                             | Colaboradores                             | Zitadel (JIT)                    | Identificação e comunicação no atendimento |
+| Empresa (escola/obra) e departamento                                               | Colaboradores                             | Informado no 1º acesso           | Roteamento, filtros e relatórios           |
+| Conteúdo dos tickets e anexos                                                      | Colaboradores e **terceiros mencionados** | Digitado ou enviado pelo usuário | Prestação do suporte                       |
+| Nome e e-mail de terceiros (externos)                                              | Terceiros                                 | E-mail recebido                  | Atendimento do chamado aberto por eles     |
+| E-mails recebidos (cabeçalhos, corpo, anexos, `.eml` bruto)                        | Colaboradores e terceiros                 | Caixa `suporte@`                 | Prestação do suporte e rastreabilidade     |
+| IP e timestamps de ações                                                           | Colaboradores                             | Gerado pelo sistema              | Segurança e auditoria (art. 46)            |
+| Pedido de acesso ao portal (nome, e-mail, unidade/departamento sugeridos, decisão) | Colaboradores e terceiros                 | Informado no 1º acesso (T22)     | Avaliar e liberar o acesso ao portal       |
 
 ⚠️ **Ponto de atenção específico da Missão:** as obras salesianas atendem crianças e adolescentes (escolas e projetos sociais). Tickets de suporte (ex.: "erro ao lançar a nota do aluno X", com print) podem conter **dados de menores** (art. 14) e eventualmente **dados sensíveis** (saúde, religião – art. 5º, II). O help desk não tem essa finalidade, mas vai recebê-los por acidente. Mitigações:
 
@@ -25,6 +26,7 @@
 - **Retenção:** conforme definido, **segue o padrão da lei**. A LGPD não fixa prazo: os dados são mantidos enquanto necessários à finalidade, e o tratamento termina quando ela é alcançada (arts. 15 e 16). A conservação é permitida para cumprimento de obrigação legal e para exercício de direitos.
   - **Implementação no MVP:** nenhuma exclusão automática. Registre no ROPA que o histórico de tickets é mantido como base de conhecimento operacional e auditoria.
   - **Fase 2:** se o DPO definir um prazo, um job de anonimização de tickets fechados há mais de N anos.
+- **Pedido de acesso ao portal (T22, RN-19 a RN-20):** pedido `pending` sem decisão há 30 dias vai para a lixeira por um cron (soft-delete: só marca `trashed_at`, nada é apagado). **A lixeira não tem prazo automático** — nada sai dela sozinho. A exclusão definitiva é sempre manual, só pelo papel `admin` (um item ou a lixeira inteira), e **atende o pedido de exclusão do titular** (art. 18) para quem nunca chegou a ser aprovado. Pula quem, entretanto, ganhou ticket pelo canal de e-mail (mantém o histórico de atendimento). ⚠️ **Esta regra ainda não foi validada pelo DPO** — ver a nota no topo deste documento.
 - **Operadores e suboperadores:** a Magalu Cloud (infraestrutura, dados em repouso no Brasil) e o Google (login federado e envio das notificações pelo Gmail). As notificações contêm trechos dos tickets e transitam pela infraestrutura do Google, que já é o provedor de e-mail da Missão, então a transferência internacional (art. 33) tende a já estar coberta pelo enquadramento atual do Workspace. Confirme com o DPO. Como o e-mail é o canal principal, o corpo das respostas **vai** no e-mail, e o `.eml` bruto de cada mensagem recebida fica no Object Storage pelo mesmo tempo que o ticket. Oriente os agentes a não colocar dados sensíveis nas respostas quando não for indispensável.
 
 ## 4.3 Direitos do titular (art. 18)
