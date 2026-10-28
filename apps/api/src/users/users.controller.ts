@@ -43,6 +43,7 @@ export class UsersController {
   }
 
   @Post(':id/access/approve')
+  @HttpCode(HttpStatus.OK)
   async approve(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(approveAccessSchema)) body: ApproveAccessInput,
@@ -54,6 +55,7 @@ export class UsersController {
   }
 
   @Post(':id/access/reject')
+  @HttpCode(HttpStatus.OK)
   async reject(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(rejectAccessSchema)) body: RejectAccessInput,
@@ -65,6 +67,7 @@ export class UsersController {
   }
 
   @Post(':id/access/restore')
+  @HttpCode(HttpStatus.OK)
   async restore(@Param('id') id: string): Promise<UserProfile> {
     const profile = await this.users.restoreAccess(id);
     this.invalidate(profile);

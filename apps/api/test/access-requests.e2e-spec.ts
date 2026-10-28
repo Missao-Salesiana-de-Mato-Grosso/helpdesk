@@ -46,16 +46,28 @@ describe('liberação de acesso (spec T22, e2e)', () => {
     });
   }
 
+  // Idempotente: alguns testes chamam mais de uma vez (ex.: aprovar e depois recusar outro pedido).
   async function adminToken() {
-    await t.prisma.user.create({
-      data: {
-        zitadelSub: 'sub-admin',
-        email: 'admin@missaosalesiana.org.br',
-        name: 'Admin',
-        roles: ['admin'],
-        accessStatus: 'approved',
-      },
-    });
+    const existing = await t.prisma.user.findUnique({ where: { zitadelSub: 'sub-admin' } });
+    if (!existing) {
+      // Unidade/departamento próprios do fixture: `reference()` é chamado por vários testes para
+      // o próprio cenário, e Company.name é único — não dá para reaproveitar o mesmo nome aqui.
+      const company = await t.prisma.company.create({ data: { name: 'Sede (admin, fixture)' } });
+      const department = await t.prisma.department.create({
+        data: { name: 'TI (admin, fixture)' },
+      });
+      await t.prisma.user.create({
+        data: {
+          zitadelSub: 'sub-admin',
+          email: 'admin@missaosalesiana.org.br',
+          name: 'Admin',
+          roles: ['admin'],
+          accessStatus: 'approved',
+          companyId: company.id,
+          departmentId: department.id,
+        },
+      });
+    }
     return t.tokens.sign({ sub: 'sub-admin', roles: ['admin'] });
   }
 
@@ -67,11 +79,23 @@ describe('liberação de acesso (spec T22, e2e)', () => {
     });
 
     it('CT-03 pending em /api/tickets → 403 ACCESS_PENDING', async () => {
-      const res = await get('/api/me', await t.tokens.sign({ sub: 'novo' })).expect(200);
+      // Unidade e departamento já preenchidos: isola o bloqueio de acesso do de onboarding
+      // (RN-05 dá prioridade ao onboarding — coberto em auth.e2e-spec.ts).
+      const { company, department } = await reference();
+      await t.prisma.user.create({
+        data: {
+          zitadelSub: 'novo',
+          email: PROFILE.email,
+          name: PROFILE.name,
+          companyId: company.id,
+          departmentId: department.id,
+          accessStatus: 'pending',
+        },
+      });
+      const token = await t.tokens.sign({ sub: 'novo' });
+      const res = await get('/api/me', token).expect(200);
       expect(res.body.accessStatus).toBe('pending');
-      const ticketsRes = await get('/api/tickets', await t.tokens.sign({ sub: 'novo' })).expect(
-        403,
-      );
+      const ticketsRes = await get('/api/tickets', token).expect(403);
       expect(ticketsRes.body.code).toBe('ACCESS_PENDING');
     });
 
@@ -83,18 +107,22 @@ describe('liberação de acesso (spec T22, e2e)', () => {
     });
 
     it('CT-05 rejected → 403 ACCESS_REJECTED; GET /me 200 com accessStatus=rejected', async () => {
+      // GET /companies é isento mesmo para rejected (RN-06): usa /tickets para testar o bloqueio.
+      const { company, department } = await reference();
       await t.prisma.user.create({
         data: {
           zitadelSub: 'sub-r',
           email: PROFILE.email,
           name: 'Maria',
+          companyId: company.id,
+          departmentId: department.id,
           accessStatus: 'rejected',
         },
       });
       const token = await t.tokens.sign({ sub: 'sub-r' });
       const me = await get('/api/me', token).expect(200);
       expect(me.body.accessStatus).toBe('rejected');
-      const res = await get('/api/companies', token).expect(403);
+      const res = await get('/api/tickets', token).expect(403);
       expect(res.body.code).toBe('ACCESS_REJECTED');
     });
 

@@ -413,8 +413,11 @@ describe('auth e JIT (spec T04–T05, e2e)', () => {
     });
 
     it('CT-28 PATCH /api/me com unidade e departamento ativos → 200 e libera o resto da API', async () => {
+      // T22: só o onboarding não libera mais quem nunca teve role (fica pending até um admin
+      // aprovar) — aqui o token já traz "agente", que a RN-04 aprova sozinho, para isolar o que
+      // esta CT testa (o gate de onboarding, não o de liberação de acesso).
       const { company, department } = await reference();
-      const token = await t.tokens.sign();
+      const token = await t.tokens.sign({ roles: ['agente'] });
       await get('/api/tickets', token).expect(403);
       const res = await http()
         .patch('/api/me')
@@ -486,6 +489,7 @@ describe('auth e JIT (spec T04–T05, e2e)', () => {
           { id: g1.id, name: 'Suporte TI' },
         ],
         needsOnboarding: false,
+        accessStatus: 'approved',
       });
     });
   });

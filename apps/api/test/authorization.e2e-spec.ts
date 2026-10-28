@@ -233,6 +233,9 @@ const MATRIX: RouteCase[] = [
     method: 'post',
     path: (ref) => `/api/users/${ref.pendingUserId}/access/reject`,
     label: '/api/users/:id/access/reject',
+    // Corpo vazio explícito: rejectAccessSchema aceita {} (note é opcional), mas sem corpo
+    // nenhum o ZodValidationPipe recebe `undefined` e falha com 422 antes de chegar na role.
+    body: () => ({}),
     expected: ADMIN_OR_SUPERVISOR,
   },
 ];
