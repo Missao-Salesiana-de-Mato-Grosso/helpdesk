@@ -21,6 +21,9 @@ export default defineConfig({
       NODE_ENV: 'test',
       DATABASE_URL: TEST_DATABASE_URL,
       LOG_LEVEL: 'warn',
+      // T18: limite alto para as suítes; o teste de hardening troca as opções do throttler.
+      THROTTLE_TTL_SECONDS: '60',
+      THROTTLE_LIMIT: '100000',
       // test/setup/auth.ts assina tokens com este issuer e projeto; o Zitadel nunca é chamado.
       ZITADEL_ISSUER: 'http://zitadel.test',
       ZITADEL_PROJECT_ID: 'test-project',

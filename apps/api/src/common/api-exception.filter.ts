@@ -14,9 +14,11 @@ const CODE_BY_STATUS: Partial<Record<number, ApiErrorCode>> = {
   [HttpStatus.BAD_REQUEST]: ApiErrorCode.VALIDATION_ERROR,
   [HttpStatus.NOT_FOUND]: ApiErrorCode.NOT_FOUND,
   [HttpStatus.UNPROCESSABLE_ENTITY]: ApiErrorCode.VALIDATION_ERROR,
+  [HttpStatus.TOO_MANY_REQUESTS]: ApiErrorCode.RATE_LIMITED,
 };
 
-// Toda resposta de erro sai no formato { statusCode, code, message }. Nada de stack no corpo.
+// Toda resposta de erro sai no formato { statusCode, code, message }. Nada de stack no corpo, em
+// nenhum ambiente: o stack de erro inesperado vai só para o log (T18).
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(ApiExceptionFilter.name);
