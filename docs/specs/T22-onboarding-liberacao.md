@@ -1,6 +1,6 @@
 # Spec T22 — Onboarding com liberação assistida
 
-> Status: rascunho · Tarefas: T22 · Depende de: T05 (JIT), T15 (admin de usuários), T16 (1º acesso), T14 (outbox) · Origem: ADR-011 · Revisada em: 25/10/2026 (respostas do §12 incorporadas)
+> Status: implementada (RN-01 a RN-20; RN-21 a RN-26 adiadas, ver §10) · Tarefas: T22 · Depende de: T05 (JIT), T15 (admin de usuários), T16 (1º acesso), T14 (outbox) · Origem: ADR-011 · Revisada em: 25/10/2026 (respostas do §12 incorporadas) · Implementada em: 28/10/2026, [PR #4](https://github.com/Missao-Salesiana-de-Mato-Grosso/helpdesk/pull/4) (aguardando revisão e merge)
 
 ## 1. Objetivo
 
@@ -152,14 +152,25 @@ Front (Vitest + Testing Library): redireciona `pending` para "Aguardando libera�
 
 ## 10. Decisões tomadas na implementação
 
-(preencher depois da sessão)
+- **RN-21 a RN-26 (cadastro próprio sem conta Google) ficaram fora desta rodada.** Dependem da P13 (SMTP do Zitadel de produção, ainda aberta em `ambientes.md`) e da própria RN-24 proibir ligar o registro antes disso. Login continua só por Google; "Solicitar cadastro" e os códigos `USE_GOOGLE_LOGIN`/CT-21/CT-22/CT-26 ficam para quando a P13 for resolvida.
+- **T15 (admin de usuários) não foi feito por completo** — só o necessário para esta spec: `UsersController` novo (antes não existia nenhum), com as rotas de liberação (§5). `GET /users?q=` e `PATCH /users/:id` genéricos (edição de unidade/departamento/`is_external`/`active` de alguém já aprovado) continuam pendentes.
+- **RN-14 (log da decisão) é só o log estruturado da aplicação** (pino), não uma tabela de auditoria nova — não existe hoje um `access_log` dedicado, e a spec não pede um.
+- **`EXTERNAL_USER_CANNOT_LOGIN` continua no enum `ApiErrorCode`**, só sem nenhum lugar que o lance (RN-09 removeu o único ponto). Não foi excluído do enum para não quebrar o front, que ainda o lista defensivamente em `NO_ACCESS_CODES` (`RequireAuth.tsx`).
+- **`UserCache` foi extraído para um módulo próprio** (`auth/user-cache.module.ts`): o `UsersController` novo precisa dele para invalidar o cache (RN-15), e isso criava um ciclo `AuthModule` ↔ `UsersModule` (o primeiro já importa o segundo pelo `UsersService`). Só apareceu no CI (a suíte de testes sobe o `AppModule` inteiro; localmente não havia Postgres para rodar os e2e e pegar isso antes).
+- **`approve`/`reject`/`restore` respondem 200 explicitamente** (`@HttpCode(HttpStatus.OK)`): o padrão do NestJS para `@Post()` é 201, que não é o que o contrato (§5) pede.
+- **Fila de liberação sem contador no menu** (a parte do RN-10 sobre "o menu mostra a contagem"): o mecanismo de contador do menu (`NavItem.counter`) é tipado para `TicketCounters`; dar um contador próprio à fila de liberação exigiria estender esse tipo ou um badge ad-hoc em `AppLayout.tsx`, deixado para uma próxima sessão por não ser essencial à liberação em si.
+- **CT-13 e CT-17 não ganharam teste próprio**: CT-13 é coberta pela matriz de permissões (`authorization.e2e-spec.ts`, linhas `access/approve` e `access/reject` como solicitante/agente); CT-17 é um ajuste em `inbound-email.e2e-spec.ts` (usuário criado pelo e-mail já nasce `pending` pelo default do schema), não um teste novo.
 
 ## 11. Impactos em documentos
 
-- `CLAUDE.md`: a regra "usuários com `is_external = true` nunca fazem login" passa a "terceiros entram no portal só depois de liberados"; acrescentar a liberação nas regras de segurança.
-- `01-escopo.md`: fluxos 2 e a linha de terceiros; matriz de permissões com o papel "pendente".
-- `04-lgpd.md`: RN-19, RN-19c e RN-20.
-- `ambientes.md`: P12 resolvida quando a T22 estiver em produção.
+Todos atualizados em 28/10/2026 (PR #4):
+
+- `CLAUDE.md`: a regra "usuários com `is_external = true` nunca fazem login" passa a "terceiros também podem logar"; liberação de acesso acrescentada às regras de segurança.
+- `01-escopo.md`: resumo do MVP, linha de terceiros, regras do canal de e-mail e matriz de permissões, com o papel "Pendente".
+- `04-lgpd.md`: nova finalidade "pedido de acesso ao portal" e a regra da lixeira (RN-19, RN-19c, RN-20) — sinalizado como ainda não validado pelo DPO.
+- `ambientes.md`: P12 **não** marcada como resolvida ainda — só quando o PR #4 for mesclado e implantado em produção.
+- `02-identidade-zitadel.md` (não estava nesta lista, mas ficou contraditório): nota em §2.1 sobre "terceiros não entram no Zitadel" e "app Internal", que não valem mais desde o ADR-011/T22.
+- `docs/specs/README.md`: status da linha do T22.
 
 ## 12. Perguntas em aberto
 
