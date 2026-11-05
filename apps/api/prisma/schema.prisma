@@ -92,21 +92,26 @@ enum UserAccessStatus {
 
 /// Colaboradores (com login pelo Zitadel), contatos criados por e-mail e terceiros.
 model User {
-  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// `sub` do Zitadel. Nulo para quem nunca fez login (criado pelo canal de e-mail) e para terceiros.
-  zitadelSub      String?   @unique @map("zitadel_sub")
-  email           String    @unique @db.Citext
-  name            String
+  zitadelSub        String?          @unique @map("zitadel_sub")
+  email             String           @unique @db.Citext
+  name              String
   /// Unidade (escola/obra). Nulo até o 1º acesso ou a triagem de um ticket vindo por e-mail.
-  companyId       String?   @map("company_id") @db.Uuid
-  departmentId    String?   @map("department_id") @db.Uuid
+  companyId         String?          @map("company_id") @db.Uuid
+  departmentId      String?          @map("department_id") @db.Uuid
   /// Terceiro: só interage por e-mail e nunca faz login.
-  isExternal      Boolean   @default(false) @map("is_external")
-  /// Cache das roles do token (admin, supervisor, agente). Vazio = solicitante.
-  roles           String[]  @default([])
-  active          Boolean   @default(true)
-  lastLoginAt     DateTime? @map("last_login_at") @db.Timestamptz(6)
-  profileSyncedAt DateTime? @map("profile_synced_at") @db.Timestamptz(6)
+  isExternal        Boolean          @default(false) @map("is_external")
+  /// Papéis efetivos = `zitadel_roles` ∪ `app_roles` (ADR-012). Vazio = solicitante. Mantido pelo
+  /// UsersService a cada mudança de um dos dois; é o que as consultas por papel usam.
+  roles             String[]         @default([])
+  /// Cache das roles do token do Zitadel (admin, supervisor, agente), atualizado a cada login.
+  zitadelRoles      String[]         @default([]) @map("zitadel_roles")
+  /// Concedidas pela tela de usuários do help desk (T24). Não somem quando o token muda.
+  appRoles          String[]         @default([]) @map("app_roles")
+  active            Boolean          @default(true)
+  lastLoginAt       DateTime?        @map("last_login_at") @db.Timestamptz(6)
+  profileSyncedAt   DateTime?        @map("profile_synced_at") @db.Timestamptz(6)
   /// Liberação de acesso ao portal (T22). `approved` para quem já existia antes da T22 (migração).
   accessStatus      UserAccessStatus @default(pending) @map("access_status")
   /// Quando entrou na fila (1ª vez com unidade e departamento preenchidos). Nulo até lá.
@@ -117,8 +122,8 @@ model User {
   accessNote        String?          @map("access_note")
   /// Soft-delete da lixeira (RN-19): só pedidos `pending` sem decisão há 30 dias.
   trashedAt         DateTime?        @map("trashed_at") @db.Timestamptz(6)
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   company          Company?        @relation(fields: [companyId], references: [id])
   department       Department?     @relation(fields: [departmentId], references: [id])
@@ -254,16 +259,16 @@ model Ticket {
 
 /// Mensagem da conversa: resposta pública ou nota interna.
 model TicketMessage {
-  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  ticketId  String      @map("ticket_id") @db.Uuid
-  authorId  String      @map("author_id") @db.Uuid
-  kind      MessageKind
-  via       MessageVia
+  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId   String      @map("ticket_id") @db.Uuid
+  authorId   String      @map("author_id") @db.Uuid
+  kind       MessageKind
+  via        MessageVia
   /// HTML já sanitizado (sanitize-html, allowlist em docs/specs/T08-T10-tickets-core.md §7).
-  bodyHtml  String      @map("body_html")
+  bodyHtml   String      @map("body_html")
   /// Trecho citado de um e-mail de resposta. A UI mostra recolhido.
-  quotedHtml String?    @map("quoted_html")
-  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  quotedHtml String?     @map("quoted_html")
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
 
   ticket      Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   author      User         @relation(fields: [authorId], references: [id])

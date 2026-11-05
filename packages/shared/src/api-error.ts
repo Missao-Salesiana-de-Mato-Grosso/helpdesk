@@ -29,6 +29,7 @@ export const ApiErrorCode = {
   // administração de usuários e grupos (T15)
   CANNOT_DEACTIVATE_SELF: 'CANNOT_DEACTIVATE_SELF',
   NOT_AN_AGENT: 'NOT_AN_AGENT',
+  CANNOT_DEMOTE_SELF: 'CANNOT_DEMOTE_SELF',
 
   // tickets (spec T08–T10)
   VERSION_CONFLICT: 'VERSION_CONFLICT',

@@ -83,3 +83,16 @@ Formato curto: Contexto → Decisão → Consequências. O status de todos é **
 - **Fila de aprovação:** quem entra pela primeira vez, interno ou externo, cai numa tela "aguardando liberação". Admin ou supervisor vê a fila, define unidade e departamento e aprova ou recusa. Pedido sem resposta em 30 dias vai para a lixeira (soft-delete, recuperável). Até a aprovação, a API recusa tudo além do próprio perfil e do status.
 - **Transição (decidida em 25/10/2026):** a tela de consentimento já está como **Externo**. Até a T22 entrar em produção, **qualquer conta Google entra como solicitante**, sem liberação. Risco aceito para avançar o go-live; os agentes acompanham a lista de usuários novos.
   **Consequências:** muda a regra "terceiros nunca fazem login" e o fluxo de 1º acesso. Spec: `docs/specs/T22-onboarding-liberacao.md` (estado do usuário, tela e rotas do admin, testes na matriz de permissões) e de revisão da LGPD (`04-lgpd.md`), porque passam a existir dados pessoais de pessoas de fora que se cadastram sozinhas.
+
+## ADR-012 — Papéis concedidos também pela tela do help desk, somados aos do Zitadel
+
+**Contexto:** conceder um papel exigia o console do Zitadel e só valia depois de a pessoa sair e entrar de novo (ADR-002, ADR-003). O dono do produto pediu, em 2026-11-05, para dar papéis (por exemplo, admin a um funcionário do suporte) pela própria tela de usuários.
+**Decisão:** substitui em parte a ADR-002.
+
+- Os papéis continuam os mesmos três (`admin`, `supervisor`, `agente`); não há permissão por funcionalidade (Fase 2).
+- O admin concede e retira papéis em **Administração → Usuários** (T24). Eles ficam no banco do help desk (`users.app_roles`).
+- **Papel efetivo = papéis do Zitadel ∪ papéis do app.** A API soma os do token aos do banco em cada requisição; a coluna `users.roles` guarda o efetivo para as consultas por papel, e `users.zitadel_roles` o cache do token.
+- Quem tem papel no Zitadel continua com ele: pelo app não se retira um papel do Zitadel. É a garantia de que o admin nunca fica trancado fora do sistema (como a RN-04 da T22). O admin também não pode retirar o próprio papel de admin pelo app.
+- A mudança vale na hora: o cache do usuário é invalidado. Conceder papel a quem está aguardando liberação libera o acesso.
+
+**Consequências:** o Zitadel deixa de ser a fonte única de quem é agente; a lista completa está na tela de usuários do help desk. O papel do app não aparece no token, então nada fora da API (o próprio Zitadel, outro sistema que leia o token) o enxerga. O papel concedido no Zitadel continua funcionando como antes, para emergências e para o primeiro admin.

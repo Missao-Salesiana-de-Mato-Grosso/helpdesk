@@ -74,6 +74,7 @@ export async function createTicketsFixture(t: TestApp): Promise<TicketsFixture> 
         email: `${key}@missaosalesiana.org.br`,
         name: key,
         roles: ROLES[key],
+        zitadelRoles: ROLES[key],
         isExternal: external,
         zitadelSub: external ? null : `sub-${key}`,
         companyId: companyOf[key],

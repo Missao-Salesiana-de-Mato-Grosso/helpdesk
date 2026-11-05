@@ -34,7 +34,18 @@ describe('updateUserSchema', () => {
     expect(updateUserSchema.safeParse({}).success).toBe(false);
   });
 
-  it('rejects fields that are not editable here (roles come from Zitadel)', () => {
+  it('accepts appRoles, removing repeats and keeping the canonical order', () => {
+    expect(updateUserSchema.parse({ appRoles: ['agente', 'admin', 'agente'] })).toEqual({
+      appRoles: ['admin', 'agente'],
+    });
+    expect(updateUserSchema.parse({ appRoles: [] })).toEqual({ appRoles: [] });
+  });
+
+  it('rejects unknown roles in appRoles', () => {
+    expect(updateUserSchema.safeParse({ appRoles: ['root'] }).success).toBe(false);
+  });
+
+  it('rejects fields that are not editable here (Zitadel roles and the effective list)', () => {
     expect(updateUserSchema.safeParse({ roles: ['admin'] }).success).toBe(false);
     expect(updateUserSchema.safeParse({ email: 'x@y.z' }).success).toBe(false);
   });

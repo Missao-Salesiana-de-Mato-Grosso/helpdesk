@@ -13,7 +13,7 @@ import { useState } from 'react';
 import { useGroupMembers, useGroups } from '../tickets/queries.ts';
 import { useReplaceGroupMembers, useUsers } from './queries.ts';
 
-/** T15: membros de cada grupo. Só agentes ativos (papel de atendimento no Zitadel) aparecem. */
+/** T15: membros de cada grupo. Só agentes ativos (com papel de atendimento) aparecem. */
 export function GroupsPage() {
   const groups = useGroups();
   const [groupId, setGroupId] = useState<string | null>(null);
@@ -95,7 +95,7 @@ function MembersForm({
       />
       {options.length === 0 && (
         <Text size="sm" c="dimmed">
-          Nenhum agente ativo. O papel de agente é dado no Zitadel (veja o runbook, §4).
+          Nenhum agente ativo. O papel de agente se dá em Administração → Usuários (runbook, §4).
         </Text>
       )}
       {replace.error && (

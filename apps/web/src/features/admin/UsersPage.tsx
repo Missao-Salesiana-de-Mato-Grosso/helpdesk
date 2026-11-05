@@ -15,7 +15,13 @@ import {
   Title,
 } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
-import type { NamedRef, UpdateUserInput, UserSummary } from '@helpdesk/shared';
+import {
+  ROLES,
+  type NamedRef,
+  type Role,
+  type UpdateUserInput,
+  type UserSummary,
+} from '@helpdesk/shared';
 import { useState } from 'react';
 import { useMe } from '../../auth/useMe.ts';
 import { useCompanies } from '../tickets/queries.ts';
@@ -29,10 +35,19 @@ const ROLE_LABELS: Record<string, string> = {
   agente: 'Agente',
 };
 
+/** Ordem de exibição no modal: do menor para o maior acesso. */
+const ROLE_OPTIONS: Role[] = ['agente', 'supervisor', 'admin'];
+
+const sameRoles = (a: readonly Role[], b: readonly Role[]) =>
+  a.length === b.length && a.every((role) => b.includes(role));
+
 const toOptions = (items: NamedRef[] | undefined) =>
   (items ?? []).map((item) => ({ value: item.id, label: item.name }));
 
-/** T15: busca e edição de usuários (unidade, departamento, terceiro, ativo). Papéis vêm do Zitadel. */
+/**
+ * T15/T24: busca e edição de usuários (unidade, departamento, terceiro, ativo e papéis). Os papéis
+ * concedidos aqui somam-se aos do Zitadel, que só mudam lá (ADR-012).
+ */
 export function UsersPage() {
   const [search, setSearch] = useState('');
   const [q] = useDebouncedValue(search.trim(), 300);
@@ -141,12 +156,17 @@ function EditUserModal({ user, onClose }: { user: UserSummary; onClose: () => vo
   const [departmentId, setDepartmentId] = useState<string | null>(user.department?.id ?? null);
   const [isExternal, setIsExternal] = useState(user.isExternal);
   const [active, setActive] = useState(user.active);
+  const [appRoles, setAppRoles] = useState<Role[]>(user.appRoles);
   const isSelf = me?.id === user.id;
+  const checkedRoles = ROLES.filter(
+    (role) => user.zitadelRoles.includes(role) || appRoles.includes(role),
+  );
 
   const save = () => {
     const data: UpdateUserInput = { isExternal, active };
     if (companyId) data.companyId = companyId;
     if (departmentId) data.departmentId = departmentId;
+    if (!sameRoles(appRoles, user.appRoles)) data.appRoles = appRoles;
     update.mutate({ id: user.id, data }, { onSuccess: onClose });
   };
 
@@ -154,7 +174,7 @@ function EditUserModal({ user, onClose }: { user: UserSummary; onClose: () => vo
     <Modal opened onClose={onClose} title={`Editar ${user.name}`}>
       <Stack>
         <Text size="sm" c="dimmed">
-          {user.email}. O papel (agente, supervisor, administrador) é definido no Zitadel.
+          {user.email}
         </Text>
         <Select
           label="Unidade"
@@ -170,6 +190,38 @@ function EditUserModal({ user, onClose }: { user: UserSummary; onClose: () => vo
           onChange={setDepartmentId}
           searchable
         />
+        <Checkbox.Group
+          label="Papéis"
+          description="Sem papel, a pessoa é solicitante. A mudança vale na hora."
+          value={checkedRoles}
+          onChange={(values) =>
+            setAppRoles(
+              ROLES.filter((role) => values.includes(role) && !user.zitadelRoles.includes(role)),
+            )
+          }
+        >
+          <Stack gap={6} mt={6}>
+            {ROLE_OPTIONS.map((role) => {
+              const fromZitadel = user.zitadelRoles.includes(role);
+              const ownAdmin = isSelf && role === 'admin';
+              return (
+                <Checkbox
+                  key={role}
+                  value={role}
+                  label={ROLE_LABELS[role]}
+                  disabled={fromZitadel || ownAdmin}
+                  description={
+                    fromZitadel
+                      ? 'Concedido no Zitadel: só pode ser retirado lá.'
+                      : ownAdmin
+                        ? 'Você não pode retirar o seu próprio papel de administrador.'
+                        : undefined
+                  }
+                />
+              );
+            })}
+          </Stack>
+        </Checkbox.Group>
         <Checkbox
           label="É terceiro (de fora da instituição)"
           checked={isExternal}

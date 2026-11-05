@@ -2,7 +2,7 @@ import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { ApiErrorCode, type AccessStatus, type Role } from '@helpdesk/shared';
 import { ApiException } from '../common/api-exception.js';
 import { Prisma } from '../generated/prisma/client.js';
-import { UsersService, type UserWithGroupIds } from '../users/users.service.js';
+import { effectiveRoles, UsersService, type UserWithGroupIds } from '../users/users.service.js';
 import { USERINFO_CLIENT, type UserinfoClient, type UserinfoProfile } from './auth.tokens.js';
 import { authUnavailable } from './token-verifier.service.js';
 import { UserCache } from './user-cache.js';
@@ -11,12 +11,16 @@ const HOUR_MS = 60 * 60 * 1000;
 const LAST_LOGIN_REFRESH_MS = HOUR_MS;
 const PROFILE_SYNC_MS = 24 * HOUR_MS;
 
-/** O que fica em cache por `sub`. As roles vêm sempre do token da requisição. */
+/**
+ * O que fica em cache por `sub`. As roles do Zitadel vêm sempre do token da requisição; as
+ * concedidas no app (T24) vêm daqui, e o guard soma as duas (ADR-012).
+ */
 export interface CachedUser {
   id: string;
   zitadelSub: string;
   email: string;
   name: string;
+  appRoles: Role[];
   active: boolean;
   companyId: string | null;
   departmentId: string | null;
@@ -53,10 +57,14 @@ export class JitService {
       ? await this.refresh(existing, roles, accessToken)
       : await this.provision(sub, roles, accessToken);
 
-    // T22 RN-04: quem tem role no Zitadel está liberado, mesmo que ainda não tenha sido aprovado.
+    // T22 RN-04: quem tem role (do Zitadel ou do app) está liberado, mesmo sem aprovação.
     // RN-19a: sem role, mas a pessoa voltou a entrar enquanto estava na lixeira — volta para a fila.
+    const appRoles = effectiveRoles([], user.appRoles);
     let accessStatus: AccessStatus = user.accessStatus;
-    if (roles.length > 0 && (accessStatus === 'pending' || accessStatus === 'trashed')) {
+    if (
+      effectiveRoles(roles, appRoles).length > 0 &&
+      (accessStatus === 'pending' || accessStatus === 'trashed')
+    ) {
       await this.users.autoApproveByRole(user.id);
       this.logger.log(`Acesso liberado automaticamente por role do Zitadel (user ${user.id})`);
       accessStatus = 'approved';
@@ -71,6 +79,7 @@ export class JitService {
       zitadelSub: sub,
       email: user.email,
       name: user.name,
+      appRoles,
       active: user.active,
       companyId: user.companyId,
       departmentId: user.departmentId,
@@ -126,7 +135,7 @@ export class JitService {
       this.logger.log(
         `Usuário criado pelo canal de e-mail vinculado ao login (user ${byEmail.id})`,
       );
-      return this.users.linkToLogin(byEmail.id, data, now);
+      return this.users.linkToLogin(byEmail, data, now);
     }
 
     try {
@@ -141,7 +150,7 @@ export class JitService {
     }
   }
 
-  /** RN-11: usuário já conhecido; sincroniza roles, último login e perfil. */
+  /** RN-11: usuário já conhecido; sincroniza roles do Zitadel (e as efetivas), último login e perfil. */
   private async refresh(
     user: UserWithGroupIds,
     roles: Role[],
@@ -150,7 +159,9 @@ export class JitService {
     const now = new Date();
     const updates: Parameters<UsersService['updateLoginState']>[1] = {};
 
-    if (!sameRoles(user.roles, roles)) updates.roles = roles;
+    const effective = effectiveRoles(roles, user.appRoles);
+    if (!sameRoles(user.zitadelRoles, roles)) updates.zitadelRoles = roles;
+    if (!sameRoles(user.roles, effective)) updates.roles = effective;
     if (!user.lastLoginAt || now.getTime() - user.lastLoginAt.getTime() > LAST_LOGIN_REFRESH_MS) {
       updates.lastLoginAt = now;
     }

@@ -7,6 +7,7 @@ export interface CurrentUser {
   zitadelSub: string;
   email: string;
   name: string;
+  /** Efetivas: as do token somadas às concedidas no app (ADR-012). */
   roles: Role[];
   /** roles ∩ {agente, supervisor, admin} ≠ ∅ */
   isAgent: boolean;

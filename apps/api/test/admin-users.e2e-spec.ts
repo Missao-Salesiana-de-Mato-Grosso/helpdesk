@@ -1,7 +1,9 @@
 // T15 (docs/discovery/05-plano-mvp.md): administração de usuários e membros de grupo.
+// T24 (ADR-012): papéis concedidos pela tela de usuários, somados aos do Zitadel.
 // A matriz de papéis dessas rotas está em authorization.e2e-spec.ts; aqui, o comportamento.
 import {
   ApiErrorCode,
+  type MeResponse,
   type NamedRef,
   type UserListResponse,
   type UserSummary,
@@ -24,6 +26,8 @@ const listOf = (res: Response) => res.body as UserListResponse;
 const userOf = (res: Response) => res.body as UserSummary;
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion
 const refsOf = (res: Response) => res.body as NamedRef[];
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion
+const meOf = (res: Response) => res.body as MeResponse;
 const names = (res: Response) => listOf(res).items.map((item) => item.name);
 
 describe('administração de usuários e grupos — T15 (e2e)', () => {
@@ -46,6 +50,8 @@ describe('administração de usuários e grupos — T15 (e2e)', () => {
 
   const http = () => request(t.app.getHttpServer());
   const as = async (user: Login) => `Bearer ${await f.token(user)}`;
+  /** Token sem roles para um `sub` qualquer. */
+  const bearer = async (sub: string) => `Bearer ${await t.tokens.sign({ sub })}`;
   const get = async (user: Login, path: string) =>
     http()
       .get(path)
@@ -165,6 +171,107 @@ describe('administração de usuários e grupos — T15 (e2e)', () => {
       const res = await get('ag1', '/api/tickets');
       expect(res.status).toBe(403);
       expect(res.body.code).toBe(ApiErrorCode.USER_INACTIVE);
+    });
+  });
+
+  describe('PATCH /api/users/:id — papéis concedidos no app (T24)', () => {
+    it('grants admin to an agent right away, without a new token', async () => {
+      expect((await get('ag1', '/api/users')).status).toBe(403);
+
+      const res = await patch('adm', `/api/users/${f.users.ag1}`, { appRoles: ['admin'] });
+      expect(res.status).toBe(200);
+      expect(userOf(res)).toMatchObject({
+        roles: ['admin', 'agente'],
+        zitadelRoles: ['agente'],
+        appRoles: ['admin'],
+      });
+
+      expect((await get('ag1', '/api/users')).status).toBe(200);
+      expect(meOf(await get('ag1', '/api/me')).roles).toEqual(['admin', 'agente']);
+    });
+
+    it('revoking an app role takes effect on the next request', async () => {
+      await patch('adm', `/api/users/${f.users.ag1}`, { appRoles: ['admin'] });
+      expect((await get('ag1', '/api/users')).status).toBe(200);
+      expect((await patch('adm', `/api/users/${f.users.ag1}`, { appRoles: [] })).status).toBe(200);
+      expect((await get('ag1', '/api/users')).status).toBe(403);
+    });
+
+    it('cannot remove a role that comes from Zitadel', async () => {
+      const res = await patch('adm', `/api/users/${f.users.ag2}`, { appRoles: [] });
+      expect(res.status).toBe(200);
+      expect(userOf(res)).toMatchObject({ roles: ['agente'], appRoles: [] });
+    });
+
+    it('turns a requester into an agent: listed as agent, joins a group, sees its tickets', async () => {
+      const ticket = await f.ticket({ requester: 'req2', group: 'G1' });
+      expect((await get('req1', `/api/tickets/${ticket.id}`)).status).toBe(404);
+
+      await patch('adm', `/api/users/${f.users.req1}`, { appRoles: ['agente'] });
+      expect(names(await get('adm', '/api/users?role=agent'))).toContain('req1');
+      const members = await put('adm', `/api/groups/${f.G1}/members`, {
+        userIds: [f.users.ag1, f.users.req1],
+      });
+      expect(members.status).toBe(200);
+      expect((await get('req1', `/api/tickets/${ticket.id}`)).status).toBe(200);
+    });
+
+    it('does not let the admin remove their own admin role', async () => {
+      await patch('adm', `/api/users/${f.users.ag1}`, { appRoles: ['admin'] });
+      const res = await patch('ag1', `/api/users/${f.users.ag1}`, { appRoles: [] });
+      expect(res.status).toBe(422);
+      expect(res.body.code).toBe(ApiErrorCode.CANNOT_DEMOTE_SELF);
+      expect(
+        (await patch('ag1', `/api/users/${f.users.ag1}`, { appRoles: ['admin', 'supervisor'] }))
+          .status,
+      ).toBe(200);
+      // O admin do Zitadel continua admin mesmo sem papel no app.
+      expect((await patch('adm', `/api/users/${f.users.adm}`, { appRoles: [] })).status).toBe(200);
+    });
+
+    it('granting a role to a pending user releases the access (RN-04)', async () => {
+      const pending = await t.prisma.user.create({
+        data: {
+          email: 'novo@missaosalesiana.org.br',
+          name: 'Novo',
+          zitadelSub: 'sub-novo',
+          companyId: f.U1,
+          departmentId: f.D1,
+          accessStatus: 'pending',
+          accessRequestedAt: new Date(),
+          lastLoginAt: new Date(),
+          profileSyncedAt: new Date(),
+        },
+      });
+      const denied = await http()
+        .get('/api/tickets')
+        .set('Authorization', await bearer('sub-novo'));
+      expect(denied.status).toBe(403);
+
+      const res = await patch('adm', `/api/users/${pending.id}`, { appRoles: ['agente'] });
+      expect(userOf(res).accessStatus).toBe('approved');
+      const saved = await t.prisma.user.findUniqueOrThrow({ where: { id: pending.id } });
+      expect(saved.accessDecidedById).toBe(f.users.adm);
+
+      const allowed = await http()
+        .get('/api/tickets')
+        .set('Authorization', await bearer('sub-novo'));
+      expect(allowed.status).toBe(200);
+    });
+
+    it('keeps app roles when the Zitadel roles in the token change', async () => {
+      await patch('adm', `/api/users/${f.users.ag1}`, { appRoles: ['supervisor'] });
+      // Token sem nenhuma role: o agente perdeu o papel no Zitadel.
+      const me = await http()
+        .get('/api/me')
+        .set('Authorization', await bearer('sub-ag1'));
+      expect(meOf(me).roles).toEqual(['supervisor']);
+      const saved = await t.prisma.user.findUniqueOrThrow({ where: { id: f.users.ag1 } });
+      expect(saved).toMatchObject({
+        zitadelRoles: [],
+        appRoles: ['supervisor'],
+        roles: ['supervisor'],
+      });
     });
   });
 
