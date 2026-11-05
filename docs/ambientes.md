@@ -127,7 +127,7 @@ done
 
 | #   | Etapa                                                                                                                                                             | Status                       |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| 1   | Caixa `suporte-teste@missaosalesiana.org.br`: usuário no Workspace, verificação em 2 etapas, senha de app                                                         | pendente                     |
+| 1   | Caixa `suporte-teste@missaosalesiana.org.br`: usuário no Workspace, verificação em 2 etapas, senha de app                                                         | feito 2026-11-05 (ver 2.3)   |
 | 2   | Cluster Kubernetes, DBaaS (bancos `zitadel` e `helpdesk`), registry, bucket de anexos (ver 2.1)                                                                   | feito 2026-10-25 (ver 2.0.1) |
 | 3   | DNS (`suporte.msmt.org.br`, `auth.msmt.org.br`), Traefik, cert-manager                                                                                            | feito 2026-10-25 (ver 2.0.1) |
 | 4   | Zitadel v4.19.5 via Helm (`deploy/zitadel`): org, projeto, roles, app SPA (JWT), branding. Mesmos passos do 1.4, com redirects de produção e sem Development Mode | pendente                     |
@@ -233,6 +233,8 @@ A preparar com as etapas 1 e 7. O código já está pronto (T14).
 
 A preparar com as etapas 1, 7 e 11. O código já está pronto (T21).
 
+- Caixa `suporte-teste@` criada em 2026-11-05 (etapa 1): verificação em 2 etapas e senha de app. Armadilha: a página de senhas de app responde "A configuração que você está procurando não está disponível para sua conta" enquanto a verificação em 2 etapas não estiver ativa **na própria conta** (ativar logado nela, em `myaccount.google.com/signinoptions/twosv`); a política do Admin Console precisa permitir que os usuários a ativem e não pode exigir só chave de segurança.
+- Na homologação, `MAIL_FROM` em `deploy/k8s/overlays/prod/config.env` é `Suporte MSMT (teste) <suporte-teste@…>` (PR #16): o remetente tem de ser a caixa autenticada, porque o Gmail reescreve o `From` de endereços que não são alias dela e a proteção contra loop (`own_address`) compara com `MAIL_FROM`. Volta para `suporte@` na virada (`docs/runbook.md` §7).
 - Até a virada, a API lê `suporte-teste@`. **Nunca** apontar para `suporte@` enquanto o Freshdesk estiver conectado (os dois criariam tickets; §5.4 do plano).
 - Valores no Secret do app: `MAILBOX_DRIVER=imap`, `MAILBOX_HOST=imap.gmail.com`, `MAILBOX_PORT=993`, `MAILBOX_USER`, `MAILBOX_PASSWORD` (a mesma senha de app do SMTP), `MAILBOX_START_SINCE` (na virada, a hora da desconexão do Freshdesk, com fuso: `2026-10-27T07:15:00-04:00`), `INTERNAL_EMAIL_DOMAINS=missaosalesiana.org.br`. Com `MAILBOX_DRIVER=imap`, a API não sobe sem usuário e senha.
 - O IMAP precisa estar habilitado na conta (Gmail → Configurações → Encaminhamento e POP/IMAP). Os rótulos `helpdesk/processado`, `helpdesk/descartado` e `helpdesk/erro` são criados pela API na primeira vez.

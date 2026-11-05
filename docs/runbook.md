@@ -138,7 +138,7 @@ Fonte: `docs/discovery/05-plano-mvp.md` §5.4 e `docs/ambientes.md` §2.3. Pré-
 
 **Virada:**
 
-1. **Preparar** (sem aplicar): em `../msmt-infra-automation/secrets/helpdesk-email.env` e nos secrets do GitHub, `SMTP_USER`/`MAILBOX_USER` = `suporte@missaosalesiana.org.br`, as senhas de app de `suporte@`, e `MAILBOX_START_SINCE` vazio por enquanto.
+1. **Preparar** (sem aplicar): em `../msmt-infra-automation/secrets/helpdesk-email.env` e nos secrets do GitHub, `SMTP_USER`/`MAILBOX_USER` = `suporte@missaosalesiana.org.br`, as senhas de app de `suporte@`, e `MAILBOX_START_SINCE` vazio por enquanto. Abrir (sem mesclar) um PR que volta `MAIL_FROM` para `Suporte MSMT <suporte@missaosalesiana.org.br>` em `deploy/k8s/overlays/prod/config.env`: na homologação ele é `suporte-teste@`, e o remetente precisa ser a caixa autenticada (o Gmail reescreve o `From` de outros endereços, e a proteção contra loop compara com `MAIL_FROM`).
 2. **Zerar o cursor da caixa de teste** (seção 10), senão a API usaria o UID de `suporte-teste@` na caixa nova:
 
    ```sql
@@ -146,14 +146,14 @@ Fonte: `docs/discovery/05-plano-mvp.md` §5.4 e `docs/ambientes.md` §2.3. Pré-
    ```
 
 3. **Desconectar a caixa no Freshdesk** (Admin → Canais → E-mail → `suporte@`; local exato: P7). **Anotar a hora**, com fuso: por exemplo `2026-11-03T07:15:00-04:00`.
-4. Preencher `MAILBOX_START_SINCE` com essa hora (arquivo e GitHub) e fazer o deploy (seção 1).
+4. Preencher `MAILBOX_START_SINCE` com essa hora (arquivo e GitHub) e mesclar o PR do `MAIL_FROM` do passo 1, o que dispara o deploy (seção 1).
 5. **Conferir:** no log, `Cursor inicial da INBOX: UID …`; enviar um e-mail de fora para `suporte@` → ticket criado, rótulo `helpdesk/processado` no Gmail (e o e-mail continua na INBOX), confirmação chega no mesmo thread com `[#n]`.
 6. Comunicar os colaboradores: nada muda, continuem escrevendo para `suporte@`; as respostas chegam com `[#número]`; o portal é `https://suporte.msmt.org.br`.
 7. **Acompanhar por 2 h** (P8): consultas da seção 8 e da seção 9 a cada 15–30 min.
 
 **Rollback da virada:**
 
-1. Voltar `SMTP_USER`/`MAILBOX_USER` e as senhas para `suporte-teste@` (ou esvaziar `MAILBOX_USER` para desligar a leitura) e fazer o deploy.
+1. Voltar `SMTP_USER`/`MAILBOX_USER` e as senhas para `suporte-teste@` (ou esvaziar `MAILBOX_USER` para desligar a leitura), reverter o PR do `MAIL_FROM` e fazer o deploy.
 2. Zerar o cursor de novo (passo 2 da virada).
 3. **Reconectar a caixa no Freshdesk.** Como a API nunca apaga nem arquiva, o Freshdesk enxerga tudo o que chegou.
 4. Tickets criados no help desk durante o intervalo continuam lá e são atendidos lá.
