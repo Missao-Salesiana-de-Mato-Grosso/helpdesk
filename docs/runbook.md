@@ -138,7 +138,7 @@ Fonte: `docs/discovery/05-plano-mvp.md` §5.4 e `docs/ambientes.md` §2.3. Pré-
 
 **Virada:**
 
-1. **Preparar** (sem aplicar): em `../msmt-infra-automation/secrets/helpdesk-email.env` e nos secrets do GitHub, `SMTP_USER`/`MAILBOX_USER` = `suporte@missaosalesiana.org.br`, as senhas de app de `suporte@`, e `MAILBOX_START_SINCE` vazio por enquanto. Abrir (sem mesclar) um PR que volta `MAIL_FROM` para `Suporte MSMT <suporte@missaosalesiana.org.br>` em `deploy/k8s/overlays/prod/config.env`: na homologação ele é `suporte-teste@`, e o remetente precisa ser a caixa autenticada (o Gmail reescreve o `From` de outros endereços, e a proteção contra loop compara com `MAIL_FROM`).
+1. **Preparar** (sem aplicar; ⚠️ os Secrets do GitHub entram no **próximo deploy, de qualquer merge**: deixe o PR do `MAIL_FROM` pronto e cadastre os Secrets só antes de mesclá-lo): em `../msmt-infra-automation/secrets/helpdesk-email.env` e nos secrets do GitHub, `SMTP_USER`/`MAILBOX_USER` = `suporte@missaosalesiana.org.br`, as senhas de app de `suporte@`, e `MAILBOX_START_SINCE` vazio por enquanto. Abrir (sem mesclar) um PR que volta `MAIL_FROM` para `Suporte MSMT <suporte@missaosalesiana.org.br>` em `deploy/k8s/overlays/prod/config.env`: na homologação ele é `suporte-teste@`, e o remetente precisa ser a caixa autenticada (o Gmail reescreve o `From` de outros endereços, e a proteção contra loop compara com `MAIL_FROM`).
 2. **Zerar o cursor da caixa de teste** (seção 10), senão a API usaria o UID de `suporte-teste@` na caixa nova:
 
    ```sql
