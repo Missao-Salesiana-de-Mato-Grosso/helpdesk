@@ -125,19 +125,19 @@ done
 
 > **Plataforma (etapas 2 e 3):** criada pelo repositório irmão `msmt-infra-automation` (`../msmt-infra-automation`), com scripts idempotentes do CLI `mgc`: `make preflight`, depois `make registry storage cluster database addons`. Ele gera as senhas do banco, a chave do Object Storage e o kubeconfig em `secrets/` (fora do git) e imprime o IP do Traefik para o DNS. O passo a passo, os valores a preencher em `config/prod.env` e o que conferir na 1ª execução estão no README de lá. Este repositório continua dono do deploy do app e do Zitadel (`deploy/k8s`, `deploy/zitadel`).
 
-| #   | Etapa                                                                                                                                                             | Status                                          |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| 1   | Caixa `suporte-teste@missaosalesiana.org.br`: usuário no Workspace, verificação em 2 etapas, senha de app                                                         | pulada: virada direta em 2026-11-05 (ver 2.3)   |
-| 2   | Cluster Kubernetes, DBaaS (bancos `zitadel` e `helpdesk`), registry, bucket de anexos (ver 2.1)                                                                   | feito 2026-10-25 (ver 2.0.1)                    |
-| 3   | DNS (`suporte.msmt.org.br`, `auth.msmt.org.br`), Traefik, cert-manager                                                                                            | feito 2026-10-25 (ver 2.0.1)                    |
-| 4   | Zitadel v4.19.5 via Helm (`deploy/zitadel`): org, projeto, roles, app SPA (JWT), branding. Mesmos passos do 1.4, com redirects de produção e sem Development Mode | pendente                                        |
-| 5   | IdP Google: app OAuth "Internal" no Google Cloud + IdP na org do Zitadel                                                                                          | pendente                                        |
-| 6   | Login real e claims do access token na §10 da spec T04–T05 (local já capturado; repetir em produção). **Decidir o Access Token Lifetime** (P1)                    | pendente                                        |
-| 7   | Senha de app de `suporte@` (produção); anotar onde se desconecta a caixa no Freshdesk. SMTP: ver 2.2                                                              | senha de app de `suporte@` gerada em 2026-11-05 |
-| 8   | Deploy do app (`make deploy`, T17), Secrets, migração                                                                                                             | pendente                                        |
-| 9   | CronJob de backup e **teste de restore**                                                                                                                          | pendente                                        |
-| 10  | Monitor de disponibilidade; verificação em 2 etapas obrigatória para os agentes no Workspace                                                                      | pendente                                        |
-| 11  | Virada do e-mail (`05-plano-mvp.md` §5.4)                                                                                                                         | feita 2026-11-05 (virada direta, ver 2.3)       |
+| #   | Etapa                                                                                                                                                             | Status                                                                                                                |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| 1   | Caixa `suporte-teste@missaosalesiana.org.br`: usuário no Workspace, verificação em 2 etapas, senha de app                                                         | pulada: virada direta em 2026-11-05 (ver 2.3)                                                                         |
+| 2   | Cluster Kubernetes, DBaaS (bancos `zitadel` e `helpdesk`), registry, bucket de anexos (ver 2.1)                                                                   | feito 2026-10-25 (ver 2.0.1)                                                                                          |
+| 3   | DNS (`suporte.msmt.org.br`, `auth.msmt.org.br`), Traefik, cert-manager                                                                                            | feito 2026-10-25 (ver 2.0.1)                                                                                          |
+| 4   | Zitadel v4.19.5 via Helm (`deploy/zitadel`): org, projeto, roles, app SPA (JWT), branding. Mesmos passos do 1.4, com redirects de produção e sem Development Mode | pendente                                                                                                              |
+| 5   | IdP Google: app OAuth "Internal" no Google Cloud + IdP na org do Zitadel                                                                                          | pendente                                                                                                              |
+| 6   | Login real e claims do access token na §10 da spec T04–T05 (local já capturado; repetir em produção). **Decidir o Access Token Lifetime** (P1)                    | pendente                                                                                                              |
+| 7   | Senha de app de `suporte@` (produção); anotar onde se desconecta a caixa no Freshdesk. SMTP: ver 2.2                                                              | senha de app de `suporte@` gerada em 2026-11-05                                                                       |
+| 8   | Deploy do app (`make deploy`, T17), Secrets, migração                                                                                                             | pendente                                                                                                              |
+| 9   | CronJob de backup e **teste de restore**                                                                                                                          | dispensada 2026-11-05: o backup do banco é o snapshot diário do DBaaS (ver `docs/runbook.md` §3); restore não testado |
+| 10  | Monitor de disponibilidade; verificação em 2 etapas obrigatória para os agentes no Workspace                                                                      | pendente                                                                                                              |
+| 11  | Virada do e-mail (`05-plano-mvp.md` §5.4)                                                                                                                         | feita 2026-11-05 (virada direta, ver 2.3)                                                                             |
 
 ### 2.0 Pendências para o rollout
 
@@ -205,11 +205,11 @@ Criado pelo painel em 2026-10-25. O código já está pronto (T13, driver `s3` c
 - Teste depois do deploy (feito em 2026-10-28, P4 resolvida): anexar um arquivo num ticket, baixar e conferir o objeto em `attachments/<ano>/<mês>/<uuid>` no bucket. Upload e download reais funcionaram pelo portal com o driver `s3`.
 - Pastas (criadas sozinhas no 1º upload; não é preciso criá-las no painel):
 
-  | Pasta          | Conteúdo                                 | Quem grava                           |
-  | -------------- | ---------------------------------------- | ------------------------------------ |
-  | `attachments/` | anexos dos tickets, `<ano>/<mês>/<uuid>` | API (T13)                            |
-  | `inbound/`     | e-mails brutos, `<ano>/<mês>/<uuid>.eml` | API (T21)                            |
-  | `backups/`     | dumps do PostgreSQL                      | CronJob de backup (etapa 9, a fazer) |
+  | Pasta          | Conteúdo                                 | Quem grava |
+  | -------------- | ---------------------------------------- | ---------- |
+  | `attachments/` | anexos dos tickets, `<ano>/<mês>/<uuid>` | API (T13)  |
+  | `inbound/`     | e-mails brutos, `<ano>/<mês>/<uuid>.eml` | API (T21)  |
+  | `backups/`     | (não usada: etapa 9 dispensada)          | —          |
 
 - **Chave restrita ao bucket (P9, opção B, em andamento desde 2026-10-30).** A chave de API do Object Storage não tem escopo por bucket; o caminho é uma **conta de serviço** com uma política no bucket:
   1. `mgc iam service-accounts create --name helpdesk-app --email helpdesk-app` (e-mail gerado: `helpdesk-app@SBE-5615.sa.idmagalu.com`).
@@ -218,7 +218,7 @@ Criado pelo painel em 2026-10-25. O código já está pronto (T13, driver `s3` c
   4. Teste com `curl --aws-sigv4 "aws:amz:br-se1:s3"` e a chave nova: PUT, GET e DELETE em `attachments/` → 200/200/204; PUT em `backups/` e listagem do bucket → 403. Feito em 2026-10-30.
   5. Troca: `S3_ACCESS_KEY`/`S3_SECRET_KEY` do ambiente `production` no GitHub atualizados em 2026-10-30 (por pipe, sem imprimir) e `secrets/object-storage.env` copiado do novo; o antigo ficou em `secrets/object-storage.env.antiga` para o rollback. ⚠️ Pendente: confirmar no portal, depois do próximo deploy, que anexos antigos e novos abrem; então revogar a chave antiga (`mgc object-storage api-key revoke`) e apagar o `.antiga`.
   - Armadilhas: (a) um tenant fora da política **perde o acesso ao próprio bucket**, por isso a regra do dono; (b) a Magalu só aceita `s3:*` como texto (`"Action": "s3:*"`), não em lista, e não aceita misturar ações de bucket e de objeto na mesma lista; (c) `mgc iam service-accounts api-keys list` devolve os segredos (`api_key`, `key_pair_secret`): filtre a saída; (d) o `get` dessas chaves não aceita `--sa-uuid` (use o `list`); (e) os comandos de bucket do `mgc` pedem a chave do CLI selecionada (`mgc object-storage api-key set --uuid <msmt-infra-cli>`); (f) rodar o `create` duas vezes gera duas chaves com o mesmo nome: revogue a sobra com `api-keys delete`.
-- ⚠️ Com backups no mesmo bucket, a chave do app (que vale para a conta toda, P9) também consegue apagá-los. O versionamento mitiga; ao fazer a etapa 9, avaliar uma chave própria para o backup ou cópia fora do bucket.
+- ⚠️ Com backups no mesmo bucket, a chave do app (que vale para a conta toda, P9) também consegue apagá-los. O versionamento mitiga; se um dia a pasta `backups/` for usada, avaliar uma chave própria para o backup ou cópia fora do bucket.
 
 ### 2.2 E-mail de saída (SMTP do Gmail)
 
