@@ -78,7 +78,7 @@ GitHub → PR que introduziu o problema → **Revert** → abre um PR de revers�
 
 ### 3.1 Restaurar o banco ⚠️
 
-Ainda **não testado**. Roteiro para o primeiro uso, de preferência feito antes como teste, que deve ser feito **fora de uma emergência**:
+Ainda **não testado** (teste previsto no encerramento do MVP, T23 de `docs/discovery/05-plano-mvp.md`). Roteiro para o primeiro uso, de preferência feito antes como teste, que deve ser feito **fora de uma emergência**:
 
 1. Painel da Magalu → Database → `pg-msmt-prd-web` → Backups: escolher o ponto. Restaurar **para uma instância nova** (nunca por cima da atual), se o painel oferecer essa opção. Confirmar na [documentação do DBaaS](https://docs.magalu.cloud/) o comando equivalente do `mgc dbaas` e anotá-lo aqui.
 2. Conferir os dados na instância restaurada por um pod `psql` (seção 10, trocando o host).
@@ -233,6 +233,7 @@ Regras:
 | Quando                   | Tarefa                                                                                              |
 | ------------------------ | --------------------------------------------------------------------------------------------------- |
 | Até 08/11/2026           | Export completo do Freshdesk (conta + API) e cancelamento (05-plano §5.4, passo 8)                  |
+| No encerramento do MVP   | Cópia de `msmt-infra-automation/secrets/` num cofre e **teste de restore** do DBaaS (T23, §3.1)     |
 | **Antes de 25/10/2027**  | Renovar o kubeconfig do `k8s-msmt-prd` (`make cluster` no infra) e o secret `KUBECONFIG_PROD` (P11) |
 | A cada 30 dias (sozinho) | Pedidos de acesso sem decisão vão para a lixeira (T22, RN-19). Conferir a lixeira no portal         |
 | Mensal (sugestão)        | Olhar `inbound_emails` `failed` e `notifications` `failed` do mês (seções 8 e 9)                    |
