@@ -51,6 +51,7 @@ const base: Record<string, Handler> = {
   'GET /api/groups': () => jsonResponse(200, GROUPS),
   'GET /api/groups/g1/members': () => jsonResponse(200, [{ id: 'a1', name: 'João Agente' }]),
   'GET /api/categories': () => jsonResponse(200, [CATEGORY]),
+  'GET /api/canned-responses': () => jsonResponse(200, []),
 };
 
 function openTicket(ticket: TicketDetail, extra: Record<string, Handler> = {}) {

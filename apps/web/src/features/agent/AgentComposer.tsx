@@ -1,8 +1,16 @@
 import { ActionIcon, Alert, Button, Group, Menu, Stack, Tabs } from '@mantine/core';
-import type { CreateMessageInput, TicketDetail, TicketStatus } from '@helpdesk/shared';
-import { useState } from 'react';
-import { HtmlEditor } from '../../components/HtmlEditor.tsx';
+import {
+  firstName,
+  type CannedVariables,
+  type CreateMessageInput,
+  type TicketDetail,
+  type TicketStatus,
+} from '@helpdesk/shared';
+import { useRef, useState } from 'react';
+import { useMe } from '../../auth/useMe.ts';
+import { HtmlEditor, type HtmlEditorHandle } from '../../components/HtmlEditor.tsx';
 import { AttachmentPicker } from '../attachments/AttachmentPicker.tsx';
+import { CannedResponsePicker } from '../canned-responses/CannedResponsePicker.tsx';
 import { STATUS_LABEL } from '../tickets/format.ts';
 import { useReply } from '../tickets/queries.ts';
 
@@ -14,9 +22,20 @@ export interface AgentComposerProps {
   onCompanyRequired: () => void;
 }
 
-/** Abas "Resposta" e "Nota interna" (T12). Cada aba guarda o próprio rascunho. */
+/**
+ * Abas "Resposta" e "Nota interna" (T12). Cada aba guarda o próprio rascunho e aceita respostas
+ * prontas (T26), inseridas na posição do cursor.
+ */
 export function AgentComposer({ ticket, onError, onCompanyRequired }: AgentComposerProps) {
   const send = useReply(ticket.id);
+  const { data: me } = useMe();
+  const replyEditor = useRef<HtmlEditorHandle>(null);
+  const noteEditor = useRef<HtmlEditorHandle>(null);
+  const variables: CannedVariables = {
+    solicitante: firstName(ticket.requester.name),
+    numero: `#${ticket.number}`,
+    agente: firstName(me?.name ?? ''),
+  };
   const [tab, setTab] = useState<'reply' | 'note'>('reply');
   const [replyHtml, setReplyHtml] = useState('');
   const [noteHtml, setNoteHtml] = useState('');
@@ -76,12 +95,18 @@ export function AgentComposer({ ticket, onError, onCompanyRequired }: AgentCompo
 
       <Tabs.Panel value="reply" pt="sm">
         <Stack>
+          <CannedResponsePicker
+            variables={variables}
+            onPick={(html) => replyEditor.current?.insertHtml(html)}
+            disabled={send.isPending}
+          />
           <HtmlEditor
             label="Resposta ao solicitante"
             value={replyHtml}
             onChange={setReplyHtml}
             error={emptyError('reply')}
             disabled={send.isPending}
+            handleRef={replyEditor}
           />
           <AttachmentPicker files={replyFiles} onChange={setReplyFiles} disabled={send.isPending} />
           <Group justify="flex-end" gap={4}>
@@ -113,12 +138,18 @@ export function AgentComposer({ ticket, onError, onCompanyRequired }: AgentCompo
 
       <Tabs.Panel value="note" pt="sm">
         <Stack>
+          <CannedResponsePicker
+            variables={variables}
+            onPick={(html) => noteEditor.current?.insertHtml(html)}
+            disabled={send.isPending}
+          />
           <HtmlEditor
             label="Nota interna (só a equipe vê)"
             value={noteHtml}
             onChange={setNoteHtml}
             error={emptyError('note')}
             disabled={send.isPending}
+            handleRef={noteEditor}
           />
           <AttachmentPicker files={noteFiles} onChange={setNoteFiles} disabled={send.isPending} />
           <Group justify="flex-end">

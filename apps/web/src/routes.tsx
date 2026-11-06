@@ -17,6 +17,7 @@ import { AccessRequestsPage } from './features/admin/AccessRequestsPage.tsx';
 import { CategoriesPage, CompaniesPage, DepartmentsPage } from './features/admin/CatalogPages.tsx';
 import { GroupsPage } from './features/admin/GroupsPage.tsx';
 import { UsersPage } from './features/admin/UsersPage.tsx';
+import { CannedResponsesPage } from './features/canned-responses/CannedResponsesPage.tsx';
 import { QueuePage } from './features/queue/QueuePage.tsx';
 import { MyTicketsPage } from './features/tickets/MyTicketsPage.tsx';
 import { NewTicketPage } from './features/tickets/NewTicketPage.tsx';
@@ -78,6 +79,15 @@ export function AppRoutes() {
             element={
               <RequireRole roles={['admin', 'supervisor']}>
                 <AccessRequestsPage />
+              </RequireRole>
+            }
+          />
+          {/* T26: respostas prontas — admin e supervisor. */}
+          <Route
+            path="admin/respostas-prontas"
+            element={
+              <RequireRole roles={['admin', 'supervisor']}>
+                <CannedResponsesPage />
               </RequireRole>
             }
           />

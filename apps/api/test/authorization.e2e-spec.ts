@@ -61,6 +61,8 @@ interface Refs {
   trashedUserId: string;
   /** Usuário do papel `solicitante` (alvo de "abrir em nome de outro"). */
   requesterUserId: string;
+  /** Resposta pronta (T26). */
+  cannedId: string;
 }
 
 // pendente: 403 ACCESS_PENDING por padrão (RN-06); as rotas isentas (/me, /companies,
@@ -320,6 +322,29 @@ const MATRIX: RouteCase[] = [
     body: () => ({ userIds: [] }),
     expected: ADMIN_ONLY,
   },
+  // T26: respostas prontas — agentes usam; admin e supervisor mantêm.
+  { method: 'get', path: '/api/canned-responses', expected: AGENT_ONLY },
+  {
+    method: 'post',
+    path: '/api/canned-responses',
+    body: () => ({ title: 'Nova', bodyHtml: '<p>Texto</p>' }),
+    expected: { ...ADMIN_OR_SUPERVISOR, supervisor: 201, admin: 201 },
+  },
+  {
+    method: 'patch',
+    path: (ref) => `/api/canned-responses/${ref.cannedId}`,
+    template: '/api/canned-responses/:id',
+    label: 'PATCH /api/canned-responses/:id',
+    body: () => ({ title: 'Renomeada' }),
+    expected: ADMIN_OR_SUPERVISOR,
+  },
+  {
+    method: 'delete',
+    path: (ref) => `/api/canned-responses/${ref.cannedId}`,
+    template: '/api/canned-responses/:id',
+    label: 'DELETE /api/canned-responses/:id',
+    expected: { ...ADMIN_OR_SUPERVISOR, supervisor: 204, admin: 204 },
+  },
   // T25: cadastros de referência — só admin.
   ...(['companies', 'departments', 'groups', 'categories'] as const).flatMap(
     (kind): RouteCase[] => [
@@ -461,6 +486,9 @@ describe('matriz de permissões (e2e)', () => {
         trashedAt: new Date(),
       },
     });
+    const canned = await t.prisma.cannedResponse.create({
+      data: { title: 'Senha', bodyHtml: '<p>Olá, {{solicitante}}</p>' },
+    });
     refs = {
       companyId: company.id,
       departmentId: department.id,
@@ -473,6 +501,7 @@ describe('matriz de permissões (e2e)', () => {
       pendingUserId: pending.id,
       trashedUserId: trashed.id,
       requesterUserId: userIds.get('solicitante')!,
+      cannedId: canned.id,
     };
   });
 

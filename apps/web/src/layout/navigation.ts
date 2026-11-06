@@ -58,10 +58,13 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    // T22 RN-10: "admin" aqui inclui supervisor — diferente da seção "Administração" acima.
-    title: 'Liberação',
+    // T22 RN-10 e T26: admin e supervisor — diferente da seção "Administração" acima.
+    title: 'Supervisão',
     roles: ['admin', 'supervisor'],
-    items: [{ label: 'Pedidos de acesso', to: '/admin/liberacao' }],
+    items: [
+      { label: 'Pedidos de acesso', to: '/admin/liberacao' },
+      { label: 'Respostas prontas', to: '/admin/respostas-prontas' },
+    ],
   },
 ];
 
