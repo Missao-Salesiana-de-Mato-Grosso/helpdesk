@@ -112,6 +112,7 @@ async function listTickets(filter) {
       for (const ticket of body) byId.set(ticket.id, ticket);
       if (body.length > 0) last = body.at(-1);
       if (body.length < 100) break;
+      if (page % 10 === 0) console.log(`  listando ${filter ?? 'tickets'}: ${byId.size}…`);
     }
     if (page <= MAX_PAGE || !last || last.updated_at === since) break;
     if (filter) {
