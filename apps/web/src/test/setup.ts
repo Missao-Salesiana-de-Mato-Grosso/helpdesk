@@ -34,3 +34,12 @@ window.ResizeObserver = ResizeObserverStub;
 
 // O Combobox do Mantine rola a opção ativa até ficar visível.
 Element.prototype.scrollIntoView = vi.fn();
+
+// O ProseMirror mede a seleção (Range) ao rolar até o cursor, por exemplo no `insertHtml` (T26);
+// o jsdom não implementa essas medidas.
+const emptyRects = (): DOMRectList => {
+  const list: DOMRect[] = [];
+  return Object.assign(list, { item: (index: number) => list[index] ?? null });
+};
+Range.prototype.getClientRects = emptyRects;
+Range.prototype.getBoundingClientRect = () => new DOMRect();
