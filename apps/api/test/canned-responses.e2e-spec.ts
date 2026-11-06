@@ -106,12 +106,14 @@ describe('respostas prontas (T26, e2e)', () => {
     expect(await t.prisma.cannedResponse.count()).toBe(0);
 
     const missing = '00000000-0000-4000-8000-000000000000';
-    for (const req of [
-      server().delete(`/api/canned-responses/${row.id}`),
-      server().patch(`/api/canned-responses/${missing}`).send({ title: 'X' }),
-      server().patch('/api/canned-responses/abc').send({ title: 'X' }),
+    // Cada requisição é montada na hora: o Supertest abre o servidor ao criar a requisição.
+    const token = await auth('adm');
+    for (const send of [
+      () => server().delete(`/api/canned-responses/${row.id}`),
+      () => server().patch(`/api/canned-responses/${missing}`).send({ title: 'X' }),
+      () => server().patch('/api/canned-responses/abc').send({ title: 'X' }),
     ]) {
-      expect((await req.set('Authorization', await auth('adm'))).status).toBe(404);
+      expect((await send().set('Authorization', token)).status).toBe(404);
     }
   });
 });
