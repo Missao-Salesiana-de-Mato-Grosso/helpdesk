@@ -79,6 +79,7 @@ Antes de dar uma tarefa como concluída, **sempre** rode `pnpm typecheck`, `pnpm
 - O login é federado com o Google (qualquer conta, ADR-011), configurado no próprio Zitadel. O app **não lida com senhas, cadastro nem MFA**: só com tokens.
 - Token de acesso é **JWT**, validado localmente via JWKS (`<ISSUER>/oauth/v2/keys`). Verificar `iss`, `aud` (contém `ZITADEL_PROJECT_ID`) e `exp`.
 - Roles vêm do claim `urn:zitadel:iam:org:project:<ZITADEL_PROJECT_ID>:roles` (objeto; as roles são as **chaves**): `admin`, `supervisor`, `agente`. Sem role = solicitante.
+- **Papel efetivo = roles do token ∪ papéis concedidos no app** (`users.app_roles`, tela de usuários, T24, ADR-012). O guard soma as duas em cada requisição; `users.roles` guarda o efetivo e `users.zitadel_roles` o cache do token. Pelo app não se retira papel do Zitadel, e o admin não retira o próprio admin.
 - Usuário local é criado ou atualizado por JIT (`zitadel_sub`) em cada request autenticado, via cache curto. **Nome e e-mail vêm do endpoint `userinfo` do Zitadel**, não do access token. Usuário criado pelo canal de e-mail é vinculado pelo e-mail.
 - Specs por tarefa em `docs/specs/`. Quando existir uma spec para a tarefa, ela manda; os CTs viram testes com o mesmo identificador no nome.
 - Nos testes, **não dependa do Zitadel**: use o helper que assina tokens com chave RSA local e injeta um JWKS fake.

@@ -48,6 +48,8 @@ const userSummary = {
     name: true,
     email: true,
     roles: true,
+    zitadelRoles: true,
+    appRoles: true,
     isExternal: true,
     active: true,
     accessStatus: true,
@@ -73,12 +75,20 @@ export const isAgentRole = (role: string): boolean =>
 
 const isRole = (role: string): role is Role => (ROLES as readonly string[]).includes(role);
 
+/** ADR-012: papéis efetivos = os do Zitadel ∪ os concedidos no app, na ordem canônica. */
+export const effectiveRoles = (
+  zitadelRoles: readonly string[],
+  appRoles: readonly string[],
+): Role[] => ROLES.filter((role) => zitadelRoles.includes(role) || appRoles.includes(role));
+
 function toUserSummary(row: UserSummaryRow): UserSummary {
   return {
     id: row.id,
     name: row.name,
     email: row.email,
     roles: row.roles.filter(isRole),
+    zitadelRoles: row.zitadelRoles.filter(isRole),
+    appRoles: row.appRoles.filter(isRole),
     company: row.company,
     department: row.department,
     groups: row.groupMemberships.map((membership) => membership.group),
@@ -112,7 +122,8 @@ export interface NewLoginUser {
   zitadelSub: string;
   email: string;
   name: string;
-  roles: string[];
+  /** Roles do token do Zitadel. */
+  roles: Role[];
 }
 
 /** Acesso à tabela `users`. Outros módulos passam por aqui, nunca pelo Prisma diretamente. */
@@ -189,19 +200,23 @@ export class UsersService {
 
   createFromLogin(data: NewLoginUser, now: Date): Promise<UserWithGroupIds> {
     return this.prisma.user.create({
-      data: { ...data, lastLoginAt: now, profileSyncedAt: now },
+      data: { ...data, zitadelRoles: data.roles, lastLoginAt: now, profileSyncedAt: now },
       ...userWithGroupIds,
     });
   }
 
-  /** Vincula ao login um usuário criado pelo canal de e-mail (RN-10.2). */
-  linkToLogin(id: string, data: NewLoginUser, now: Date): Promise<UserWithGroupIds> {
+  /**
+   * Vincula ao login um usuário criado pelo canal de e-mail (RN-10.2). Papéis já concedidos no app
+   * (T24) se somam aos do token.
+   */
+  linkToLogin(user: UserWithGroupIds, data: NewLoginUser, now: Date): Promise<UserWithGroupIds> {
     return this.prisma.user.update({
-      where: { id },
+      where: { id: user.id },
       data: {
         zitadelSub: data.zitadelSub,
         name: data.name,
-        roles: data.roles,
+        zitadelRoles: data.roles,
+        roles: effectiveRoles(data.roles, user.appRoles),
         lastLoginAt: now,
         profileSyncedAt: now,
       },
@@ -209,11 +224,12 @@ export class UsersService {
     });
   }
 
+  /** `roles` e `zitadelRoles` andam juntos: quem muda um recalcula o outro (`effectiveRoles`). */
   updateLoginState(
     id: string,
     data: Pick<
       Prisma.UserUpdateInput,
-      'roles' | 'lastLoginAt' | 'profileSyncedAt' | 'name' | 'email'
+      'roles' | 'zitadelRoles' | 'lastLoginAt' | 'profileSyncedAt' | 'name' | 'email'
     >,
   ): Promise<UserWithGroupIds> {
     return this.prisma.user.update({ where: { id }, data, ...userWithGroupIds });
@@ -293,8 +309,8 @@ export class UsersService {
   }
 
   /**
-   * Unidade, departamento, terceiro e `active`. Papéis vêm do Zitadel e não se editam aqui.
-   * Devolve também o `sub`, para o controller invalidar o cache (o efeito é imediato).
+   * Unidade, departamento, terceiro, `active` e os papéis concedidos no app (T24; os do Zitadel não
+   * se editam aqui). Devolve também o `sub`, para o controller invalidar o cache (efeito imediato).
    */
   async updateByAdmin(
     id: string,
@@ -315,9 +331,35 @@ export class UsersService {
     if (input.departmentId && !(await this.departments.isActive(input.departmentId))) {
       throw inactiveReference('Departamento inexistente ou inativo.');
     }
-    const exists = await this.prisma.user.findUnique({ where: { id }, select: { id: true } });
-    if (!exists) throw userNotFound();
-    const row = await this.prisma.user.update({ where: { id }, data: input, ...userSummary });
+    const current = await this.prisma.user.findUnique({
+      where: { id },
+      select: { zitadelRoles: true, accessStatus: true },
+    });
+    if (!current) throw userNotFound();
+
+    const { appRoles, ...fields } = input;
+    const data: Prisma.UserUncheckedUpdateInput = fields;
+    if (appRoles) {
+      const roles = effectiveRoles(current.zitadelRoles, appRoles);
+      // Sem isso o último admin podia se trancar fora (o admin do Zitadel continua, ADR-012).
+      if (id === actorId && !roles.includes('admin')) {
+        throw new ApiException(
+          HttpStatus.UNPROCESSABLE_ENTITY,
+          ApiErrorCode.CANNOT_DEMOTE_SELF,
+          'Você não pode retirar o seu próprio papel de administrador.',
+        );
+      }
+      data.appRoles = appRoles;
+      data.roles = roles;
+      // T22 RN-04 para os papéis do app: quem ganha papel está liberado.
+      if (appRoles.length > 0 && current.accessStatus !== 'approved') {
+        data.accessStatus = 'approved';
+        data.accessDecidedAt = new Date();
+        data.accessDecidedById = actorId;
+        data.trashedAt = null;
+      }
+    }
+    const row = await this.prisma.user.update({ where: { id }, data, ...userSummary });
     return { user: toUserSummary(row), zitadelSub: row.zitadelSub };
   }
 

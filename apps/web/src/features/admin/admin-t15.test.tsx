@@ -32,6 +32,8 @@ const user = (overrides: Partial<UserSummary>): UserSummary => ({
   name: 'Maria',
   email: 'maria@missaosalesiana.org.br',
   roles: [],
+  zitadelRoles: [],
+  appRoles: [],
   company: { id: 'c1', name: 'Sede' },
   department: { id: 'd1', name: 'Secretaria' },
   groups: [],
@@ -100,6 +102,35 @@ describe('UsersPage (T15)', () => {
     );
   });
 
+  it('concede um papel pelo app; o do Zitadel fica travado (T24)', async () => {
+    let patchBody: unknown;
+    stubApi({
+      'GET /api/me': () => jsonResponse(200, ADMIN),
+      'GET /api/users': () =>
+        jsonResponse(
+          200,
+          list([user({ id: 'u1', roles: ['agente'], zitadelRoles: ['agente'], appRoles: [] })]),
+        ),
+      'GET /api/companies': () => jsonResponse(200, [{ id: 'c1', name: 'Sede' }]),
+      'GET /api/departments': () => jsonResponse(200, [{ id: 'd1', name: 'Secretaria' }]),
+      'PATCH /api/users/u1': (init) => {
+        patchBody = jsonBody(init);
+        return jsonResponse(200, user({ roles: ['supervisor', 'agente'] }));
+      },
+    });
+    renderWithProviders(<UsersPage />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Editar' }));
+    const modal = await screen.findByRole('dialog');
+    const agente = within(modal).getByRole('checkbox', { name: /Agente/ });
+    expect(agente).toBeChecked();
+    expect(agente).toBeDisabled();
+    await userEvent.click(within(modal).getByRole('checkbox', { name: /Supervisor/ }));
+    await userEvent.click(within(modal).getByRole('button', { name: 'Salvar' }));
+
+    await waitFor(() => expect(patchBody).toMatchObject({ appRoles: ['supervisor'] }));
+  });
+
   it('não deixa o admin se inativar', async () => {
     stubApi({
       'GET /api/me': () => jsonResponse(200, ADMIN),
@@ -115,6 +146,7 @@ describe('UsersPage (T15)', () => {
       expect(within(modal).getByRole('checkbox', { name: /Ativo/ })).toBeDisabled(),
     );
     expect(within(modal).getByText('Você não pode inativar a própria conta.')).toBeInTheDocument();
+    expect(within(modal).getByRole('checkbox', { name: /Administrador/ })).toBeDisabled();
   });
 });
 

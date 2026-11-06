@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AccessStatus, NamedRef, Role } from './me.js';
+import { ROLES, type AccessStatus, type NamedRef, type Role } from './me.js';
 
 /** `GET /api/users` (T15): busca de usuários para administração. A lixeira (T22) fica de fora. */
 export const listUsersQuerySchema = z
@@ -19,7 +19,12 @@ export interface UserSummary {
   id: string;
   name: string;
   email: string;
+  /** Papéis efetivos: os do Zitadel somados aos concedidos no app (ADR-012). */
   roles: Role[];
+  /** Vindos do Zitadel (no último login). Não se retiram pelo app. */
+  zitadelRoles: Role[];
+  /** Concedidos pela tela de usuários (T24). */
+  appRoles: Role[];
   company: NamedRef | null;
   department: NamedRef | null;
   /** Grupos ativos de que é membro. */
@@ -38,13 +43,21 @@ export interface UserListResponse {
   pageSize: number;
 }
 
-/** `PATCH /api/users/:id` (T15). Só os campos enviados mudam. */
+/**
+ * `PATCH /api/users/:id` (T15, T24). Só os campos enviados mudam. `appRoles` é a lista completa dos
+ * papéis concedidos no app (substitui a atual); os do Zitadel não se editam aqui.
+ */
 export const updateUserSchema = z
   .object({
     companyId: z.uuid().optional(),
     departmentId: z.uuid().optional(),
     isExternal: z.boolean().optional(),
     active: z.boolean().optional(),
+    appRoles: z
+      .array(z.enum(ROLES))
+      .max(ROLES.length)
+      .transform((roles) => ROLES.filter((role) => roles.includes(role)))
+      .optional(),
   })
   .strict()
   .refine((data) => Object.values(data).some((value) => value !== undefined), {

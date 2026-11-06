@@ -2,6 +2,7 @@ import { type CanActivate, type ExecutionContext, HttpStatus, Injectable } from 
 import { Reflector } from '@nestjs/core';
 import { ApiErrorCode, type Role } from '@helpdesk/shared';
 import { ApiException } from '../common/api-exception.js';
+import { effectiveRoles } from '../users/users.service.js';
 import type { AuthenticatedRequest, CurrentUser } from './current-user.js';
 import {
   ALLOW_DURING_ONBOARDING_KEY,
@@ -42,8 +43,10 @@ export class AuthGuard implements CanActivate {
     }
     const accessToken = match[1]!;
 
-    const { sub, roles } = await this.verifier.verify(accessToken);
-    const local = await this.jit.resolve(sub, roles, accessToken);
+    const { sub, roles: tokenRoles } = await this.verifier.verify(accessToken);
+    const local = await this.jit.resolve(sub, tokenRoles, accessToken);
+    // ADR-012: as do token somadas às concedidas no app (T24).
+    const roles = effectiveRoles(tokenRoles, local.appRoles);
 
     if (!local.active) {
       throw new ApiException(

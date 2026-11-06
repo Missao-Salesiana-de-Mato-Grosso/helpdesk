@@ -91,16 +91,16 @@ Painel da Magalu → Object Storage → `msmt-helpdesk` → objeto (a chave est�
 
 ## 4. Criar um agente
 
-O papel vem do **Zitadel**, o grupo vem do **help desk**. Sem grupo, o agente só vê os tickets atribuídos a ele.
+O papel e o grupo se dão no **help desk** (T24, ADR-012). Sem grupo, o agente só vê os tickets atribuídos a ele.
 
 1. A pessoa entra uma vez em `https://suporte.msmt.org.br` com a conta Google. Isso cria o usuário no Zitadel e no help desk.
-2. Dar o papel no Zitadel 📘 (o mesmo caminho do admin, `docs/ambientes.md` §2.4):
-   - Terminal: `make zitadel-bootstrap ARGS="--admin <email>"` concede `admin`. ⚠️ Para `agente` ou `supervisor`, use o console: `https://auth.msmt.org.br/ui/console` → Projetos → **Help Desk** → **Autorizações** → Nova → usuário → marcar `agente` (ou `supervisor`).
-   - Quem ganha papel no Zitadel é **aprovado automaticamente** na fila de liberação (T22, RN-04).
-3. A pessoa sai e entra de novo (o papel vem no token novo). Para efeito imediato no app, basta o próximo login; o cache de usuário dura 60 s.
-4. **Pôr no grupo** ⚠️: portal → Administração → **Grupos** → escolher o grupo → acrescentar a pessoa em **Membros** → **Salvar membros**. Só aparecem agentes ativos: se a pessoa não estiver na lista, ela ainda não entrou de novo depois de ganhar o papel (passo 3). A mudança vale na hora (T15).
+2. **Dar o papel** ⚠️: portal → Administração → **Usuários** → buscar a pessoa → **Editar** → em **Papéis**, marcar `Agente` (ou `Supervisor`, `Administrador`) → **Salvar**. Vale na hora, sem a pessoa sair e entrar (T24).
+   - Quem ganha papel é **liberado automaticamente** se ainda estava na fila de liberação (T22, RN-04).
+   - Papel marcado como "Concedido no Zitadel" aparece travado: só sai pelo console do Zitadel.
+   - Pelo Zitadel continua funcionando 📘 (para o 1º admin ou numa emergência): `make zitadel-bootstrap ARGS="--admin <email>"` concede `admin`; para os outros, `https://auth.msmt.org.br/ui/console` → Projetos → **Help Desk** → **Autorizações**. Esse caminho só vale depois que a pessoa sai e entra de novo.
+3. **Pôr no grupo** ⚠️: portal → Administração → **Grupos** → escolher o grupo → acrescentar a pessoa em **Membros** → **Salvar membros**. Só aparecem agentes ativos. A mudança vale na hora (T15).
 
-5. Pedir que a pessoa confira a fila "Do grupo" no portal.
+4. Pedir que a pessoa confira a fila "Do grupo" no portal.
 
 Lembrete para o Workspace: agentes, supervisores e admins devem ter **verificação em 2 etapas obrigatória** (etapa 10 de `docs/ambientes.md`).
 
@@ -110,7 +110,7 @@ Faça os três passos no mesmo dia. Desde o ADR-011 o login aceita qualquer cont
 
 1. **Workspace** (contas `@missaosalesiana.org.br`): Admin do Google → Usuários → **Suspender**. A conta deixa de entrar no Google e, portanto, no Zitadel.
 2. **Zitadel** ⚠️: console → Usuários → a pessoa → **Desativar**. Remova também as autorizações do projeto Help Desk.
-3. **Help desk** ⚠️: portal → Administração → **Usuários** → buscar a pessoa → **Editar** → desmarcar **Ativo** → Salvar. A API passa a responder `403 USER_INACTIVE` já na próxima requisição, mesmo com token ainda válido, e a pessoa deixa de receber tickets e avisos de grupo. Ela some da tela de membros dos grupos; ao salvar os membros de um grupo, ela sai dele de vez.
+3. **Help desk** ⚠️: portal → Administração → **Usuários** → buscar a pessoa → **Editar** → desmarcar **Ativo** e os **Papéis** concedidos no app → Salvar. A API passa a responder `403 USER_INACTIVE` já na próxima requisição, mesmo com token ainda válido, e a pessoa deixa de receber tickets e avisos de grupo. Ela some da tela de membros dos grupos; ao salvar os membros de um grupo, ela sai dele de vez.
 
 4. Tickets atribuídos à pessoa: no portal, a fila "Todos" (supervisor) filtrada pelo responsável. Reatribuir um a um.
 
