@@ -1,8 +1,9 @@
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
+import { DEFAULT_CATEGORY_NAME } from '@helpdesk/shared';
 import { AppModule } from '../src/app.module.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
-import { SEED, SYSTEM_USER_EMAIL, seed } from '../prisma/seed.js';
+import { DEFAULT_CATEGORY, SEED, SYSTEM_USER_EMAIL, seed } from '../prisma/seed.js';
 import { truncateAll } from './setup/db.js';
 
 describe('schema, migração e seed (e2e)', () => {
@@ -41,6 +42,39 @@ describe('schema, migração e seed (e2e)', () => {
 
     const system = await prisma.user.findUniqueOrThrow({ where: { email: SYSTEM_USER_EMAIL } });
     expect(system.active).toBe(false);
+  });
+
+  it('T25: não desfaz o que o admin mudou depois (renomear, trocar e-mail do grupo)', async () => {
+    await seed(prisma);
+    await prisma.company.update({
+      where: { name: 'Unidade de exemplo' },
+      data: { name: 'Escola Real' },
+    });
+    await prisma.group.update({ where: { name: 'Suporte TI' }, data: { email: null } });
+    await prisma.department.update({ where: { name: 'Financeiro' }, data: { active: false } });
+
+    await seed(prisma);
+
+    expect(await prisma.company.findUnique({ where: { name: 'Unidade de exemplo' } })).toBeNull();
+    expect(await prisma.company.count()).toBe(SEED.companies.length);
+    const group = await prisma.group.findUniqueOrThrow({ where: { name: 'Suporte TI' } });
+    expect(group.email).toBeNull();
+    const department = await prisma.department.findUniqueOrThrow({ where: { name: 'Financeiro' } });
+    expect(department.active).toBe(false);
+  });
+
+  it('T25: garante a categoria "Geral" mesmo com categorias já cadastradas', async () => {
+    expect(DEFAULT_CATEGORY).toBe(DEFAULT_CATEGORY_NAME);
+    const older = await prisma.group.create({ data: { name: 'Antigo', active: false } });
+    const group = await prisma.group.create({ data: { name: 'Atendimento' } });
+    await prisma.category.create({ data: { name: 'Rede', defaultGroupId: older.id } });
+
+    await seed(prisma);
+
+    const geral = await prisma.category.findUniqueOrThrow({ where: { name: DEFAULT_CATEGORY } });
+    expect(geral.defaultGroupId).toBe(group.id);
+    expect(await prisma.category.count()).toBe(2);
+    expect(await prisma.group.count()).toBe(2);
   });
 
   it('e-mail é case-insensitive (citext) e único', async () => {

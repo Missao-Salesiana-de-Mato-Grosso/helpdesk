@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DEFAULT_CATEGORY_NAME } from '@helpdesk/shared';
 import { simpleParser, type ParsedMail } from 'mailparser';
 import { AttachmentsService, type IncomingFile } from '../attachments/attachments.service.js';
 import { CategoriesService } from '../categories/categories.service.js';
@@ -44,7 +45,6 @@ interface InboundRow {
 
 const CURSOR_UID = 'mailbox.last_uid';
 const CURSOR_VALIDITY = 'mailbox.uid_validity';
-const DEFAULT_CATEGORY = 'Geral';
 const SUBJECT_MAX = 200;
 const HOUR_MS = 60 * 60_000;
 const TAG = /\[#(\d{1,9})\]/;
@@ -276,7 +276,7 @@ export class InboundEmailService {
         if (result === 'added') return ticketNumber;
       }
       // RN-13: resposta a ticket fechado abre um novo, ligado ao anterior.
-      const category = await this.categories.findActiveByName(DEFAULT_CATEGORY);
+      const category = await this.categories.findActiveByName(DEFAULT_CATEGORY_NAME);
       if (!category?.defaultGroup.active) throw new InboundRejection('no_default_category');
       await this.tickets.createFromEmail(
         author,

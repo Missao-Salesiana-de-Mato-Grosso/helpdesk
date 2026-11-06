@@ -14,6 +14,7 @@ import { useMe } from './auth/useMe.ts';
 import { WaitingApprovalPage } from './auth/WaitingApprovalPage.tsx';
 import { StatusScreen } from './components/StatusScreen.tsx';
 import { AccessRequestsPage } from './features/admin/AccessRequestsPage.tsx';
+import { CategoriesPage, CompaniesPage, DepartmentsPage } from './features/admin/CatalogPages.tsx';
 import { GroupsPage } from './features/admin/GroupsPage.tsx';
 import { UsersPage } from './features/admin/UsersPage.tsx';
 import { QueuePage } from './features/queue/QueuePage.tsx';
@@ -67,6 +68,9 @@ export function AppRoutes() {
             <Route index element={<Navigate to="/admin/usuarios" replace />} />
             <Route path="usuarios" element={<UsersPage />} />
             <Route path="grupos" element={<GroupsPage />} />
+            <Route path="categorias" element={<CategoriesPage />} />
+            <Route path="unidades" element={<CompaniesPage />} />
+            <Route path="departamentos" element={<DepartmentsPage />} />
           </Route>
           {/* T22 RN-10: liberação de acesso é "admin ou supervisor", diferente do bloco acima. */}
           <Route

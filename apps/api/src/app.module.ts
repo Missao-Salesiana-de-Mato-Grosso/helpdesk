@@ -6,6 +6,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { AuthModule } from './auth/auth.module.js';
+import { CatalogAdminModule } from './catalog-admin/catalog-admin.module.js';
 import { ApiExceptionFilter } from './common/api-exception.filter.js';
 import { loggerParams } from './common/logger.js';
 import { CategoriesModule } from './categories/categories.module.js';
@@ -50,6 +51,7 @@ import { UsersModule } from './users/users.module.js';
     DepartmentsModule,
     CategoriesModule,
     GroupsModule,
+    CatalogAdminModule,
     TicketsModule,
     InboundEmailModule,
   ],

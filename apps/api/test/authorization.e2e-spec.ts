@@ -101,6 +101,14 @@ const ADMIN_ONLY = {
   pendente: 403,
 };
 
+/** Registro de cada cadastro (T25) que o PATCH da matriz edita. */
+const CATALOG_IDS = {
+  companies: (ref: Refs) => ref.companyId,
+  departments: (ref: Refs) => ref.departmentId,
+  groups: (ref: Refs) => ref.groupId,
+  categories: (ref: Refs) => ref.categoryId,
+};
+
 const MATRIX: RouteCase[] = [
   {
     method: 'get',
@@ -312,6 +320,29 @@ const MATRIX: RouteCase[] = [
     body: () => ({ userIds: [] }),
     expected: ADMIN_ONLY,
   },
+  // T25: cadastros de referência — só admin.
+  ...(['companies', 'departments', 'groups', 'categories'] as const).flatMap(
+    (kind): RouteCase[] => [
+      { method: 'get', path: `/api/admin/${kind}`, expected: ADMIN_ONLY },
+      {
+        method: 'post',
+        path: `/api/admin/${kind}`,
+        body: (ref) =>
+          kind === 'categories' ? { name: 'Nova', defaultGroupId: ref.groupId } : { name: 'Nova' },
+        expected: { ...ADMIN_ONLY, admin: 201 },
+      },
+      {
+        method: 'patch',
+        path: (ref) => `/api/admin/${kind}/${CATALOG_IDS[kind](ref)}`,
+        template: `/api/admin/${kind}/:id`,
+        label: `PATCH /api/admin/${kind}/:id`,
+        // A categoria do fixture é a "Geral", que não se renomeia: muda só o grupo padrão.
+        body: (ref) =>
+          kind === 'categories' ? { defaultGroupId: ref.groupId } : { name: 'Renomeado' },
+        expected: ADMIN_ONLY,
+      },
+    ],
+  ),
 ];
 
 /** Rotas que o Express tem registradas, no formato `GET /api/tickets/:id`. */

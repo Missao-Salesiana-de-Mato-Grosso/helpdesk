@@ -24,6 +24,7 @@ Convenções:
 | Notificação que não chegou        | 9     |
 | Rodar SQL em produção             | 10    |
 | Tarefas com data marcada          | 11    |
+| Unidade, setor, grupo, categoria  | 12    |
 
 **Saúde:** `make status` (só leitura: pods, certificados, `https://auth.msmt.org.br/debug/ready` e `https://suporte.msmt.org.br/api/health`).
 
@@ -171,16 +172,16 @@ WHERE status IN ('failed', 'discarded') AND created_at > now() - interval '1 day
 ORDER BY created_at DESC;
 ```
 
-| `status` · `reason`                                            | O que fazer                                                                                                                                                                          |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `discarded` · `auto_submitted`, `bulk`, `auto_reply`, `bounce` | Esperado (auto-resposta, lista, aviso de entrega). Nada a fazer                                                                                                                      |
-| `discarded` · `own_address`                                    | E-mail da própria caixa (anti-loop). Esperado                                                                                                                                        |
-| `discarded` · `rate_limited`                                   | Mais de 20 e-mails do remetente na hora: costuma ser loop ou disparo em massa. Ler na caixa; se for legítimo, abrir o ticket pelo portal em nome do remetente                        |
-| `discarded` · `dmarc_fail`                                     | O remetente não passou no DMARC: possível falsificação. Ler o original no Gmail ("Mostrar original"); se for legítimo, abrir pelo portal e avisar o remetente do problema no domínio |
-| `discarded` · `inactive_sender`                                | Usuário inativado (seção 5). Se ainda precisa de atendimento, reativar ou abrir pelo portal                                                                                          |
-| `failed` · `parse_error`, `no_sender`                          | E-mail ilegível ou sem remetente. Ler o original no Gmail; se for um pedido real, abrir o ticket pelo portal em nome do remetente                                                    |
-| `failed` · outro texto (ex.: categoria "Geral" ausente)        | Erro de regra. "Geral" vem do seed: o deploy roda o seed de novo (Job de migração). Corrigida a causa, reprocessar (abaixo)                                                          |
-| nenhuma linha, e-mail parado na INBOX sem rótulo               | Falha de infraestrutura (banco, storage, IMAP): a API não grava `failed` e tenta de novo no próximo ciclo. Ver o log (`Ciclo da caixa interrompido`)                                 |
+| `status` · `reason`                                            | O que fazer                                                                                                                                                                                  |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `discarded` · `auto_submitted`, `bulk`, `auto_reply`, `bounce` | Esperado (auto-resposta, lista, aviso de entrega). Nada a fazer                                                                                                                              |
+| `discarded` · `own_address`                                    | E-mail da própria caixa (anti-loop). Esperado                                                                                                                                                |
+| `discarded` · `rate_limited`                                   | Mais de 20 e-mails do remetente na hora: costuma ser loop ou disparo em massa. Ler na caixa; se for legítimo, abrir o ticket pelo portal em nome do remetente                                |
+| `discarded` · `dmarc_fail`                                     | O remetente não passou no DMARC: possível falsificação. Ler o original no Gmail ("Mostrar original"); se for legítimo, abrir pelo portal e avisar o remetente do problema no domínio         |
+| `discarded` · `inactive_sender`                                | Usuário inativado (seção 5). Se ainda precisa de atendimento, reativar ou abrir pelo portal                                                                                                  |
+| `failed` · `parse_error`, `no_sender`                          | E-mail ilegível ou sem remetente. Ler o original no Gmail; se for um pedido real, abrir o ticket pelo portal em nome do remetente                                                            |
+| `failed` · outro texto (ex.: categoria "Geral" ausente)        | Erro de regra. A tela não deixa desativar nem renomear a "Geral" (T25), e o seed a recria se faltar: o próximo deploy roda o seed (Job de migração). Corrigida a causa, reprocessar (abaixo) |
+| nenhuma linha, e-mail parado na INBOX sem rótulo               | Falha de infraestrutura (banco, storage, IMAP): a API não grava `failed` e tenta de novo no próximo ciclo. Ver o log (`Ciclo da caixa interrompido`)                                         |
 
 **Reprocessar um e-mail `failed`** ⚠️ (depois de corrigir a causa). A idempotência é por `Message-ID`, então é preciso remover a linha e recuar o cursor até antes do UID dele (seção 10):
 
@@ -237,3 +238,13 @@ Regras:
 | **Antes de 25/10/2027**  | Renovar o kubeconfig do `k8s-msmt-prd` (`make cluster` no infra) e o secret `KUBECONFIG_PROD` (P11) |
 | A cada 30 dias (sozinho) | Pedidos de acesso sem decisão vão para a lixeira (T22, RN-19). Conferir a lixeira no portal         |
 | Mensal (sugestão)        | Olhar `inbound_emails` `failed` e `notifications` `failed` do mês (seções 8 e 9)                    |
+
+## 12. Unidades, departamentos, grupos e categorias
+
+Portal → **Administração** → **Unidades**, **Departamentos**, **Grupos** ou **Categorias** (só admin, T25). Em cada tela: **Novo** cria; **Editar** renomeia ou desativa. A mudança vale na hora.
+
+- **Não existe excluir.** Desativar tira o item das listas de escolha (1º acesso, novo ticket, painel do agente); quem já usa continua com ele, e o histórico não muda. Para corrigir um nome, **renomeie**: os vínculos com usuários e tickets ficam.
+- **Nome repetido** é recusado, sem diferenciar maiúsculas.
+- **Grupo:** o e-mail de aviso é opcional e recebe o aviso de ticket novo além dos membros (T14). Os membros continuam na mesma tela, em **Membros**. Não dá para desativar o grupo padrão de uma categoria ativa: troque o grupo padrão dela ou desative-a antes.
+- **Categoria "Geral":** recebe os tickets abertos por e-mail (T21). Não pode ser renomeada nem desativada; só o grupo padrão muda.
+- **Seed:** o Job de migração roda `prisma/seed.ts` a cada deploy, mas ele só preenche uma tabela **vazia** (instalação nova) e garante a "Geral". O que for mudado pela tela não volta no deploy seguinte.
