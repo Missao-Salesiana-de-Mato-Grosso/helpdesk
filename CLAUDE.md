@@ -33,7 +33,7 @@ pnpm --filter @helpdesk/api test:unit      # só *.spec.ts
 pnpm --filter @helpdesk/api test:e2e       # só test/**/*.e2e-spec.ts (usa o banco helpdesk_test; exige a infra local)
 pnpm typecheck && pnpm lint && pnpm format:check
 pnpm --filter @helpdesk/api prisma:migrate -- --name <nome>   # nova migração (dev)
-pnpm --filter @helpdesk/api prisma:seed                      # dados de referência (idempotente)
+pnpm --filter @helpdesk/api prisma:seed                      # dados iniciais: só tabela vazia + "Geral" (T25)
 ```
 
 ## Fluxo de mudança (issue → PR → deploy)

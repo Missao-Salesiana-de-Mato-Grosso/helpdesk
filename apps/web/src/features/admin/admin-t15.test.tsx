@@ -155,7 +155,11 @@ describe('GroupsPage (T15)', () => {
     let putBody: unknown;
     stubApi({
       'GET /api/me': () => jsonResponse(200, ADMIN),
-      'GET /api/groups': () => jsonResponse(200, [{ id: 'g1', name: 'Suporte TI' }]),
+      'GET /api/admin/groups': () =>
+        jsonResponse(200, [
+          { id: 'g1', name: 'Suporte TI', email: null, active: true },
+          { id: 'g9', name: 'Antigo', email: null, active: false },
+        ]),
       'GET /api/groups/g1/members': () => jsonResponse(200, [{ id: 'a1', name: 'Ana' }]),
       'GET /api/users': (_init, url) => {
         expect(url.searchParams.get('role')).toBe('agent');
@@ -179,6 +183,8 @@ describe('GroupsPage (T15)', () => {
     renderWithProviders(<GroupsPage />);
 
     await userEvent.click(await screen.findByRole('combobox', { name: 'Grupo' }));
+    // Grupo inativo não aparece na escolha de membros.
+    expect(screen.queryByRole('option', { name: 'Antigo' })).not.toBeInTheDocument();
     await userEvent.click(await screen.findByRole('option', { name: 'Suporte TI' }));
 
     const save = await screen.findByRole('button', { name: 'Salvar membros' });

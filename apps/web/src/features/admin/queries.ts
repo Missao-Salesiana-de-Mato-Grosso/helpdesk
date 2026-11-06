@@ -1,10 +1,19 @@
 import type {
   AccessRequestListResponse,
   ApproveAccessInput,
+  CatalogItem,
+  CategoryItem,
+  CreateCatalogItemInput,
+  CreateCategoryInput,
+  CreateGroupInput,
+  GroupItem,
   EmptyTrashResponse,
   MeResponse,
   NamedRef,
   RejectAccessInput,
+  UpdateCatalogItemInput,
+  UpdateCategoryInput,
+  UpdateGroupInput,
   UpdateUserInput,
   UserListResponse,
   UserSummary,
@@ -140,6 +149,62 @@ export function useReplaceGroupMembers(groupId: string) {
       queryClient.setQueryData(['groups', groupId, 'members'], members);
       // A coluna "Grupos" da lista de usuários mudou.
       void queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+}
+
+// ───────────── T25: cadastros de referência ─────────────
+
+interface CatalogTypes {
+  companies: { item: CatalogItem; create: CreateCatalogItemInput; update: UpdateCatalogItemInput };
+  departments: {
+    item: CatalogItem;
+    create: CreateCatalogItemInput;
+    update: UpdateCatalogItemInput;
+  };
+  groups: { item: GroupItem; create: CreateGroupInput; update: UpdateGroupInput };
+  categories: { item: CategoryItem; create: CreateCategoryInput; update: UpdateCategoryInput };
+}
+
+export type CatalogKind = keyof CatalogTypes;
+
+/** Listas de escolha (só ativos) que mudam junto. Grupo inativo também tira as categorias dele. */
+const PUBLIC_LISTS: Record<CatalogKind, string[]> = {
+  companies: ['companies'],
+  departments: ['departments'],
+  groups: ['groups', 'categories'],
+  categories: ['categories'],
+};
+
+/** Lista da tela de admin, com os inativos. */
+export function useCatalog<K extends CatalogKind>(kind: K) {
+  const api = useApi();
+  return useQuery({
+    queryKey: ['admin', kind],
+    queryFn: () => api<CatalogTypes[K]['item'][]>(`/admin/${kind}`),
+  });
+}
+
+/** Sem `id` cria; com `id` edita só os campos enviados. */
+export function useSaveCatalogItem<K extends CatalogKind>(kind: K) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      input:
+        | { id?: undefined; data: CatalogTypes[K]['create'] }
+        | { id: string; data: CatalogTypes[K]['update'] },
+    ) =>
+      api<CatalogTypes[K]['item']>(input.id ? `/admin/${kind}/${input.id}` : `/admin/${kind}`, {
+        method: input.id ? 'PATCH' : 'POST',
+        body: JSON.stringify(input.data),
+      }),
+    onSuccess: () => {
+      // A lista de categorias do admin mostra o grupo padrão: todas as listas do admin recarregam.
+      void queryClient.invalidateQueries({ queryKey: ['admin'] });
+      for (const key of PUBLIC_LISTS[kind]) {
+        void queryClient.invalidateQueries({ queryKey: [key] });
+      }
     },
   });
 }

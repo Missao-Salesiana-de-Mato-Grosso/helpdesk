@@ -52,6 +52,9 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: 'Usuários', to: '/admin/usuarios' },
       { label: 'Grupos', to: '/admin/grupos' },
+      { label: 'Categorias', to: '/admin/categorias' },
+      { label: 'Unidades', to: '/admin/unidades' },
+      { label: 'Departamentos', to: '/admin/departamentos' },
     ],
   },
   {
