@@ -4,6 +4,7 @@ import type { PrismaClient } from '../../src/generated/prisma/client.js';
 // ao seu START; a migração inicial define START 1001 em tickets.number, então os testes recomeçam em #1001.
 const TABLES = [
   'app_settings',
+  'canned_responses',
   'email_message_refs',
   'inbound_emails',
   'notifications',

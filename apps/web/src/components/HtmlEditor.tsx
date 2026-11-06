@@ -2,7 +2,7 @@ import { Input } from '@mantine/core';
 import { Link, RichTextEditor, type RichTextEditorLabels } from '@mantine/tiptap';
 import { useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { useEffect, useId } from 'react';
+import { useEffect, useId, useImperativeHandle, type Ref } from 'react';
 
 const LABELS: Partial<RichTextEditorLabels> = {
   boldControlLabel: 'Negrito',
@@ -24,6 +24,12 @@ const LABELS: Partial<RichTextEditorLabels> = {
   linkEditorSave: 'Salvar',
 };
 
+/** Ações do editor para o pai (ex.: inserir uma resposta pronta, T26). */
+export interface HtmlEditorHandle {
+  /** Insere o HTML na posição do cursor (no fim, se o editor nunca recebeu foco). */
+  insertHtml: (html: string) => void;
+}
+
 export interface HtmlEditorProps {
   label: string;
   /** HTML; `''` quando o editor está vazio (só espaços também conta como vazio). */
@@ -31,13 +37,21 @@ export interface HtmlEditorProps {
   onChange: (html: string) => void;
   error?: string | undefined;
   disabled?: boolean;
+  handleRef?: Ref<HtmlEditorHandle>;
 }
 
 /**
  * Editor rico (Tiptap via `@mantine/tiptap`) com o subconjunto que a allowlist do backend aceita:
  * negrito, itálico, sublinhado, tachado, listas, citação, código e link. Sem imagens (anexos: T13).
  */
-export function HtmlEditor({ label, value, onChange, error, disabled = false }: HtmlEditorProps) {
+export function HtmlEditor({
+  label,
+  value,
+  onChange,
+  error,
+  disabled = false,
+  handleRef,
+}: HtmlEditorProps) {
   // O Input.Wrapper do Mantine dá ao rótulo o id `<id>-label`.
   const labelId = useId();
   const editor = useEditor({
@@ -72,6 +86,16 @@ export function HtmlEditor({ label, value, onChange, error, disabled = false }: 
   useEffect(() => {
     editor?.setEditable(!disabled);
   }, [editor, disabled]);
+
+  useImperativeHandle(
+    handleRef,
+    () => ({
+      insertHtml: (html) => {
+        editor?.chain().focus().insertContent(html).run();
+      },
+    }),
+    [editor],
+  );
 
   return (
     <Input.Wrapper label={label} id={labelId} required error={error}>

@@ -125,15 +125,16 @@ model User {
   createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  company          Company?        @relation(fields: [companyId], references: [id])
-  department       Department?     @relation(fields: [departmentId], references: [id])
-  accessDecidedBy  User?           @relation("AccessDecisions", fields: [accessDecidedById], references: [id])
-  accessDecisions  User[]          @relation("AccessDecisions")
+  company          Company?         @relation(fields: [companyId], references: [id])
+  department       Department?      @relation(fields: [departmentId], references: [id])
+  accessDecidedBy  User?            @relation("AccessDecisions", fields: [accessDecidedById], references: [id])
+  accessDecisions  User[]           @relation("AccessDecisions")
   groupMemberships GroupMember[]
-  requestedTickets Ticket[]        @relation("TicketRequester")
-  assignedTickets  Ticket[]        @relation("TicketAssignee")
+  requestedTickets Ticket[]         @relation("TicketRequester")
+  assignedTickets  Ticket[]         @relation("TicketAssignee")
   messages         TicketMessage[]
   events           TicketEvent[]
+  cannedResponses  CannedResponse[]
 
   @@index([companyId])
   @@index([accessRequestedAt], map: "users_access_requested_at_pending_idx")
@@ -373,6 +374,22 @@ model EmailMessageRef {
 }
 
 /// Chave/valor para estado operacional (ex.: cursor `mailbox.last_uid`).
+/// T26: respostas prontas. O texto é copiado para a mensagem ao inserir; nada referencia a linha.
+model CannedResponse {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Único sem diferenciar maiúsculas.
+  title       String   @unique @db.Citext
+  /// HTML já sanitizado (mesma allowlist das mensagens).
+  bodyHtml    String   @map("body_html")
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@map("canned_responses")
+}
+
 model AppSetting {
   key       String   @id
   value     String

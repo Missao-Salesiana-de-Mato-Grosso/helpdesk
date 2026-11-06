@@ -9,12 +9,12 @@ describe('visibleSections', () => {
     expect(titles([])).toEqual(['Meus pedidos']);
   });
 
-  it('agente vê o atendimento, sem administração nem liberação', () => {
+  it('agente vê o atendimento, sem administração nem supervisão', () => {
     expect(titles(['agente'])).toEqual(['Atendimento', 'Meus pedidos']);
   });
 
-  it('supervisor vê o atendimento e a liberação, sem a administração (T15)', () => {
-    expect(titles(['supervisor'])).toEqual(['Atendimento', 'Meus pedidos', 'Liberação']);
+  it('supervisor vê o atendimento e a supervisão, sem a administração (T15)', () => {
+    expect(titles(['supervisor'])).toEqual(['Atendimento', 'Meus pedidos', 'Supervisão']);
   });
 
   it('admin vê tudo', () => {
@@ -22,7 +22,7 @@ describe('visibleSections', () => {
       'Atendimento',
       'Meus pedidos',
       'Administração',
-      'Liberação',
+      'Supervisão',
     ]);
   });
 });

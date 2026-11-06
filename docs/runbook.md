@@ -25,6 +25,7 @@ Convenções:
 | Rodar SQL em produção             | 10    |
 | Tarefas com data marcada          | 11    |
 | Unidade, setor, grupo, categoria  | 12    |
+| Respostas prontas                 | 13    |
 
 **Saúde:** `make status` (só leitura: pods, certificados, `https://auth.msmt.org.br/debug/ready` e `https://suporte.msmt.org.br/api/health`).
 
@@ -248,3 +249,11 @@ Portal → **Administração** → **Unidades**, **Departamentos**, **Grupos** o
 - **Grupo:** o e-mail de aviso é opcional e recebe o aviso de ticket novo além dos membros (T14). Os membros continuam na mesma tela, em **Membros**. Não dá para desativar o grupo padrão de uma categoria ativa: troque o grupo padrão dela ou desative-a antes.
 - **Categoria "Geral":** recebe os tickets abertos por e-mail (T21). Não pode ser renomeada nem desativada; só o grupo padrão muda.
 - **Seed:** o Job de migração roda `prisma/seed.ts` a cada deploy, mas ele só preenche uma tabela **vazia** (instalação nova) e garante a "Geral". O que for mudado pela tela não volta no deploy seguinte.
+
+## 13. Respostas prontas
+
+Portal → **Supervisão** → **Respostas prontas** (admin e supervisor, T26): **Nova resposta**, **Editar** e, dentro do modal, **Excluir resposta** (pede confirmação). Excluir não muda as mensagens já enviadas: o texto é copiado para a mensagem na hora de inserir.
+
+- O agente usa no ticket, nas abas **Resposta** e **Nota interna**: campo **Inserir resposta pronta…**, com busca pelo título. O texto entra na posição do cursor e pode ser editado antes de enviar.
+- Variáveis trocadas ao inserir: `{{solicitante}}` (primeiro nome do solicitante), `{{numero}}` (`#1234`) e `{{agente}}` (primeiro nome de quem responde). Variável escrita errada fica como está, para o agente notar.
+- Título repetido é recusado, sem diferenciar maiúsculas.
