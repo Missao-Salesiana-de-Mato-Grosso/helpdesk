@@ -94,6 +94,9 @@ export const envSchema = z
 
     // Liberação de acesso ao portal (T22). Pedido pending sem decisão há N dias vai para a lixeira (RN-19).
     ACCESS_REQUEST_TRASH_DAYS: z.coerce.number().int().positive().default(30),
+
+    // T27: ticket resolvido há N dias sem resposta passa para fechado. 0 desliga.
+    AUTO_CLOSE_DAYS: z.coerce.number().int().nonnegative().default(7),
   })
   .superRefine((env, ctx) => {
     const requireWith = (keys: readonly (keyof typeof env)[], condition: string) => {

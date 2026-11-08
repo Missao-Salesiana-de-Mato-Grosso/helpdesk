@@ -27,9 +27,11 @@ export function eventText(event: TicketEvent, refs: Record<string, string>): str
         ? 'abriu o chamado (relacionado a um chamado anterior)'
         : 'abriu o chamado';
     case 'status_changed':
-      return event.data.reason === 'requester_reply'
-        ? 'reabriu o chamado ao responder'
-        : `mudou a situação de ${status(from)} para ${status(to)}`;
+      if (event.data.reason === 'requester_reply') return 'reabriu o chamado ao responder';
+      if (event.data.reason === 'auto_close') {
+        return 'fechou o chamado automaticamente (resolvido, sem resposta do solicitante)';
+      }
+      return `mudou a situação de ${status(from)} para ${status(to)}`;
     case 'priority_changed':
       return `mudou a prioridade de ${priority(from)} para ${priority(to)}`;
     case 'assigned':

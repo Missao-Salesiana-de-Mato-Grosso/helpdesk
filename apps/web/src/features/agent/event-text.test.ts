@@ -24,6 +24,10 @@ describe('eventText', () => {
       'reabriu o chamado ao responder',
     ],
     [
+      event('status_changed', { from: 'resolved', to: 'closed', reason: 'auto_close' }),
+      'fechou o chamado automaticamente (resolvido, sem resposta do solicitante)',
+    ],
+    [
       event('priority_changed', { from: 'medium', to: 'urgent' }),
       'mudou a prioridade de Média para Urgente',
     ],

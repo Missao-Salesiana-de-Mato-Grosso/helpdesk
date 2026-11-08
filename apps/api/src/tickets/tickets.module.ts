@@ -5,6 +5,7 @@ import { CompaniesModule } from '../companies/companies.module.js';
 import { GroupsModule } from '../groups/groups.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
 import { UsersModule } from '../users/users.module.js';
+import { AutoCloseCron } from './auto-close.cron.js';
 import { AttachmentsController, TicketsController } from './tickets.controller.js';
 import { TicketEventsRepository, TicketsRepository } from './tickets.repository.js';
 import { TicketsService } from './tickets.service.js';
@@ -19,7 +20,7 @@ import { TicketsService } from './tickets.service.js';
     NotificationsModule,
   ],
   controllers: [TicketsController, AttachmentsController],
-  providers: [TicketsService, TicketsRepository, TicketEventsRepository],
+  providers: [TicketsService, TicketsRepository, TicketEventsRepository, AutoCloseCron],
   exports: [TicketsService],
 })
 export class TicketsModule {}

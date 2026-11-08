@@ -46,7 +46,7 @@ Legenda de complexidade, considerando 1 dev com Claude Code: **P** = até meio d
 |                          | Horário comercial e feriados                                            | Fase 2           | M      | SLA                           |                                                                                                                                                                                  |
 |                          | Escalonamento                                                           | Fase 2           | M      | SLA                           |                                                                                                                                                                                  |
 | **Automações**           | Respostas prontas (canned responses)                                    | Fase 2 (T26)     | P      | —                             | Compartilhadas; variáveis `{{solicitante}}`, `{{numero}}`, `{{agente}}`                                                                                                          |
-|                          | Fechar automaticamente resolvidos após N dias                           | Fase 2           | P      | Scheduler                     |                                                                                                                                                                                  |
+|                          | Fechar automaticamente resolvidos após N dias                           | Fase 2 (T27)     | P      | Scheduler                     | `AUTO_CLOSE_DAYS` (7); evento assinado pelo ator do sistema, sem e-mail                                                                                                          |
 |                          | Regras na criação, por evento e por tempo                               | Fase 2           | G      | —                             | Motor de regras genérico é caro. Começar com regras fixas em código                                                                                                              |
 | **Solicitantes**         | Cadastro via Zitadel (JIT)                                              | **MVP**          | P      | Login                         |                                                                                                                                                                                  |
 |                          | Empresa (escola/obra) e departamento do solicitante                     | **MVP**          | P      | Cadastros                     | Preenchidos numa tela de 1º acesso (obrigatória antes de abrir ticket) ou pelo admin                                                                                             |
@@ -105,7 +105,7 @@ stateDiagram-v2
     Aberto --> Resolvido: agente resolve
     Pendente --> Resolvido: agente resolve
     Resolvido --> Aberto: solicitante responde (reabre)
-    Resolvido --> Fechado: agente fecha / auto após N dias (Fase 2)
+    Resolvido --> Fechado: agente fecha / auto após N dias (T27)
     Fechado --> [*]
 ```
 

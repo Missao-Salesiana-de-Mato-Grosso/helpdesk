@@ -6,9 +6,9 @@
 // Uso: `pnpm --filter @helpdesk/api prisma:seed` (ou `prisma db seed`).
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client.js';
+import { SYSTEM_USER_EMAIL } from '../src/users/system-user.js';
 
-/** E-mail do ator do sistema, usado como `actor_id` em eventos gerados por jobs e pelo canal de e-mail. */
-export const SYSTEM_USER_EMAIL = 'system@helpdesk.local';
+export { SYSTEM_USER_EMAIL };
 
 export const SEED = {
   departments: ['Secretaria', 'Financeiro', 'Pedagógico'],

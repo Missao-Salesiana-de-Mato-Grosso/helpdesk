@@ -26,6 +26,7 @@ Convenções:
 | Tarefas com data marcada          | 11    |
 | Unidade, setor, grupo, categoria  | 12    |
 | Respostas prontas                 | 13    |
+| Fechamento automático             | 14    |
 
 **Saúde:** `make status` (só leitura: pods, certificados, `https://auth.msmt.org.br/debug/ready` e `https://suporte.msmt.org.br/api/health`).
 
@@ -257,3 +258,11 @@ Portal → **Supervisão** → **Respostas prontas** (admin e supervisor, T26): 
 - O agente usa no ticket, nas abas **Resposta** e **Nota interna**: campo **Inserir resposta pronta…**, com busca pelo título. O texto entra na posição do cursor e pode ser editado antes de enviar.
 - Variáveis trocadas ao inserir: `{{solicitante}}` (primeiro nome do solicitante), `{{numero}}` (`#1234`) e `{{agente}}` (primeiro nome de quem responde). Variável escrita errada fica como está, para o agente notar.
 - Título repetido é recusado, sem diferenciar maiúsculas.
+
+## 14. Fechamento automático
+
+Uma rotina da API roda a cada hora e passa para **Fechado** o ticket que está em **Resolvido** há mais de `AUTO_CLOSE_DAYS` dias (padrão **7**), contados da última resolução (T27). Se o solicitante responder antes, o ticket volta para Aberto e a contagem recomeça na próxima resolução.
+
+- No histórico aparece "Sistema fechou o chamado automaticamente". O solicitante não recebe e-mail. Resposta depois disso abre um ticket novo, relacionado ao anterior (T21).
+- Mudar o prazo: variável `AUTO_CLOSE_DAYS` em `deploy/k8s/overlays/prod/config.env` (por PR, como qualquer mudança). `0` desliga a rotina.
+- Cada ciclo fecha no máximo 200 tickets; o resto fica para a hora seguinte. No log, `Fechamento automático: N ticket(s)...`. Se aparecer `Ator do sistema ... ausente`, o seed não rodou (ele roda no Job de migração a cada deploy).
