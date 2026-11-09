@@ -26,6 +26,7 @@ import {
 import { useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { QUEUE_VIEWS, type QueueSlug } from '../../layout/navigation.ts';
+import { SlaBadge } from '../tickets/SlaBadge.tsx';
 import { StatusBadge } from '../tickets/StatusBadge.tsx';
 import { PRIORITY_COLOR, PRIORITY_LABEL, STATUS_LABEL, formatDateTime } from '../tickets/format.ts';
 import {
@@ -44,6 +45,7 @@ const SORT_OPTIONS: { value: TicketSort; label: string }[] = [
   { value: 'created_at:asc', label: 'Mais antigos primeiro' },
   { value: 'created_at:desc', label: 'Mais novos primeiro' },
   { value: 'priority:desc', label: 'Maior prioridade' },
+  { value: 'resolution_due:asc', label: 'Prazo de resolução mais próximo' },
 ];
 
 const isStatus = (value: string): value is TicketStatus =>
@@ -70,6 +72,7 @@ function Queue({ slug }: { slug: QueueSlug }) {
   const [priorities, setPriorities] = useState<TicketPriority[]>([]);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [noCompany, setNoCompany] = useState(false);
+  const [slaBreached, setSlaBreached] = useState(false);
   const [groupId, setGroupId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [q] = useDebouncedValue(search.trim(), 300);
@@ -86,6 +89,7 @@ function Queue({ slug }: { slug: QueueSlug }) {
     priorities,
     companyId,
     noCompany,
+    slaBreached,
     groupId: slug === 'todos' ? groupId : null,
     q,
     sort,
@@ -101,6 +105,7 @@ function Queue({ slug }: { slug: QueueSlug }) {
   const total = tickets.data?.total ?? 0;
   const pages = Math.ceil(total / QUEUE_PAGE_SIZE);
   const noCompanyCount = counters.data?.noCompany;
+  const breachedCount = counters.data?.slaBreached;
 
   return (
     <Stack>
@@ -108,14 +113,24 @@ function Queue({ slug }: { slug: QueueSlug }) {
         <Title order={1} size="h2">
           Fila — {queue.label}
         </Title>
-        <Button
-          variant={noCompany ? 'filled' : 'light'}
-          color="red"
-          aria-pressed={noCompany}
-          onClick={() => reset(setNoCompany)(!noCompany)}
-        >
-          Sem unidade{noCompanyCount === undefined ? '' : ` (${noCompanyCount})`}
-        </Button>
+        <Group gap="xs">
+          <Button
+            variant={slaBreached ? 'filled' : 'light'}
+            color="orange"
+            aria-pressed={slaBreached}
+            onClick={() => reset(setSlaBreached)(!slaBreached)}
+          >
+            SLA vencido{breachedCount === undefined ? '' : ` (${breachedCount})`}
+          </Button>
+          <Button
+            variant={noCompany ? 'filled' : 'light'}
+            color="red"
+            aria-pressed={noCompany}
+            onClick={() => reset(setNoCompany)(!noCompany)}
+          >
+            Sem unidade{noCompanyCount === undefined ? '' : ` (${noCompanyCount})`}
+          </Button>
+        </Group>
       </Group>
 
       <Group align="flex-end">
@@ -190,7 +205,7 @@ function Queue({ slug }: { slug: QueueSlug }) {
 
       {tickets.data && total > 0 && (
         <>
-          <Table.ScrollContainer minWidth={960}>
+          <Table.ScrollContainer minWidth={1080}>
             <Table striped highlightOnHover>
               <Table.Thead>
                 <Table.Tr>
@@ -202,6 +217,7 @@ function Queue({ slug }: { slug: QueueSlug }) {
                   <Table.Th>Responsável</Table.Th>
                   <Table.Th>Prioridade</Table.Th>
                   <Table.Th>Situação</Table.Th>
+                  <Table.Th>Prazo</Table.Th>
                   <Table.Th>Atualizado em</Table.Th>
                 </Table.Tr>
               </Table.Thead>
@@ -240,6 +256,9 @@ function Queue({ slug }: { slug: QueueSlug }) {
                     </Table.Td>
                     <Table.Td>
                       <StatusBadge status={ticket.status} />
+                    </Table.Td>
+                    <Table.Td>
+                      <SlaBadge sla={ticket.sla} />
                     </Table.Td>
                     <Table.Td>{formatDateTime(ticket.updatedAt)}</Table.Td>
                   </Table.Tr>

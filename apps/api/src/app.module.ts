@@ -8,6 +8,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { AuthModule } from './auth/auth.module.js';
 import { CannedResponsesModule } from './canned-responses/canned-responses.module.js';
 import { CatalogAdminModule } from './catalog-admin/catalog-admin.module.js';
+import { SlaAdminModule } from './sla-admin/sla-admin.module.js';
 import { ApiExceptionFilter } from './common/api-exception.filter.js';
 import { loggerParams } from './common/logger.js';
 import { CategoriesModule } from './categories/categories.module.js';
@@ -54,6 +55,7 @@ import { UsersModule } from './users/users.module.js';
     GroupsModule,
     CatalogAdminModule,
     CannedResponsesModule,
+    SlaAdminModule,
     TicketsModule,
     InboundEmailModule,
   ],

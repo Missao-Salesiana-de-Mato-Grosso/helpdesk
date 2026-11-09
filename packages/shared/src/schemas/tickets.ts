@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { NamedRef } from './me.js';
+import type { TicketSla } from './sla.js';
 
 // Enums de domínio (iguais aos do Prisma). Spec docs/specs/T08-T10-tickets-core.md.
 export const TICKET_STATUSES = ['open', 'pending', 'resolved', 'closed'] as const;
@@ -15,6 +16,7 @@ export const TICKET_SORTS = [
   'priority:desc',
   'number:asc',
   'number:desc',
+  'resolution_due:asc',
 ] as const;
 
 export type TicketStatus = (typeof TICKET_STATUSES)[number];
@@ -74,6 +76,8 @@ export const listTicketsQuerySchema = z
     companyId: z.uuid().optional(),
     noCompany: queryBoolean,
     groupId: z.uuid().optional(),
+    /** T28: abertos com a 1ª resposta ou a resolução vencida. */
+    slaBreached: queryBoolean,
     q: z.string().trim().max(200).optional(),
     page: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(100).default(25),
@@ -136,6 +140,8 @@ export interface TicketSummary {
   createdAt: string;
   updatedAt: string;
   lastMessageAt: string | null;
+  /** T28: só para agentes. */
+  sla: TicketSla | null;
 }
 
 export interface TicketListResponse {
@@ -150,6 +156,8 @@ export interface TicketCounters {
   group: number;
   unassigned: number;
   noCompany: number;
+  /** T28: abertos com SLA vencido, no escopo do agente. */
+  slaBreached: number;
 }
 
 export interface TicketAttachment {
@@ -201,6 +209,8 @@ export interface TicketDetail {
   closedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** T28: só para agentes. */
+  sla: TicketSla | null;
   messages: TicketMessage[];
   events: TicketEvent[];
   /** Nomes dos ids citados em `events[].data` (responsável, grupo, unidade, categoria). */

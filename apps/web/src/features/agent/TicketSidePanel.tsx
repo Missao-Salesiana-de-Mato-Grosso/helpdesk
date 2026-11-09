@@ -10,6 +10,7 @@ import {
   type UpdateTicketInput,
 } from '@helpdesk/shared';
 import { useState, type Ref } from 'react';
+import { SlaPanel } from '../tickets/SlaBadge.tsx';
 import { PRIORITY_LABEL, STATUS_LABEL } from '../tickets/format.ts';
 import { useCategories, useCompanies, useGroupMembers, useGroups } from '../tickets/queries.ts';
 
@@ -78,6 +79,7 @@ export function TicketSidePanel({
 
   return (
     <Stack>
+      {ticket.sla && <SlaPanel sla={ticket.sla} />}
       <Paper withBorder p="md">
         <Stack gap="sm">
           <Select

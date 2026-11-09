@@ -1,4 +1,4 @@
-import type { TicketDetail, TicketSummary } from '@helpdesk/shared';
+import type { TicketDetail, TicketSla, TicketSummary } from '@helpdesk/shared';
 import { isAgent } from './ticket-scope.js';
 import type { TicketDetailRow, TicketSummaryRow } from './tickets.repository.js';
 
@@ -10,7 +10,31 @@ function jsonObject(value: unknown): Record<string, unknown> {
     : {};
 }
 
-export function toTicketSummary(row: TicketSummaryRow): TicketSummary {
+type SlaColumns = Pick<
+  TicketSummaryRow,
+  | 'firstResponseDueAt'
+  | 'firstResponseAt'
+  | 'resolutionDueAt'
+  | 'resolvedAt'
+  | 'closedAt'
+  | 'slaPausedAt'
+>;
+
+/** T28: prazos e o que já foi cumprido. Resolução cumprida = resolvido ou, sem isso, fechado. */
+function toSla(row: SlaColumns): TicketSla {
+  return {
+    firstResponse: row.firstResponseDueAt
+      ? { dueAt: row.firstResponseDueAt.toISOString(), doneAt: iso(row.firstResponseAt) }
+      : null,
+    resolution: row.resolutionDueAt
+      ? { dueAt: row.resolutionDueAt.toISOString(), doneAt: iso(row.resolvedAt ?? row.closedAt) }
+      : null,
+    pausedAt: iso(row.slaPausedAt),
+  };
+}
+
+/** `agentView`: o SLA só vai para agentes. */
+export function toTicketSummary(row: TicketSummaryRow, agentView: boolean): TicketSummary {
   return {
     id: row.id,
     number: row.number,
@@ -25,12 +49,14 @@ export function toTicketSummary(row: TicketSummaryRow): TicketSummary {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     lastMessageAt: iso(row.messages[0]?.createdAt ?? null),
+    sla: agentView ? toSla(row) : null,
   };
 }
 
 export function toTicketDetail(
   row: TicketDetailRow,
-  refs: Record<string, string> = {},
+  refs: Record<string, string>,
+  agentView: boolean,
 ): TicketDetail {
   return {
     refs,
@@ -51,6 +77,7 @@ export function toTicketDetail(
     closedAt: iso(row.closedAt),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    sla: agentView ? toSla(row) : null,
     messages: row.messages.map((message) => ({
       id: message.id,
       kind: message.kind,

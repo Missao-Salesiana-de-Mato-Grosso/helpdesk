@@ -93,6 +93,9 @@ const lockedState = {
   companyId: true,
   firstResponseAt: true,
   resolvedAt: true,
+  createdAt: true,
+  slaPausedAt: true,
+  slaPausedMinutes: true,
 } satisfies Prisma.TicketSelect;
 
 export type LockedTicket = Prisma.TicketGetPayload<{ select: typeof lockedState }>;
@@ -108,6 +111,10 @@ export type TicketChanges = Pick<
   | 'firstResponseAt'
   | 'resolvedAt'
   | 'closedAt'
+  | 'firstResponseDueAt'
+  | 'resolutionDueAt'
+  | 'slaPausedAt'
+  | 'slaPausedMinutes'
 >;
 
 export interface NewTicket {
@@ -118,7 +125,25 @@ export interface NewTicket {
   groupId: string;
   categoryId: string;
   companyId: string | null;
+  createdAt: Date;
+  firstResponseDueAt: Date | null;
+  resolutionDueAt: Date | null;
 }
+
+/** T28: o que o recálculo do SLA lê de cada ticket. */
+const slaRowSelect = {
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  priority: true,
+  status: true,
+  slaPausedAt: true,
+  slaPausedMinutes: true,
+  resolvedAt: true,
+  closedAt: true,
+} satisfies Prisma.TicketSelect;
+
+export type SlaRow = Prisma.TicketGetPayload<{ select: typeof slaRowSelect }>;
 
 export interface NewMessage {
   ticketId: string;
@@ -205,6 +230,31 @@ export class TicketsRepository {
       where: { AND: [ticketScope(viewer), { id }] },
       select: lockedState,
     });
+  }
+
+  /** T28: tickets para recalcular o SLA: os não fechados ou, no backfill, os que nunca tiveram prazo. */
+  findForSla(missingOnly: boolean): Promise<SlaRow[]> {
+    return this.prisma.ticket.findMany({
+      where: missingOnly
+        ? { firstResponseDueAt: null, resolutionDueAt: null }
+        : { status: { not: 'closed' } },
+      select: slaRowSelect,
+    });
+  }
+
+  /**
+   * T28: grava só as colunas de SLA, sem mexer em `updated_at` nem na versão. Se o status ou a pausa
+   * mudaram desde a leitura, não grava (a escrita concorrente já calculou o SLA). Devolve 1 ou 0.
+   */
+  async setSla(
+    row: SlaRow,
+    fields: Pick<TicketChanges, 'firstResponseDueAt' | 'resolutionDueAt' | 'slaPausedAt'>,
+  ): Promise<number> {
+    const { count } = await this.prisma.ticket.updateMany({
+      where: { id: row.id, status: row.status, slaPausedMinutes: row.slaPausedMinutes },
+      data: { ...fields, updatedAt: row.updatedAt },
+    });
+    return count;
   }
 
   /** T27: ids dos tickets resolvidos antes de `cutoff`, os mais antigos primeiro. */

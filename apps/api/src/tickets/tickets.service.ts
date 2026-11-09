@@ -27,6 +27,7 @@ import { CompaniesService } from '../companies/companies.service.js';
 import { GroupsService } from '../groups/groups.service.js';
 import { NotificationService, type NotifiedTicket } from '../notifications/notification.service.js';
 import type { Prisma } from '../generated/prisma/client.js';
+import { SlaService, type SlaFields } from '../sla/sla.service.js';
 import { SYSTEM_USER_EMAIL } from '../users/system-user.js';
 import { UsersService } from '../users/users.service.js';
 import { isAgent, seesAllTickets, type ScopeUser } from './ticket-scope.js';
@@ -166,7 +167,17 @@ const SORTS: Record<ListTicketsQuery['sort'], Prisma.TicketOrderByWithRelationIn
   'priority:desc': [{ priority: 'desc' }, { updatedAt: 'desc' }],
   'number:asc': [{ number: 'asc' }],
   'number:desc': [{ number: 'desc' }],
+  'resolution_due:asc': [{ resolutionDueAt: { sort: 'asc', nulls: 'last' } }, { number: 'asc' }],
 };
+
+/** T28: abertos (o relógio correndo) com a 1ª resposta ou a resolução vencida. */
+const slaBreached = (now: Date): Prisma.TicketWhereInput => ({
+  status: 'open',
+  OR: [
+    { firstResponseAt: null, firstResponseDueAt: { lt: now } },
+    { resolutionDueAt: { lt: now } },
+  ],
+});
 
 /** Corpo sanitizado; vazio depois de sanitizar → 422 EMPTY_BODY (RN-33). */
 export function cleanBody(html: string): string {
@@ -195,6 +206,7 @@ export class TicketsService {
     private readonly attachments: AttachmentsService,
     private readonly notifications: NotificationService,
     private readonly emitter: EventEmitter2,
+    private readonly sla: SlaService,
   ) {}
 
   /** RN-21 a RN-30. O controller já exige agente+. */
@@ -281,6 +293,7 @@ export class TicketsService {
       }
 
       if (events.length === 0) return [];
+      await this.applySla(ticket, changes);
       await this.tickets.update(tx, id, changes, true);
       for (const event of events) {
         await this.events.append(tx, { ...event, ticketId: id, actorId: actor.id, ip });
@@ -309,7 +322,7 @@ export class TicketsService {
     });
 
     this.emitAll(emits);
-    return this.toDetail(await this.tickets.loadAfterWrite(actor, id));
+    return this.toDetail(await this.tickets.loadAfterWrite(actor, id), actor);
   }
 
   /** RN-31 a RN-39. */
@@ -382,6 +395,7 @@ export class TicketsService {
           bodyHtml,
         });
         await this.attachments.createRecords(tx, message.id, stored);
+        await this.applySla(ticket, changes);
         // Mudar o status muda o ticket: a versão sobe, para um PATCH concorrente dar 409.
         await this.tickets.update(tx, id, changes, changes.status !== undefined);
         await this.events.append(tx, {
@@ -428,7 +442,7 @@ export class TicketsService {
     );
 
     this.emitAll(emits);
-    return this.toDetail(await this.tickets.loadAfterWrite(actor, id));
+    return this.toDetail(await this.tickets.loadAfterWrite(actor, id), actor);
   }
 
   /**
@@ -466,7 +480,7 @@ export class TicketsService {
   }
 
   /** Detalhe com `refs`: nomes dos ids que os eventos citam, resolvidos na leitura. */
-  private async toDetail(row: TicketDetailRow): Promise<TicketDetail> {
+  private async toDetail(row: TicketDetailRow, viewer: ScopeUser): Promise<TicketDetail> {
     const ids: Record<'users' | 'groups' | 'companies' | 'categories', Set<string>> = {
       users: new Set(),
       groups: new Set(),
@@ -488,7 +502,16 @@ export class TicketsService {
       this.categories.namesByIds([...ids.categories]),
     ]);
     const refs = Object.fromEntries(found.flat().map((ref) => [ref.id, ref.name]));
-    return toTicketDetail(row, refs);
+    return toTicketDetail(row, refs, isAgent(viewer));
+  }
+
+  /** T28: soma ao `changes` o efeito da mudança de status ou prioridade no SLA. */
+  private async applySla(ticket: LockedTicket, changes: TicketChanges): Promise<void> {
+    const next = {
+      status: typeof changes.status === 'string' ? changes.status : ticket.status,
+      priority: typeof changes.priority === 'string' ? changes.priority : ticket.priority,
+    };
+    Object.assign(changes, await this.sla.plan(ticket, next, new Date()));
   }
 
   private async lockOrThrow(tx: Tx, actor: ScopeUser, id: string): Promise<LockedTicket> {
@@ -515,7 +538,7 @@ export class TicketsService {
     if (!UUID.test(id)) throw notFound();
     const row = await this.tickets.findDetail(viewer, id);
     if (!row) throw notFound();
-    return this.toDetail(row);
+    return this.toDetail(row, viewer);
   }
 
   /** RN-04 a RN-11. */
@@ -555,6 +578,8 @@ export class TicketsService {
     }
 
     const bodyHtml = cleanBody(input.bodyHtml);
+    const createdAt = new Date();
+    const sla = await this.sla.initial(input.priority, createdAt);
     const stored = await this.attachments.storeAll(files);
 
     const created = await this.withStoredFiles(stored, () =>
@@ -567,6 +592,9 @@ export class TicketsService {
           groupId: category.defaultGroup.id,
           categoryId: category.id,
           companyId,
+          createdAt,
+          firstResponseDueAt: sla.firstResponseDueAt,
+          resolutionDueAt: sla.resolutionDueAt,
         });
         const message = await this.tickets.addMessage(tx, {
           ticketId: ticket.id,
@@ -610,7 +638,7 @@ export class TicketsService {
       source,
     } satisfies TicketCreatedEvent);
 
-    return this.toDetail(await this.tickets.loadAfterWrite(actor, created.id));
+    return this.toDetail(await this.tickets.loadAfterWrite(actor, created.id), actor);
   }
 
   /** T21 RN-11: o ticket que um e-mail referencia (por id via refs, ou pelo número da tag). */
@@ -632,6 +660,8 @@ export class TicketsService {
     stored: StoredFile[],
     write: EmailWrite,
   ): Promise<{ id: string; number: number }> {
+    const createdAt = new Date();
+    const sla = await this.sla.initial('medium', createdAt);
     const created = await this.tickets.transaction(async (tx) => {
       const ticket = await this.tickets.create(tx, {
         subject: input.subject,
@@ -641,6 +671,9 @@ export class TicketsService {
         groupId: input.groupId,
         categoryId: input.categoryId,
         companyId: author.companyId,
+        createdAt,
+        firstResponseDueAt: sla.firstResponseDueAt,
+        resolutionDueAt: sla.resolutionDueAt,
       });
       const message = await this.tickets.addMessage(tx, {
         ticketId: ticket.id,
@@ -731,6 +764,7 @@ export class TicketsService {
         quotedHtml: input.quotedHtml,
       });
       await this.attachments.createRecords(tx, message.id, stored);
+      await this.applySla(ticket, changes);
       await this.tickets.update(tx, ticketId, changes, changes.status !== undefined);
       await this.events.append(tx, {
         ticketId,
@@ -814,6 +848,26 @@ export class TicketsService {
     return closed;
   }
 
+  /**
+   * T28: recalcula os prazos depois de uma mudança de metas, horário ou feriados (tickets não
+   * fechados) ou, com `missingOnly`, preenche os tickets que nunca tiveram prazo (backfill na
+   * subida). Devolve quantos gravou.
+   */
+  async recomputeSla(missingOnly = false): Promise<number> {
+    const context = await this.sla.context();
+    if (context.policies.size === 0) return 0;
+    let updated = 0;
+    for (const row of await this.tickets.findForSla(missingOnly)) {
+      const fields: Partial<SlaFields> = this.sla.dueDates(context, row);
+      // Backfill de ticket anterior à T28: a pausa atual começa na última data conhecida.
+      if (missingOnly && row.slaPausedAt === null && row.status !== 'open') {
+        fields.slaPausedAt = row.resolvedAt ?? row.closedAt ?? row.updatedAt;
+      }
+      updated += await this.tickets.setSla(row, fields);
+    }
+    return updated;
+  }
+
   /** RN-12 a RN-17. */
   async list(viewer: ScopeUser, query: ListTicketsQuery): Promise<TicketListResponse> {
     const view = query.view ?? this.defaultView(viewer);
@@ -828,6 +882,7 @@ export class TicketsService {
     if (query.noCompany) filters.push({ companyId: null });
     else if (query.companyId) filters.push({ companyId: query.companyId });
     if (query.groupId) filters.push({ groupId: query.groupId });
+    if (query.slaBreached) filters.push(slaBreached(new Date()));
     const search = searchFilter(query.q);
     if (search) filters.push(search);
 
@@ -835,19 +890,26 @@ export class TicketsService {
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
     });
-    return { items: rows.map(toTicketSummary), total, page: query.page, pageSize: query.pageSize };
+    const agentView = isAgent(viewer);
+    return {
+      items: rows.map((row) => toTicketSummary(row, agentView)),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+    };
   }
 
   /** RN-18: contadores das filas do agente (abertos e pendentes, dentro do escopo). */
   async counters(viewer: ScopeUser): Promise<TicketCounters> {
     const open: Prisma.TicketWhereInput = { status: { in: OPEN_STATUSES } };
-    const [mine, group, unassigned, noCompany] = await Promise.all([
+    const [mine, group, unassigned, noCompany, breached] = await Promise.all([
       this.tickets.count(viewer, { AND: [open, this.viewFilter(viewer, 'mine')] }),
       this.tickets.count(viewer, { AND: [open, this.viewFilter(viewer, 'group')] }),
       this.tickets.count(viewer, { AND: [open, this.viewFilter(viewer, 'unassigned')] }),
       this.tickets.count(viewer, { AND: [open, { companyId: null }] }),
+      this.tickets.count(viewer, slaBreached(new Date())),
     ]);
-    return { mine, group, unassigned, noCompany };
+    return { mine, group, unassigned, noCompany, slaBreached: breached };
   }
 
   private defaultView(viewer: ScopeUser): TicketView {

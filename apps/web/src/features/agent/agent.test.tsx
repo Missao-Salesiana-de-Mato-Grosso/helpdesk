@@ -35,7 +35,7 @@ const GROUPS = [
   { id: 'g1', name: 'Suporte TI' },
   { id: 'g2', name: 'Sistemas' },
 ];
-const COUNTERS = { mine: 1, group: 2, unassigned: 1, noCompany: 1 };
+const COUNTERS = { mine: 1, group: 2, unassigned: 1, noCompany: 1, slaBreached: 0 };
 const conflict = () =>
   jsonResponse(409, {
     statusCode: 409,

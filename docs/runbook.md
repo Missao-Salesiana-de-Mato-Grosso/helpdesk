@@ -27,6 +27,7 @@ Convenções:
 | Unidade, setor, grupo, categoria  | 12    |
 | Respostas prontas                 | 13    |
 | Fechamento automático             | 14    |
+| SLA: metas, horário e feriados    | 15    |
 
 **Saúde:** `make status` (só leitura: pods, certificados, `https://auth.msmt.org.br/debug/ready` e `https://suporte.msmt.org.br/api/health`).
 
@@ -266,3 +267,19 @@ Uma rotina da API roda a cada hora e passa para **Fechado** o ticket que está e
 - No histórico aparece "Sistema fechou o chamado automaticamente". O solicitante não recebe e-mail. Resposta depois disso abre um ticket novo, relacionado ao anterior (T21).
 - Mudar o prazo: variável `AUTO_CLOSE_DAYS` em `deploy/k8s/overlays/prod/config.env` (por PR, como qualquer mudança). `0` desliga a rotina.
 - Cada ciclo fecha no máximo 200 tickets; o resto fica para a hora seguinte. No log, `Fechamento automático: N ticket(s)...`. Se aparecer `Ator do sistema ... ausente`, o seed não rodou (ele roda no Job de migração a cada deploy).
+
+## 15. SLA: metas, horário e feriados
+
+Portal → **Administração** → **SLA** (só admin, T28). Três blocos, cada um com o próprio **Salvar**:
+
+- **Metas por prioridade:** 1ª resposta e resolução, em **horas úteis** (com o horário padrão, 1 dia útil = 8 h). Padrão do seed: urgente 1 h / 4 h, alta 4 h / 8 h, média 8 h / 24 h, baixa 16 h / 40 h.
+- **Horário comercial:** intervalos por dia, separados por vírgula (`07:00–11:00, 13:00–17:00`); em branco = fechado. O fuso é `BUSINESS_TIMEZONE` (`America/Cuiaba`), não o do navegador.
+- **Feriados:** um calendário único para todas as unidades; o dia todo fica fora do horário útil. O seed traz só os **nacionais de 2026 e 2027**: cadastre os estaduais, os municipais e os pontos facultativos que a Missão adota, e **todo fim de ano os do ano seguinte**.
+
+Como conta:
+
+- O prazo corre só em horário útil, a partir da abertura. **Pendente, resolvido e fechado pausam** o relógio; quando o ticket volta para aberto, as horas úteis pausadas são somadas ao prazo. Trocar a prioridade recalcula pela nova meta.
+- Salvar qualquer bloco recalcula os prazos dos tickets **não fechados**. Os fechados guardam o prazo que tinham.
+- Tickets de antes da T28 ganharam prazo no primeiro deploy, contado da abertura e sem descontar pausas anteriores (o histórico de pausas não existia). Os que estavam pendentes, resolvidos ou fechados ficaram pausados desde a resolução (ou, sem ela, a última atualização).
+- Só agentes veem o SLA. Na fila: coluna **Prazo** (a 1ª resposta enquanto não houver, depois a resolução), botão **SLA vencido (n)** (abertos com prazo estourado, do escopo do agente) e a ordenação **Prazo de resolução mais próximo**. No ticket, o quadro **SLA** mostra as duas metas.
+- Não há alerta por e-mail nem escalonamento (Fase 2, depois).

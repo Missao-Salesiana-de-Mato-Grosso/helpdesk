@@ -216,28 +216,35 @@ model Category {
 // ───────────────────────────── tickets ─────────────────────────────
 
 model Ticket {
-  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// Número sequencial exibido como #1001. A sequência começa em 1001 (ver migração inicial).
-  number          Int            @unique @default(autoincrement())
-  subject         String
-  status          TicketStatus   @default(open)
-  priority        TicketPriority @default(medium)
-  source          TicketSource
-  requesterId     String         @map("requester_id") @db.Uuid
-  assigneeId      String?        @map("assignee_id") @db.Uuid
-  groupId         String         @map("group_id") @db.Uuid
-  categoryId      String         @map("category_id") @db.Uuid
+  number             Int            @unique @default(autoincrement())
+  subject            String
+  status             TicketStatus   @default(open)
+  priority           TicketPriority @default(medium)
+  source             TicketSource
+  requesterId        String         @map("requester_id") @db.Uuid
+  assigneeId         String?        @map("assignee_id") @db.Uuid
+  groupId            String         @map("group_id") @db.Uuid
+  categoryId         String         @map("category_id") @db.Uuid
   /// Unidade. Nulo quando o ticket chega por e-mail de alguém sem unidade; obrigatório para resolver.
-  companyId       String?        @map("company_id") @db.Uuid
+  companyId          String?        @map("company_id") @db.Uuid
   /// Reservado para a Fase 2 (campos customizados).
-  customFields    Json?          @map("custom_fields")
+  customFields       Json?          @map("custom_fields")
   /// Locking otimista: todo PATCH envia a versão atual.
-  version         Int            @default(1)
-  firstResponseAt DateTime?      @map("first_response_at") @db.Timestamptz(6)
-  resolvedAt      DateTime?      @map("resolved_at") @db.Timestamptz(6)
-  closedAt        DateTime?      @map("closed_at") @db.Timestamptz(6)
-  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  version            Int            @default(1)
+  firstResponseAt    DateTime?      @map("first_response_at") @db.Timestamptz(6)
+  resolvedAt         DateTime?      @map("resolved_at") @db.Timestamptz(6)
+  closedAt           DateTime?      @map("closed_at") @db.Timestamptz(6)
+  /// T28: prazos do SLA, em horário útil, já somado o tempo pausado. Nulos sem meta cadastrada.
+  firstResponseDueAt DateTime?      @map("first_response_due_at") @db.Timestamptz(6)
+  resolutionDueAt    DateTime?      @map("resolution_due_at") @db.Timestamptz(6)
+  /// T28: início da pausa atual (pendente, resolvido ou fechado). Nulo com o relógio correndo.
+  slaPausedAt        DateTime?      @map("sla_paused_at") @db.Timestamptz(6)
+  /// T28: minutos úteis já pausados, somados aos prazos.
+  slaPausedMinutes   Int            @default(0) @map("sla_paused_minutes")
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   requester     User              @relation("TicketRequester", fields: [requesterId], references: [id])
   assignee      User?             @relation("TicketAssignee", fields: [assigneeId], references: [id])
@@ -255,6 +262,7 @@ model Ticket {
   @@index([requesterId])
   @@index([companyId, status])
   @@index([updatedAt(sort: Desc)])
+  @@index([status, resolutionDueAt])
   @@map("tickets")
 }
 
@@ -387,6 +395,40 @@ model CannedResponse {
   createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@map("canned_responses")
+}
+
+// ───────────────────────────── SLA (T28) ─────────────────────────────
+
+/// Metas por prioridade, em minutos úteis.
+model SlaPolicy {
+  priority             TicketPriority @id
+  firstResponseMinutes Int            @map("first_response_minutes")
+  resolutionMinutes    Int            @map("resolution_minutes")
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("sla_policies")
+}
+
+/// Horário comercial: um ou mais intervalos por dia da semana, no fuso `BUSINESS_TIMEZONE`.
+model BusinessHours {
+  id          String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// 0 = domingo … 6 = sábado.
+  weekday     Int
+  /// Minutos desde a meia-noite (420 = 7h).
+  startMinute Int    @map("start_minute")
+  endMinute   Int    @map("end_minute")
+
+  @@map("business_hours")
+}
+
+/// Feriados: um calendário único para todas as unidades. O dia todo fica fora do horário útil.
+model Holiday {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  date      DateTime @unique @db.Date
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("holidays")
 }
 
 /// Chave/valor para estado operacional (ex.: cursor `mailbox.last_uid`).

@@ -66,6 +66,7 @@ export function detail(overrides: Partial<TicketDetail> = {}): TicketDetail {
     closedAt: null,
     createdAt: '2026-10-24T12:00:00.000Z',
     updatedAt: '2026-10-24T12:00:00.000Z',
+    sla: null,
     messages: [message()],
     events: [],
     refs: {},
@@ -88,6 +89,7 @@ export function summary(overrides: Partial<TicketSummary> = {}): TicketSummary {
     createdAt: '2026-10-24T12:00:00.000Z',
     updatedAt: '2026-10-24T15:30:00.000Z',
     lastMessageAt: null,
+    sla: null,
     ...overrides,
   };
 }

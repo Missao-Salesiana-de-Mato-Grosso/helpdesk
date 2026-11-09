@@ -32,6 +32,7 @@ export interface QueueParams {
   priorities: readonly TicketPriority[];
   companyId: string | null;
   noCompany: boolean;
+  slaBreached: boolean;
   groupId: string | null;
   q: string;
   sort: TicketSort;
@@ -116,6 +117,7 @@ export function useQueue(params: QueueParams) {
       if (params.noCompany) search.set('noCompany', 'true');
       else if (params.companyId) search.set('companyId', params.companyId);
       if (params.groupId) search.set('groupId', params.groupId);
+      if (params.slaBreached) search.set('slaBreached', 'true');
       if (params.q) search.set('q', params.q);
       return api<TicketListResponse>(`/tickets?${search.toString()}`);
     },

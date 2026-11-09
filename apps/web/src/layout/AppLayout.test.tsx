@@ -28,7 +28,7 @@ function me(roles: Role[]): MeResponse {
 
 let auth: FakeAuth;
 
-const COUNTERS = { mine: 3, group: 12, unassigned: 4, noCompany: 1 };
+const COUNTERS = { mine: 3, group: 12, unassigned: 4, noCompany: 1, slaBreached: 0 };
 
 function renderAs(roles: Role[], route = '/') {
   const fetchMock = stubApi({
