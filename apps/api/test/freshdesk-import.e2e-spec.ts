@@ -3,7 +3,10 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DEFAULT_CATEGORY_NAME } from '@helpdesk/shared';
+import type { INestApplicationContext } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
 import { DEFAULT_GROUP_RULES } from '../src/import/freshdesk-bundle.js';
+import { FreshdeskImportModule } from '../src/import/freshdesk-import.module.js';
 import {
   FreshdeskImportService,
   type ImportOptions,
@@ -24,6 +27,8 @@ const PNG = Buffer.from(
 
 describe('import do Freshdesk (T29, e2e)', () => {
   let t: TestApp;
+  // O import tem módulo próprio (fora do AppModule), como na linha de comando.
+  let importer: INestApplicationContext;
   let f: TicketsFixture;
   let dir: string;
   let systemId: string;
@@ -31,9 +36,11 @@ describe('import do Freshdesk (T29, e2e)', () => {
 
   beforeAll(async () => {
     t = await createTestApp();
+    importer = await NestFactory.createApplicationContext(FreshdeskImportModule, { logger: false });
   });
 
   afterAll(async () => {
+    await importer.close();
     await t.app.close();
   });
 
@@ -143,7 +150,7 @@ describe('import do Freshdesk (T29, e2e)', () => {
   });
 
   const run = (overrides: Partial<ImportOptions> = {}) =>
-    t.app.get(FreshdeskImportService).run({
+    importer.get(FreshdeskImportService).run({
       dir,
       apply: false,
       keep: new Set(),
