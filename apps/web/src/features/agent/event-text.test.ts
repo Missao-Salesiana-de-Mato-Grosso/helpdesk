@@ -38,6 +38,10 @@ describe('eventText', () => {
     [event('company_changed', { from: null, to: 'c1' }), 'definiu a unidade como Colégio'],
     [event('message_added', { kind: 'internal' }), 'adicionou uma nota interna'],
     [event('message_added', { kind: 'public' }), 'respondeu'],
+    [
+      event('imported', { source: 'freshdesk', freshdeskId: 18277 }),
+      'importou do Freshdesk (chamado #18277 de lá)',
+    ],
     [event('assigned', { from: null, to: 'sumiu' }), 'atribuiu a item removido'],
   ])('%#: %s', (input, expected) => {
     expect(eventText(input, refs)).toBe(expected);

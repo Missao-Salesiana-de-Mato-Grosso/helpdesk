@@ -47,6 +47,10 @@ export function eventText(event: TicketEvent, refs: Record<string, string>): str
       return from === null || from === undefined
         ? `definiu a unidade como ${name(to)}`
         : `mudou a unidade de ${name(from)} para ${name(to)}`;
+    case 'imported':
+      return typeof event.data.freshdeskId === 'number'
+        ? `importou do Freshdesk (chamado #${event.data.freshdeskId} de lá)`
+        : 'importou o chamado';
     case 'message_added':
       return event.data.kind === 'internal' ? 'adicionou uma nota interna' : 'respondeu';
     default:
