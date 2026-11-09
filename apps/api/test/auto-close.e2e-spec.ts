@@ -8,6 +8,8 @@ import { createTicketsFixture, type TicketsFixture } from './setup/tickets-fixtu
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const daysAgo = (days: number) => new Date(Date.now() - days * DAY_MS);
+// O fixture já grava o evento `created` de cada ticket.
+const STATUS_EVENTS = { type: 'status_changed' };
 
 describe('fechamento automático de resolvidos (T27, e2e)', () => {
   let t: TestApp;
@@ -53,7 +55,9 @@ describe('fechamento automático de resolvidos (T27, e2e)', () => {
     expect(after.status).toBe('closed');
     expect(after.closedAt).not.toBeNull();
     expect(after.version).toBe(before.version + 1);
-    const events = await t.prisma.ticketEvent.findMany({ where: { ticketId: old.id } });
+    const events = await t.prisma.ticketEvent.findMany({
+      where: { ticketId: old.id, ...STATUS_EVENTS },
+    });
     expect(events).toEqual([
       expect.objectContaining({
         actorId: systemId,
@@ -88,7 +92,7 @@ describe('fechamento automático de resolvidos (T27, e2e)', () => {
       'pending',
       'resolved',
     ]);
-    expect(await t.prisma.ticketEvent.count()).toBe(0);
+    expect(await t.prisma.ticketEvent.count({ where: STATUS_EVENTS })).toBe(0);
   });
 
   it('o ticket fechado pela rotina não aceita mais alterações', async () => {
