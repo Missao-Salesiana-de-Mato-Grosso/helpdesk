@@ -55,6 +55,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Categorias', to: '/admin/categorias' },
       { label: 'Unidades', to: '/admin/unidades' },
       { label: 'Departamentos', to: '/admin/departamentos' },
+      { label: 'SLA', to: '/admin/sla' },
     ],
   },
   {

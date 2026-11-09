@@ -19,6 +19,7 @@ import { GroupsPage } from './features/admin/GroupsPage.tsx';
 import { UsersPage } from './features/admin/UsersPage.tsx';
 import { CannedResponsesPage } from './features/canned-responses/CannedResponsesPage.tsx';
 import { QueuePage } from './features/queue/QueuePage.tsx';
+import { SlaSettingsPage } from './features/sla/SlaSettingsPage.tsx';
 import { MyTicketsPage } from './features/tickets/MyTicketsPage.tsx';
 import { NewTicketPage } from './features/tickets/NewTicketPage.tsx';
 import { TicketDetailPage } from './features/tickets/TicketDetailPage.tsx';
@@ -72,6 +73,7 @@ export function AppRoutes() {
             <Route path="categorias" element={<CategoriesPage />} />
             <Route path="unidades" element={<CompaniesPage />} />
             <Route path="departamentos" element={<DepartmentsPage />} />
+            <Route path="sla" element={<SlaSettingsPage />} />
           </Route>
           {/* T22 RN-10: liberação de acesso é "admin ou supervisor", diferente do bloco acima. */}
           <Route
