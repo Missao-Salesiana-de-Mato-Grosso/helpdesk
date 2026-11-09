@@ -63,6 +63,8 @@ interface Refs {
   requesterUserId: string;
   /** Resposta pronta (T26). */
   cannedId: string;
+  /** Feriado (T28). */
+  holidayId: string;
 }
 
 // pendente: 403 ACCESS_PENDING por padrão (RN-06); as rotas isentas (/me, /companies,
@@ -368,6 +370,39 @@ const MATRIX: RouteCase[] = [
       },
     ],
   ),
+  // T28: SLA — só admin.
+  { method: 'get', path: '/api/admin/sla', expected: ADMIN_ONLY },
+  {
+    method: 'put',
+    path: '/api/admin/sla/policies',
+    body: () =>
+      (['low', 'medium', 'high', 'urgent'] as const).map((priority) => ({
+        priority,
+        firstResponseMinutes: 60,
+        resolutionMinutes: 240,
+      })),
+    expected: ADMIN_ONLY,
+  },
+  {
+    method: 'put',
+    path: '/api/admin/sla/hours',
+    body: () => [{ weekday: 1, startMinute: 420, endMinute: 660 }],
+    expected: ADMIN_ONLY,
+  },
+  { method: 'get', path: '/api/admin/holidays', expected: ADMIN_ONLY },
+  {
+    method: 'post',
+    path: '/api/admin/holidays',
+    body: () => ({ date: '2026-04-08', name: 'Aniversário de Cuiabá' }),
+    expected: { ...ADMIN_ONLY, admin: 201 },
+  },
+  {
+    method: 'delete',
+    path: (ref) => `/api/admin/holidays/${ref.holidayId}`,
+    template: '/api/admin/holidays/:id',
+    label: 'DELETE /api/admin/holidays/:id',
+    expected: { ...ADMIN_ONLY, admin: 204 },
+  },
 ];
 
 /** Rotas que o Express tem registradas, no formato `GET /api/tickets/:id`. */
@@ -489,6 +524,9 @@ describe('matriz de permissões (e2e)', () => {
     const canned = await t.prisma.cannedResponse.create({
       data: { title: 'Senha', bodyHtml: '<p>Olá, {{solicitante}}</p>' },
     });
+    const holiday = await t.prisma.holiday.create({
+      data: { date: new Date('2026-12-25T00:00:00Z'), name: 'Natal' },
+    });
     refs = {
       companyId: company.id,
       departmentId: department.id,
@@ -502,6 +540,7 @@ describe('matriz de permissões (e2e)', () => {
       trashedUserId: trashed.id,
       requesterUserId: userIds.get('solicitante')!,
       cannedId: canned.id,
+      holidayId: holiday.id,
     };
   });
 

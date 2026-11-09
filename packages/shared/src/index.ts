@@ -14,6 +14,7 @@ export {
 export * from './schemas/access-requests.js';
 export * from './schemas/canned-responses.js';
 export * from './schemas/catalog.js';
+export * from './schemas/sla.js';
 export * from './schemas/tickets.js';
 export * from './schemas/users.js';
 export * from './attachments.js';

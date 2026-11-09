@@ -24,6 +24,45 @@ export const SEED = {
   ],
 } as const;
 
+/**
+ * T28: metas sugeridas (minutos úteis; 1 dia útil = 480), horário seg–sex 7h–11h e 13h–17h e os
+ * feriados nacionais de 2026 e 2027. Os estaduais e municipais o admin cadastra na tela.
+ */
+export const SLA_SEED = {
+  policies: [
+    { priority: 'urgent', firstResponseMinutes: 60, resolutionMinutes: 240 },
+    { priority: 'high', firstResponseMinutes: 240, resolutionMinutes: 480 },
+    { priority: 'medium', firstResponseMinutes: 480, resolutionMinutes: 1440 },
+    { priority: 'low', firstResponseMinutes: 960, resolutionMinutes: 2400 },
+  ],
+  hours: [1, 2, 3, 4, 5].flatMap((weekday) => [
+    { weekday, startMinute: 7 * 60, endMinute: 11 * 60 },
+    { weekday, startMinute: 13 * 60, endMinute: 17 * 60 },
+  ]),
+  holidays: [
+    ['2026-01-01', 'Confraternização Universal'],
+    ['2026-04-03', 'Sexta-feira Santa'],
+    ['2026-04-21', 'Tiradentes'],
+    ['2026-05-01', 'Dia do Trabalho'],
+    ['2026-09-07', 'Independência do Brasil'],
+    ['2026-10-12', 'Nossa Senhora Aparecida'],
+    ['2026-11-02', 'Finados'],
+    ['2026-11-15', 'Proclamação da República'],
+    ['2026-11-20', 'Dia Nacional de Zumbi e da Consciência Negra'],
+    ['2026-12-25', 'Natal'],
+    ['2027-01-01', 'Confraternização Universal'],
+    ['2027-03-26', 'Sexta-feira Santa'],
+    ['2027-04-21', 'Tiradentes'],
+    ['2027-05-01', 'Dia do Trabalho'],
+    ['2027-09-07', 'Independência do Brasil'],
+    ['2027-10-12', 'Nossa Senhora Aparecida'],
+    ['2027-11-02', 'Finados'],
+    ['2027-11-15', 'Proclamação da República'],
+    ['2027-11-20', 'Dia Nacional de Zumbi e da Consciência Negra'],
+    ['2027-12-25', 'Natal'],
+  ],
+} as const;
+
 /** Mesmo valor de `DEFAULT_CATEGORY_NAME` (@helpdesk/shared); o teste do seed confere. */
 export const DEFAULT_CATEGORY = 'Geral';
 
@@ -64,6 +103,21 @@ export async function seed(prisma: PrismaClient): Promise<void> {
     });
     if (!group) throw new Error('Seed: nenhum grupo ativo para a categoria "Geral"');
     await prisma.category.create({ data: { name: DEFAULT_CATEGORY, defaultGroupId: group.id } });
+  }
+
+  if ((await prisma.slaPolicy.count()) === 0) {
+    await prisma.slaPolicy.createMany({ data: SLA_SEED.policies.map((policy) => ({ ...policy })) });
+  }
+  if ((await prisma.businessHours.count()) === 0) {
+    await prisma.businessHours.createMany({ data: SLA_SEED.hours });
+  }
+  if ((await prisma.holiday.count()) === 0) {
+    await prisma.holiday.createMany({
+      data: SLA_SEED.holidays.map(([date, name]) => ({
+        date: new Date(`${date}T00:00:00Z`),
+        name,
+      })),
+    });
   }
 
   // Ator do sistema: nunca autentica (active = false), só assina eventos automáticos.

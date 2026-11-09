@@ -61,7 +61,7 @@ const CANNED: CannedResponse[] = [
 const base: Record<string, Handler> = {
   'GET /api/me': () => jsonResponse(200, agent),
   'GET /api/tickets/counters': () =>
-    jsonResponse(200, { mine: 0, group: 0, unassigned: 0, noCompany: 0 }),
+    jsonResponse(200, { mine: 0, group: 0, unassigned: 0, noCompany: 0, slaBreached: 0 }),
   'GET /api/companies': () => jsonResponse(200, [COMPANY]),
   'GET /api/groups': () => jsonResponse(200, [{ id: 'g1', name: 'Suporte TI' }]),
   'GET /api/groups/g1/members': () => jsonResponse(200, [{ id: 'a1', name: 'João Agente' }]),

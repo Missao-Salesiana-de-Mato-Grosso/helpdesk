@@ -13,6 +13,14 @@ const flag = (fallback: 'true' | 'false') =>
     .default(fallback)
     .transform((value) => value === 'true');
 
+const isTimeZone = (value: string) => {
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZone: value }).resolvedOptions().timeZone !== '';
+  } catch {
+    return false;
+  }
+};
+
 export const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -97,6 +105,12 @@ export const envSchema = z
 
     // T27: ticket resolvido há N dias sem resposta passa para fechado. 0 desliga.
     AUTO_CLOSE_DAYS: z.coerce.number().int().nonnegative().default(7),
+
+    // T28: fuso do horário comercial do SLA (IANA).
+    BUSINESS_TIMEZONE: z
+      .string()
+      .default('America/Cuiaba')
+      .refine(isTimeZone, 'Fuso IANA inválido (ex.: America/Cuiaba)'),
   })
   .superRefine((env, ctx) => {
     const requireWith = (keys: readonly (keyof typeof env)[], condition: string) => {

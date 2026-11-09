@@ -347,7 +347,7 @@ describe('tickets — T08 (e2e)', () => {
       await f.ticket({ requester: 'req1', group: 'G1', status: 'closed' });
       const res = await get('ag1', '/api/tickets/counters');
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({ mine: 1, group: 4, unassigned: 3, noCompany: 1 });
+      expect(res.body).toEqual({ mine: 1, group: 4, unassigned: 3, noCompany: 1, slaBreached: 0 });
       expect((await get('req1', '/api/tickets/counters')).status).toBe(403);
     });
   });

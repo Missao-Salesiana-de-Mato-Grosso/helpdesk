@@ -47,7 +47,7 @@ describe('WaitingApprovalPage (T22)', () => {
     stubApi({
       'GET /api/me': () => jsonResponse(200, { ...PENDING, accessStatus: 'approved' }),
       'GET /api/tickets/counters': () =>
-        jsonResponse(200, { mine: 0, group: 0, unassigned: 0, noCompany: 0 }),
+        jsonResponse(200, { mine: 0, group: 0, unassigned: 0, noCompany: 0, slaBreached: 0 }),
     });
     renderWithProviders(<AppRoutes />, { route: '/aguardando-liberacao' });
     expect(await screen.findByRole('heading', { name: 'Meus tickets' })).toBeInTheDocument();
