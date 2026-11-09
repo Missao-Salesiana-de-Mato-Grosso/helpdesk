@@ -92,6 +92,7 @@ const lockedState = {
   categoryId: true,
   companyId: true,
   firstResponseAt: true,
+  resolvedAt: true,
 } satisfies Prisma.TicketSelect;
 
 export type LockedTicket = Prisma.TicketGetPayload<{ select: typeof lockedState }>;
@@ -204,6 +205,17 @@ export class TicketsRepository {
       where: { AND: [ticketScope(viewer), { id }] },
       select: lockedState,
     });
+  }
+
+  /** T27: ids dos tickets resolvidos antes de `cutoff`, os mais antigos primeiro. */
+  async findResolvedBefore(cutoff: Date, limit: number): Promise<string[]> {
+    const rows = await this.prisma.ticket.findMany({
+      where: { status: 'resolved', resolvedAt: { lt: cutoff } },
+      orderBy: { resolvedAt: 'asc' },
+      take: limit,
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
   }
 
   /** Grava as mudanças; `bumpVersion` incrementa `version` (RN-22). Sempre atualiza `updated_at`. */

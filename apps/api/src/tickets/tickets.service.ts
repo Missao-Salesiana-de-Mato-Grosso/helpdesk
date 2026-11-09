@@ -27,6 +27,7 @@ import { CompaniesService } from '../companies/companies.service.js';
 import { GroupsService } from '../groups/groups.service.js';
 import { NotificationService, type NotifiedTicket } from '../notifications/notification.service.js';
 import type { Prisma } from '../generated/prisma/client.js';
+import { SYSTEM_USER_EMAIL } from '../users/system-user.js';
 import { UsersService } from '../users/users.service.js';
 import { isAgent, seesAllTickets, type ScopeUser } from './ticket-scope.js';
 import { planStatusChange, ticketClosed, versionConflict } from './ticket-status.js';
@@ -78,7 +79,7 @@ export interface TicketStatusChangedEvent {
   actorId: string;
   from: TicketStatus;
   to: TicketStatus;
-  reason?: 'requester_reply';
+  reason?: StatusReason;
 }
 
 export interface TicketAssignedEvent {
@@ -117,6 +118,13 @@ export type EmailWrite = (tx: Tx, ticket: { id: string; number: number }) => Pro
  * mensagem continua sendo o remetente.
  */
 const EMAIL_SCOPE: ScopeUser = { id: 'inbound-email', roles: ['admin'], groupIds: [] };
+const AUTO_CLOSE_SCOPE: ScopeUser = { id: 'auto-close', roles: ['admin'], groupIds: [] };
+/** Tickets fechados por ciclo da rotina; o resto fica para o ciclo seguinte. */
+const AUTO_CLOSE_BATCH = 200;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Por que o status mudou sem um agente escolher: o solicitante respondeu ou a rotina da T27. */
+type StatusReason = 'requester_reply' | 'auto_close';
 
 const toRoles = (roles: readonly string[]) => roles.filter(isKnownRole);
 
@@ -761,6 +769,51 @@ export class TicketsService {
     return 'added';
   }
 
+  /**
+   * T27: fecha os tickets resolvidos há mais de `days` dias, assinando como o ator do sistema.
+   * Cada ticket tem a própria transação e é conferido de novo com a linha travada (pode ter sido
+   * reaberto entretanto). Devolve quantos fechou.
+   */
+  async closeExpiredResolved(days: number): Promise<number> {
+    const cutoff = new Date(Date.now() - days * DAY_MS);
+    const ids = await this.tickets.findResolvedBefore(cutoff, AUTO_CLOSE_BATCH);
+    if (ids.length === 0) return 0;
+    const system = await this.users.findByEmail(SYSTEM_USER_EMAIL);
+    if (!system) throw new Error(`Ator do sistema (${SYSTEM_USER_EMAIL}) ausente: rode o seed`);
+
+    let closed = 0;
+    for (const id of ids) {
+      try {
+        const emits = await this.tickets.transaction(async (tx) => {
+          const ticket = await this.tickets.lockInScope(tx, AUTO_CLOSE_SCOPE, id);
+          if (ticket?.status !== 'resolved' || !ticket.resolvedAt || ticket.resolvedAt >= cutoff) {
+            return null;
+          }
+          const plan = planStatusChange(ticket.status, 'closed', ticket.companyId, new Date());
+          if (!plan) return null;
+          await this.tickets.update(tx, id, { status: plan.to, ...plan.timestamps }, true);
+          await this.events.append(tx, {
+            ticketId: id,
+            actorId: system.id,
+            type: 'status_changed',
+            data: { from: plan.from, to: plan.to, reason: 'auto_close' },
+          });
+          return [statusEmit(id, system.id, plan.from, plan.to, 'auto_close')];
+        });
+        if (emits) {
+          this.emitAll(emits);
+          closed++;
+        }
+      } catch (error) {
+        // Um ticket com problema não impede os outros; ele volta no próximo ciclo.
+        this.logger.error(
+          `Fechamento automático do ticket ${id} falhou: ${error instanceof Error ? error.message : 'erro'}`,
+        );
+      }
+    }
+    return closed;
+  }
+
   /** RN-12 a RN-17. */
   async list(viewer: ScopeUser, query: ListTicketsQuery): Promise<TicketListResponse> {
     const view = query.view ?? this.defaultView(viewer);
@@ -870,7 +923,7 @@ function statusEmit(
   actorId: string,
   from: TicketStatus,
   to: TicketStatus,
-  reason?: 'requester_reply',
+  reason?: StatusReason,
 ): PendingEmit {
   return {
     name: TicketDomainEvent.statusChanged,

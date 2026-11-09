@@ -373,7 +373,6 @@ model EmailMessageRef {
   @@map("email_message_refs")
 }
 
-/// Chave/valor para estado operacional (ex.: cursor `mailbox.last_uid`).
 /// T26: respostas prontas. O texto é copiado para a mensagem ao inserir; nada referencia a linha.
 model CannedResponse {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -390,6 +389,7 @@ model CannedResponse {
   @@map("canned_responses")
 }
 
+/// Chave/valor para estado operacional (ex.: cursor `mailbox.last_uid`).
 model AppSetting {
   key       String   @id
   value     String
