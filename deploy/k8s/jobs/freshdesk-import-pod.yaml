@@ -1,0 +1,44 @@
+# T29: pod temporário para importar os chamados abertos do Freshdesk (docs/runbook.md §16).
+# Não faz parte do kustomization. Mesma imagem e ambiente da API; fica parado (sleep) para receber o
+# pacote por `kubectl cp` e rodar o import por `kubectl exec`. Some sozinho em 2 h.
+# IMAGE é trocado pela imagem atual do deployment (comando no runbook).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: helpdesk-import
+  namespace: helpdesk
+spec:
+  restartPolicy: Never
+  activeDeadlineSeconds: 7200
+  imagePullSecrets:
+    - name: registry
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+  containers:
+    - name: import
+      image: IMAGE
+      command: ['sleep', '7200']
+      envFrom:
+        - configMapRef:
+            name: helpdesk-config
+        - secretRef:
+            name: helpdesk-secrets
+      env:
+        - name: HOME
+          value: /tmp
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+      resources:
+        requests: { cpu: 100m, memory: 256Mi }
+        limits: { memory: 768Mi }
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+  volumes:
+    - name: tmp
+      emptyDir:
+        sizeLimit: 1Gi

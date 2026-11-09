@@ -28,6 +28,7 @@ Convenções:
 | Respostas prontas                 | 13    |
 | Fechamento automático             | 14    |
 | SLA: metas, horário e feriados    | 15    |
+| Importar abertos do Freshdesk     | 16    |
 
 **Saúde:** `make status` (só leitura: pods, certificados, `https://auth.msmt.org.br/debug/ready` e `https://suporte.msmt.org.br/api/health`).
 
@@ -283,3 +284,27 @@ Como conta:
 - Tickets de antes da T28 ganharam prazo no primeiro deploy, contado da abertura e sem descontar pausas anteriores (o histórico de pausas não existia). Os que estavam pendentes, resolvidos ou fechados ficaram pausados desde a resolução (ou, sem ela, a última atualização).
 - Só agentes veem o SLA. Na fila: coluna **Prazo** (a 1ª resposta enquanto não houver, depois a resolução), botão **SLA vencido (n)** (abertos com prazo estourado, do escopo do agente) e a ordenação **Prazo de resolução mais próximo**. No ticket, o quadro **SLA** mostra as duas metas.
 - Não há alerta por e-mail nem escalonamento (Fase 2, depois).
+
+## 16. Importar os chamados abertos do Freshdesk
+
+Uso único (T29). Traz só os chamados **abertos e pendentes** do export, com mensagens, notas internas, anexos e as imagens coladas. Entram com a data e os autores originais, um número novo daqui e o evento "importou do Freshdesk (chamado #N de lá)". Não envia e-mail. O SLA conta a partir da importação. Rodar de novo não duplica (o número de lá fica em `custom_fields.freshdeskId`).
+
+**Antes:** a T29 em produção (a imagem precisa ter `dist/import`) e os grupos de destino criados (padrão: `Cadastros` para o grupo "Cadastro de Clientes e Fornecedores" e para o que foi para `cadastros@`; `Suporte TI` para os grupos de suporte; o resto vai para o grupo padrão da categoria "Geral").
+
+1. **Pacote** (na máquina que tem o export, **com o Freshdesk ainda ativo**, porque as imagens coladas são baixadas de lá): `node scripts/freshdesk-bundle.mjs` → `~/freshdesk-bundle`. Depois: `tar -C ~ -czf ~/freshdesk-bundle.tgz freshdesk-bundle`.
+2. **Pod temporário** (com o mesmo ambiente da API; o banco só é alcançável de dentro do cluster):
+
+   ```bash
+   K="kubectl --kubeconfig ../msmt-infra-automation/secrets/kubeconfig-k8s-msmt-prd.yaml -n helpdesk"
+   IMAGE=$($K get deployment helpdesk -o jsonpath='{.spec.template.spec.containers[0].image}')
+   sed "s|IMAGE|$IMAGE|" deploy/k8s/jobs/freshdesk-import-pod.yaml | $K apply -f -
+   $K wait --for=condition=Ready pod/helpdesk-import --timeout=120s
+   $K cp ~/freshdesk-bundle.tgz helpdesk-import:/tmp/bundle.tgz
+   $K exec helpdesk-import -- tar -xzf /tmp/bundle.tgz -C /tmp
+   ```
+
+3. **Simular** (não grava nada): `$K exec helpdesk-import -- node dist/import/freshdesk-import.js /tmp/freshdesk-bundle`. Uma linha por chamado (só número de lá, situação, grupo, contagens), os **possíveis duplicados** (mesmo solicitante e assunto, aberto do dia anterior a 3 dias depois: o `suporte@` encaminhou para o Freshdesk depois da virada) e os grupos que faltam. Conferir cada duplicado no portal pelo número indicado.
+4. **Gravar:** o mesmo comando com `--apply`. Duplicados são pulados; para importar algum mesmo assim, `--keep 18277,18279`. Outro destino de grupo: `--map-group "Nome lá=Nome aqui"` ou `--map-mailbox "caixa@missaosalesiana.org.br=Grupo"`.
+5. **Limpar:** `$K delete pod helpdesk-import` (some sozinho em 2 h) e, conferido o resultado, apagar `~/freshdesk-bundle` e `~/freshdesk-bundle.tgz` (dados pessoais). Registrar a execução em `docs/ambientes.md`.
+
+Detalhes: prioridade "baixa" de lá (o padrão, quase todos) vira média; contatos novos entram como no canal de e-mail (sem login, terceiro fora do domínio institucional); o responsável só é mantido se for agente ativo aqui; anexos fora das regras (tipo, 20 MB) ficam listados no texto da mensagem; imagens coladas viram anexo, com um aviso no lugar.
