@@ -295,12 +295,14 @@ Uso único (T29). Traz só os chamados **abertos e pendentes** do export, com me
 2. **Pod temporário** (com o mesmo ambiente da API; o banco só é alcançável de dentro do cluster):
 
    ```bash
+   # Git Bash: sem isto, /tmp/... vira C:/Users/.../Temp/... antes de chegar ao pod.
+   export MSYS_NO_PATHCONV=1
    K="kubectl --kubeconfig ../msmt-infra-automation/secrets/kubeconfig-k8s-msmt-prd.yaml -n helpdesk"
    IMAGE=$($K get deployment helpdesk -o jsonpath='{.spec.template.spec.containers[0].image}')
    sed "s|IMAGE|$IMAGE|" deploy/k8s/jobs/freshdesk-import-pod.yaml | $K apply -f -
    $K wait --for=condition=Ready pod/helpdesk-import --timeout=120s
    # Caminho relativo: no Windows, um absoluto (C:/...) faz o kubectl ler "C" como nome de pod.
-   KC=$(realpath ../msmt-infra-automation/secrets/kubeconfig-k8s-msmt-prd.yaml)
+   KC=$(cd ../msmt-infra-automation/secrets && (pwd -W 2>/dev/null || pwd))/kubeconfig-k8s-msmt-prd.yaml
    (cd ~ && kubectl --kubeconfig "$KC" -n helpdesk cp freshdesk-bundle.tgz helpdesk-import:/tmp/bundle.tgz)
    $K exec helpdesk-import -- tar -xzf /tmp/bundle.tgz -C /tmp
    ```
