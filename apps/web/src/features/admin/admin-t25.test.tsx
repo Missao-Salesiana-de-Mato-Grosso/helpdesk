@@ -96,9 +96,9 @@ const categoryRoutes = (onPost?: (body: unknown) => void, onPatch?: (body: unkno
     jsonResponse(200, [category({ id: 'k0', name: 'Geral', locked: true }), category({})]),
   'GET /api/admin/groups': () =>
     jsonResponse(200, [
-      { id: 'g1', name: 'Suporte TI', email: null, active: true },
-      { id: 'g2', name: 'Sistemas', email: null, active: true },
-      { id: 'g9', name: 'Antigo', email: null, active: false },
+      { id: 'g1', name: 'Suporte TI', email: null, inboundEmail: null, active: true },
+      { id: 'g2', name: 'Sistemas', email: null, inboundEmail: null, active: true },
+      { id: 'g9', name: 'Antigo', email: null, inboundEmail: null, active: false },
     ]),
   'POST /api/admin/categories': (init: RequestInit | undefined) => {
     onPost?.(jsonBody(init));
@@ -152,12 +152,53 @@ describe('CategoriesPage (T25)', () => {
 });
 
 describe('GroupsPage (T25)', () => {
+  it('caixa de entrada (#42): mostra na lista e salva só o que mudou', async () => {
+    let patchBody: unknown;
+    stubApi({
+      'GET /api/me': () => jsonResponse(200, ADMIN),
+      'GET /api/admin/groups': () =>
+        jsonResponse(200, [
+          { id: 'g1', name: 'Cadastros', email: null, inboundEmail: null, active: true },
+          {
+            id: 'g2',
+            name: 'Financeiro',
+            email: null,
+            inboundEmail: 'financeiro@missaosalesiana.org.br',
+            active: true,
+          },
+        ]),
+      'PATCH /api/admin/groups/g1': (init) => {
+        patchBody = jsonBody(init);
+        return jsonResponse(200, {});
+      },
+    });
+    renderWithProviders(<GroupsPage />);
+
+    expect(await screen.findByText('financeiro@missaosalesiana.org.br')).toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole('button', { name: 'Editar' })[0]!);
+    const dialog = await screen.findByRole('dialog', { name: 'Editar Cadastros' });
+    await userEvent.type(
+      within(dialog).getByLabelText(/^Caixa de entrada/),
+      'cadastros@missaosalesiana.org.br',
+    );
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+    await waitFor(() =>
+      expect(patchBody).toEqual({ inboundEmail: 'cadastros@missaosalesiana.org.br' }),
+    );
+  });
+
   it('mostra o erro da API ao desativar grupo padrão de categoria ativa', async () => {
     stubApi({
       'GET /api/me': () => jsonResponse(200, ADMIN),
       'GET /api/admin/groups': () =>
         jsonResponse(200, [
-          { id: 'g1', name: 'Suporte TI', email: 'suporte@missaosalesiana.org.br', active: true },
+          {
+            id: 'g1',
+            name: 'Suporte TI',
+            email: 'suporte@missaosalesiana.org.br',
+            inboundEmail: null,
+            active: true,
+          },
         ]),
       'PATCH /api/admin/groups/g1': () =>
         jsonResponse(422, {

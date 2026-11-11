@@ -29,6 +29,7 @@ Convenções:
 | Fechamento automático             | 14    |
 | SLA: metas, horário e feriados    | 15    |
 | Importar abertos do Freshdesk     | 16    |
+| Caixa de outro setor (cadastros@) | 17    |
 
 **Saúde:** `make status` (só leitura: pods, certificados, `https://auth.msmt.org.br/debug/ready` e `https://suporte.msmt.org.br/api/health`).
 
@@ -310,3 +311,14 @@ Uso único (T29). Traz só os chamados **abertos e pendentes** do export, com me
 5. **Limpar:** `$K delete pod helpdesk-import` (some sozinho em 2 h) e, conferido o resultado, apagar `~/freshdesk-bundle` e `~/freshdesk-bundle.tgz` (dados pessoais). Registrar a execução em `docs/ambientes.md`.
 
 Detalhes: prioridade "baixa" de lá (o padrão, quase todos) vira média; contatos novos entram como no canal de e-mail (sem login, terceiro fora do domínio institucional); o responsável só é mantido se for agente ativo aqui; anexos fora das regras (tipo, 20 MB) ficam listados no texto da mensagem; imagens coladas viram anexo, com um aviso no lugar.
+
+## 17. Caixa de outro setor (ex.: `cadastros@`)
+
+O app lê só a caixa `suporte@`. Outra caixa entra **encaminhando** para ela: o e-mail novo enviado para a caixa do setor abre o ticket no grupo que tem essa **caixa de entrada** (o app reconhece o destino pelo `To`/`Cc` ou pelos cabeçalhos do encaminhamento). Respostas a tickets existentes seguem pelo `[#n]`, como sempre. Confirmação e respostas saem de `suporte@`.
+
+1. **Grupo:** Administração → Grupos → editar o grupo (ex.: Cadastros) → **Caixa de entrada**: `cadastros@missaosalesiana.org.br`. Fazer **antes** do passo 2; sem isso, os e-mails caem no grupo padrão da categoria "Geral". O grupo precisa ter agentes como membros.
+2. **Encaminhamento** (logado na caixa do setor, no Gmail): Configurações → Ver todas as configurações → **Encaminhamento e POP/IMAP** → Adicionar um endereço de encaminhamento → `suporte@missaosalesiana.org.br`. O Google manda um código de confirmação para `suporte@`: ele vira um ticket no grupo padrão da "Geral" (ou abra no Gmail de `suporte@`); copie o código e feche esse ticket. Depois, marque **Encaminhar uma cópia dos e-mails recebidos para** `suporte@` e **arquivar a cópia do Gmail** (o atendimento passa a ser só no help desk). Se a opção não aparecer, o encaminhamento automático está bloqueado no Admin Console (Gmail → Configurações do usuário final → Encaminhamento automático).
+3. **Freshdesk:** o Gmail encaminha para um endereço só. Se a caixa encaminhava para o Freshdesk, o passo 2 troca o destino; se o Freshdesk lia a caixa por conta própria, desconectar lá, para não abrir o chamado nos dois.
+4. **Testar:** de uma conta de fora, mandar um e-mail para a caixa do setor. Em até 1 min: ticket no grupo, aviso aos membros e confirmação `[#n]` para o remetente. Se não aparecer, ver o motivo em `inbound_emails` (§10; ex.: `dmarc_fail`) e o rótulo `helpdesk/erro` no Gmail de `suporte@` (§8).
+
+Para desligar: apagar a caixa de entrada do grupo e o encaminhamento no Gmail.

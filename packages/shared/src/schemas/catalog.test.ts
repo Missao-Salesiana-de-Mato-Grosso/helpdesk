@@ -33,6 +33,8 @@ describe('group schemas', () => {
     expect(createGroupSchema.parse({ name: 'TI', email: '' })).toEqual({ name: 'TI', email: null });
     expect(updateGroupSchema.parse({ email: null })).toEqual({ email: null });
     expect(createGroupSchema.safeParse({ name: 'TI', email: 'x' }).success).toBe(false);
+    expect(updateGroupSchema.parse({ inboundEmail: '' })).toEqual({ inboundEmail: null });
+    expect(createGroupSchema.safeParse({ name: 'TI', inboundEmail: 'x' }).success).toBe(false);
   });
 });
 

@@ -4,6 +4,7 @@ import { ImapFlow } from 'imapflow';
 import { AttachmentsModule } from '../attachments/attachments.module.js';
 import { CategoriesModule } from '../categories/categories.module.js';
 import type { Env } from '../config/env.js';
+import { GroupsModule } from '../groups/groups.module.js';
 import { TicketsModule } from '../tickets/tickets.module.js';
 import { UsersModule } from '../users/users.module.js';
 import { FolderMailboxSource } from './folder-mailbox.source.js';
@@ -13,7 +14,7 @@ import { InboundEmailService } from './inbound-email.service.js';
 import { MAILBOX_SOURCE, type MailboxSource } from './mailbox-source.js';
 
 @Module({
-  imports: [TicketsModule, UsersModule, CategoriesModule, AttachmentsModule],
+  imports: [TicketsModule, UsersModule, CategoriesModule, GroupsModule, AttachmentsModule],
   providers: [
     InboundEmailService,
     InboundEmailCron,

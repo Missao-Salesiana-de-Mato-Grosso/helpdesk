@@ -81,6 +81,23 @@ export class GroupsService {
     };
   }
 
+  /**
+   * #42: o grupo ativo cuja caixa de entrada está entre os destinatários, na ordem deles (o `To`
+   * vem antes dos cabeçalhos de encaminhamento); `null` se nenhum.
+   */
+  async findActiveByInboundEmail(addresses: readonly string[]): Promise<NamedRef | null> {
+    if (addresses.length === 0) return null;
+    const groups = await this.prisma.group.findMany({
+      where: { active: true, inboundEmail: { in: [...addresses] } },
+      select: { id: true, name: true, inboundEmail: true },
+    });
+    for (const address of addresses) {
+      const group = groups.find((candidate) => candidate.inboundEmail?.toLowerCase() === address);
+      if (group) return { id: group.id, name: group.name };
+    }
+    return null;
+  }
+
   /** Para quem vai o aviso ao grupo (T14): o e-mail do grupo, se houver, e os agentes ativos. */
   async notificationTarget(
     groupId: string,
