@@ -299,12 +299,14 @@ Uso único (T29). Traz só os chamados **abertos e pendentes** do export, com me
    IMAGE=$($K get deployment helpdesk -o jsonpath='{.spec.template.spec.containers[0].image}')
    sed "s|IMAGE|$IMAGE|" deploy/k8s/jobs/freshdesk-import-pod.yaml | $K apply -f -
    $K wait --for=condition=Ready pod/helpdesk-import --timeout=120s
-   $K cp ~/freshdesk-bundle.tgz helpdesk-import:/tmp/bundle.tgz
+   # Caminho relativo: no Windows, um absoluto (C:/...) faz o kubectl ler "C" como nome de pod.
+   KC=$(realpath ../msmt-infra-automation/secrets/kubeconfig-k8s-msmt-prd.yaml)
+   (cd ~ && kubectl --kubeconfig "$KC" -n helpdesk cp freshdesk-bundle.tgz helpdesk-import:/tmp/bundle.tgz)
    $K exec helpdesk-import -- tar -xzf /tmp/bundle.tgz -C /tmp
    ```
 
 3. **Simular** (não grava nada): `$K exec helpdesk-import -- node dist/import/freshdesk-import.js /tmp/freshdesk-bundle`. Uma linha por chamado (só número de lá, situação, grupo, contagens), os **possíveis duplicados** (mesmo solicitante e assunto, aberto do dia anterior a 3 dias depois: o `suporte@` encaminhou para o Freshdesk depois da virada) e os grupos que faltam. Conferir cada duplicado no portal pelo número indicado.
-4. **Gravar:** o mesmo comando com `--apply`. Duplicados são pulados; para importar algum mesmo assim, `--keep 18277,18279`. Outro destino de grupo: `--map-group "Nome lá=Nome aqui"` ou `--map-mailbox "caixa@missaosalesiana.org.br=Grupo"`.
+4. **Gravar:** o mesmo comando com `--apply`. Duplicados são pulados; para importar algum mesmo assim, `--keep 18101,18150` (os números de lá que a simulação apontou). Outro destino de grupo: `--map-group "Nome lá=Nome aqui"` ou `--map-mailbox "caixa@missaosalesiana.org.br=Grupo"`.
 5. **Limpar:** `$K delete pod helpdesk-import` (some sozinho em 2 h) e, conferido o resultado, apagar `~/freshdesk-bundle` e `~/freshdesk-bundle.tgz` (dados pessoais). Registrar a execução em `docs/ambientes.md`.
 
 Detalhes: prioridade "baixa" de lá (o padrão, quase todos) vira média; contatos novos entram como no canal de e-mail (sem login, terceiro fora do domínio institucional); o responsável só é mantido se for agente ativo aqui; anexos fora das regras (tipo, 20 MB) ficam listados no texto da mensagem; imagens coladas viram anexo, com um aviso no lugar.
