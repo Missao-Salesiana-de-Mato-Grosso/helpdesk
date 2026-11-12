@@ -295,3 +295,20 @@ Armadilhas e decisões:
 - O app roda com **1 réplica** e estratégia `Recreate`: os crons (outbox e IMAP) rodam no processo, e a leitura da caixa não deve rodar em paralelo.
 - As variáveis `VITE_*` são embutidas no front no build. Trocar o client id do Zitadel exige novo `make deploy`.
 - O `.dockerignore` excluía `**/storage` e levava junto o código de `src/attachments/storage/`: as exclusões de dados são só `/storage` e `apps/api/storage`.
+
+### 2.5 Import dos chamados abertos do Freshdesk (T29)
+
+Executado em 2026-11-11 pelo `docs/runbook.md` §16, num pod temporário (`helpdesk-import`), com o pacote gerado do export.
+
+- **Antes:** grupos montados em Administração → Grupos: `Cadastros` (Rhauan, responsável por cadastro de fornecedores e produtos) e `Suporte TI` (também o grupo padrão da categoria "Geral"). O import não cria agentes nem membros de grupo, e só mantém o responsável que já é agente ativo aqui.
+- **Resultado:** 120 importados (#1014–#1133), 0 falhas, 54 contatos novos, 13 anexos recusados pelas regras de tipo e tamanho (listados no texto da mensagem; os arquivos continuam no export). Destino: os de `cadastros@` e do grupo "Cadastro de Clientes e Fornecedores" em `Cadastros`; o resto em `Suporte TI`.
+- **Pulados (possível duplicado, já chegaram pelo `suporte@` depois da virada):** Freshdesk #18509, #18550, #18551, #18553 (testes da virada, ≈ #1004–#1007), #18549 (≈ #1003), #18552 (≈ #1006), #18562 (≈ #1008), #18529 (≈ #1009, 4 mensagens lá) e #18571 (≈ #1010, 3 mensagens lá). Os dois últimos podem ter resposta de agente que não está aqui: conferir no Freshdesk e, se for o caso, `--keep`.
+- **Fora do pacote:** chamados do Freshdesk acima de #18571 e respostas posteriores ao export (até a virada do `cadastros@`, §2.6). Tratar à mão ou com um pacote complementar antes de cancelar.
+- **Armadilhas (Git Bash no Windows):** um caminho absoluto no `kubectl cp` (`C:/...`) faz o kubectl ler `C` como nome de pod; e o Git Bash converte `/tmp/...` em `C:/Users/.../Temp/...` antes de chegar ao `kubectl exec`. Solução: copiar por caminho relativo a partir da pasta home e `export MSYS_NO_PATHCONV=1` (runbook corrigido).
+- **Limpeza:** apagar o pod e `~/freshdesk-bundle` / `~/freshdesk-bundle.tgz` (dados pessoais).
+
+### 2.6 Caixa `cadastros@` (#42, runbook §17)
+
+- **2026-11-11:** encaminhamento automático configurado no Gmail de `cadastros@missaosalesiana.org.br` para `suporte@missaosalesiana.org.br` (substitui o envio ao Freshdesk). A partir daqui, e-mail novo para `cadastros@` abre ticket no help desk.
+- **Pendente:** merge e deploy do PR #43 e, logo depois, Administração → Grupos → `Cadastros` → **Caixa de entrada** = `cadastros@missaosalesiana.org.br`. Até lá, esses tickets entram em `Suporte TI` (grupo padrão da "Geral") e o Rhauan não os vê: mover à mão para `Cadastros`.
+- **Pendente:** teste de uma conta externa (ticket em `Cadastros`, aviso ao Rhauan, confirmação `[#n]`); conferir que o ticket do código de confirmação do Google foi fechado.
