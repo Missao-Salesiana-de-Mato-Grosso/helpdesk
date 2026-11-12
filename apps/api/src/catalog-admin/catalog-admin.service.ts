@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   ApiErrorCode,
   DEFAULT_CATEGORY_NAME,
@@ -14,11 +15,13 @@ import {
 } from '@helpdesk/shared';
 import { ApiException } from '../common/api-exception.js';
 import { isUuid } from '../common/uuid.js';
+import type { Env } from '../config/env.js';
 import { Prisma } from '../generated/prisma/client.js';
+import { mailboxAddress } from '../notifications/notification.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 const itemSelect = { id: true, name: true, active: true } as const;
-const groupSelect = { ...itemSelect, email: true } as const;
+const groupSelect = { ...itemSelect, email: true, inboundEmail: true } as const;
 const categorySelect = {
   ...itemSelect,
   defaultGroup: { select: { id: true, name: true, active: true } },
@@ -53,7 +56,14 @@ const nameTaken = (label: string) =>
  */
 @Injectable()
 export class CatalogAdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly ownAddress: string;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    config: ConfigService<Env, true>,
+  ) {
+    this.ownAddress = mailboxAddress(config.get('MAIL_FROM', { infer: true }));
+  }
 
   // ───────────── unidades ─────────────
 
@@ -126,6 +136,7 @@ export class CatalogAdminService {
       'um grupo',
       this.prisma.group.findFirst({ where: sameName(input.name), select: { id: true } }),
     );
+    await this.assertInboundFree(input.inboundEmail);
     return this.uniqueName('um grupo', () =>
       this.prisma.group.create({ data: input, select: groupSelect }),
     );
@@ -141,6 +152,7 @@ export class CatalogAdminService {
         this.prisma.group.findFirst({ where: sameName(input.name, id), select: { id: true } }),
       );
     }
+    await this.assertInboundFree(input.inboundEmail, id);
     if (input.active === false && found.active) {
       const categories = await this.prisma.category.findMany({
         where: { defaultGroupId: id, active: true },
@@ -225,6 +237,32 @@ export class CatalogAdminService {
         HttpStatus.UNPROCESSABLE_ENTITY,
         ApiErrorCode.INACTIVE_REFERENCE,
         'O grupo padrão precisa existir e estar ativo.',
+      );
+    }
+  }
+
+  /**
+   * #42: a caixa de entrada é de um grupo só, e não pode ser a do próprio help desk (todo e-mail
+   * iria para o grupo, no lugar do padrão da categoria "Geral").
+   */
+  private async assertInboundFree(inboundEmail: string | null | undefined, exceptId?: string) {
+    if (!inboundEmail) return;
+    if (inboundEmail.toLowerCase() === this.ownAddress) {
+      throw new ApiException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        ApiErrorCode.INBOUND_EMAIL_TAKEN,
+        'Essa é a caixa do próprio help desk: os e-mails dela já vão para o grupo padrão da categoria "Geral".',
+      );
+    }
+    const other = await this.prisma.group.findFirst({
+      where: { inboundEmail, ...(exceptId ? { id: { not: exceptId } } : {}) },
+      select: { name: true },
+    });
+    if (other) {
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        ApiErrorCode.INBOUND_EMAIL_TAKEN,
+        `Essa caixa de entrada já é do grupo ${other.name}.`,
       );
     }
   }

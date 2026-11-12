@@ -131,6 +131,39 @@ describe('cadastros de referência (T25, e2e)', () => {
       expect(groupOf(cleared).email).toBeNull();
     });
 
+    it('caixa de entrada (#42): de um grupo só e nunca a do próprio help desk', async () => {
+      const created = groupOf(
+        await post('/api/admin/groups', {
+          name: 'Cadastros',
+          inboundEmail: 'Cadastros@missaosalesiana.org.br',
+        }),
+      );
+      expect(created).toMatchObject({ inboundEmail: 'Cadastros@missaosalesiana.org.br' });
+
+      const taken = await patch(`/api/admin/groups/${f.G1}`, {
+        inboundEmail: 'cadastros@missaosalesiana.org.br',
+      });
+      expect(taken.status).toBe(409);
+      expect(taken.body).toMatchObject({ code: 'INBOUND_EMAIL_TAKEN' });
+
+      const own = await patch(`/api/admin/groups/${f.G1}`, {
+        inboundEmail: 'suporte@missaosalesiana.org.br',
+      });
+      expect(own.status).toBe(422);
+      expect(own.body).toMatchObject({ code: 'INBOUND_EMAIL_TAKEN' });
+
+      // O próprio grupo pode salvar a mesma caixa; vazio limpa.
+      expect(
+        (
+          await patch(`/api/admin/groups/${created.id}`, {
+            inboundEmail: 'cadastros@missaosalesiana.org.br',
+          })
+        ).status,
+      ).toBe(200);
+      const cleared = await patch(`/api/admin/groups/${created.id}`, { inboundEmail: '' });
+      expect(groupOf(cleared).inboundEmail).toBeNull();
+    });
+
     it('não desativa grupo padrão de categoria ativa (422 GROUP_IN_USE)', async () => {
       const res = await patch(`/api/admin/groups/${f.G2}`, { active: false });
       expect(res.status).toBe(422);

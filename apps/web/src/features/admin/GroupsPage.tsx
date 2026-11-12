@@ -20,8 +20,8 @@ import { CatalogLayout, SaveFooter, StatusBadge } from './CatalogPages.tsx';
 import { useCatalog, useReplaceGroupMembers, useSaveCatalogItem, useUsers } from './queries.ts';
 
 /**
- * T25: cadastro de grupos (nome, e-mail de aviso, ativo). T15: membros de cada grupo; só agentes
- * ativos (com papel de atendimento) aparecem.
+ * T25: cadastro de grupos (nome, e-mail de aviso, ativo). #42: caixa de entrada própria. T15:
+ * membros de cada grupo; só agentes ativos (com papel de atendimento) aparecem.
  */
 export function GroupsPage() {
   const groups = useCatalog('groups');
@@ -43,6 +43,7 @@ export function GroupsPage() {
             <Table.Tr>
               <Table.Th>Nome</Table.Th>
               <Table.Th>E-mail de aviso</Table.Th>
+              <Table.Th>Caixa de entrada</Table.Th>
               <Table.Th>Situação</Table.Th>
               <Table.Th />
             </Table.Tr>
@@ -52,6 +53,7 @@ export function GroupsPage() {
               <Table.Tr key={group.id}>
                 <Table.Td>{group.name}</Table.Td>
                 <Table.Td>{group.email ?? '—'}</Table.Td>
+                <Table.Td>{group.inboundEmail ?? '—'}</Table.Td>
                 <Table.Td>
                   <StatusBadge active={group.active} />
                 </Table.Td>
@@ -91,21 +93,24 @@ function GroupModal({ group, onClose }: { group: GroupItem | null; onClose: () =
   const save = useSaveCatalogItem('groups');
   const [name, setName] = useState(group?.name ?? '');
   const [email, setEmail] = useState(group?.email ?? '');
+  const [inbound, setInbound] = useState(group?.inboundEmail ?? '');
   const [active, setActive] = useState(group?.active ?? true);
 
   const submit = () => {
     const trimmed = name.trim();
     const mail = email.trim() || null;
+    const inboundEmail = inbound.trim() || null;
     if (group) {
       const data = {
         ...(trimmed !== group.name ? { name: trimmed } : {}),
         ...(mail !== group.email ? { email: mail } : {}),
+        ...(inboundEmail !== group.inboundEmail ? { inboundEmail } : {}),
         ...(active !== group.active ? { active } : {}),
       };
       if (Object.keys(data).length === 0) return onClose();
       save.mutate({ id: group.id, data }, { onSuccess: onClose });
     } else {
-      save.mutate({ data: { name: trimmed, email: mail } }, { onSuccess: onClose });
+      save.mutate({ data: { name: trimmed, email: mail, inboundEmail } }, { onSuccess: onClose });
     }
   };
 
@@ -124,6 +129,13 @@ function GroupModal({ group, onClose }: { group: GroupItem | null; onClose: () =
           type="email"
           value={email}
           onChange={(event) => setEmail(event.currentTarget.value)}
+        />
+        <TextInput
+          label="Caixa de entrada (opcional)"
+          description="Caixa de outro setor encaminhada para a do help desk (ex.: cadastros@). E-mail novo enviado para ela abre o ticket neste grupo."
+          type="email"
+          value={inbound}
+          onChange={(event) => setInbound(event.currentTarget.value)}
         />
         {group && (
           <Checkbox

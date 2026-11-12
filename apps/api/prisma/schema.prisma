@@ -170,13 +170,16 @@ model Department {
 
 /// Grupo de atendimento (fila de agentes).
 model Group {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name      String   @unique
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String   @unique
   /// Opcional: e-mail que recebe o aviso de ticket novo na fila.
-  email     String?  @db.Citext
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  email        String?  @db.Citext
+  /// Opcional: caixa de outro setor encaminhada para a do help desk (ex.: cadastros@). E-mail novo
+  /// enviado para ela abre o ticket neste grupo, em vez do grupo padrão da categoria "Geral".
+  inboundEmail String?  @unique @map("inbound_email") @db.Citext
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   members    GroupMember[]
   tickets    Ticket[]

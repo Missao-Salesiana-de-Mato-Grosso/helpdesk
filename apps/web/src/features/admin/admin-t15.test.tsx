@@ -157,8 +157,8 @@ describe('GroupsPage (T15)', () => {
       'GET /api/me': () => jsonResponse(200, ADMIN),
       'GET /api/admin/groups': () =>
         jsonResponse(200, [
-          { id: 'g1', name: 'Suporte TI', email: null, active: true },
-          { id: 'g9', name: 'Antigo', email: null, active: false },
+          { id: 'g1', name: 'Suporte TI', email: null, inboundEmail: null, active: true },
+          { id: 'g9', name: 'Antigo', email: null, inboundEmail: null, active: false },
         ]),
       'GET /api/groups/g1/members': () => jsonResponse(200, [{ id: 'a1', name: 'Ana' }]),
       'GET /api/users': (_init, url) => {

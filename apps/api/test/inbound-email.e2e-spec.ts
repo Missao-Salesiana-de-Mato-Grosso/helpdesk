@@ -28,6 +28,7 @@ class RecordingMailer implements Mailer {
 
 interface EmlOptions {
   from: string;
+  to?: string;
   subject?: string;
   messageId?: string;
   inReplyTo?: string;
@@ -51,7 +52,7 @@ function eml(options: EmlOptions): string {
   counter += 1;
   return [
     `From: ${options.from}`,
-    'To: suporte@missaosalesiana.org.br',
+    `To: ${options.to ?? 'suporte@missaosalesiana.org.br'}`,
     `Subject: ${options.subject ?? 'Assunto'}`,
     'Date: Sat, 24 Oct 2026 12:00:00 -0400',
     `Message-ID: ${options.messageId ?? `<gerado-${counter}-${Date.now()}@teste.org>`}`,
@@ -99,6 +100,7 @@ describe('e-mail de entrada — T21 (e2e)', () => {
     return file;
   };
   const poll = () => inbound.pollMailbox();
+  const groupOfNew = async () => (await t.prisma.ticket.findFirstOrThrow()).groupId;
   const inboundRows = () => t.prisma.inboundEmail.findMany({ orderBy: { createdAt: 'asc' } });
   const outbox = async () =>
     (
@@ -196,6 +198,54 @@ describe('e-mail de entrada — T21 (e2e)', () => {
       const ticket = await t.prisma.ticket.findFirstOrThrow();
       expect(ticket).toMatchObject({ requesterId: f.users.req1, companyId: f.U1 });
       expect(await t.prisma.user.count()).toBe(7);
+    });
+
+    describe('caixa de entrada por grupo (#42)', () => {
+      const cadastros = 'cadastros@missaosalesiana.org.br';
+      beforeEach(async () => {
+        await t.prisma.group.update({ where: { id: f.G2 }, data: { inboundEmail: cadastros } });
+      });
+
+      it('enviado direto para a caixa do grupo: ticket nesse grupo, aviso aos membros dele', async () => {
+        await drop(
+          eml({
+            from: 'compras@fornecedor.com.br',
+            to: `"Cadastros" <Cadastros@missaosalesiana.org.br>`,
+          }),
+        );
+        await poll();
+        expect(await groupOfNew()).toBe(f.G2);
+        expect(await outbox()).toContainEqual(['ticket_created_group', email('ag2')]);
+        expect(await outbox()).not.toContainEqual(['ticket_created_group', email('ag1')]);
+      });
+
+      it('encaminhado pelo Gmail (X-Forwarded-For): ticket no grupo da caixa original', async () => {
+        await drop(
+          eml({
+            from: 'compras@fornecedor.com.br',
+            to: 'undisclosed-recipients:;',
+            headers: [
+              'Delivered-To: suporte@missaosalesiana.org.br',
+              `X-Forwarded-For: ${cadastros} suporte@missaosalesiana.org.br`,
+            ],
+          }),
+        );
+        await poll();
+        expect(await groupOfNew()).toBe(f.G2);
+      });
+
+      it('para o suporte@: continua no grupo padrão da "Geral"', async () => {
+        await drop(eml({ from: email('req1') }));
+        await poll();
+        expect(await groupOfNew()).toBe(f.G1);
+      });
+
+      it('grupo da caixa inativo: vai para o grupo padrão da "Geral"', async () => {
+        await t.prisma.group.update({ where: { id: f.G2 }, data: { active: false } });
+        await drop(eml({ from: email('req1'), to: cadastros }));
+        await poll();
+        expect(await groupOfNew()).toBe(f.G1);
+      });
     });
 
     it('sem a categoria "Geral": failed com o motivo, sem ticket', async () => {

@@ -23,6 +23,8 @@ export interface CatalogItem {
 export interface GroupItem extends CatalogItem {
   /** Recebe o aviso de ticket novo na fila, além dos membros (T14). */
   email: string | null;
+  /** Caixa encaminhada para a do help desk: e-mail novo para ela abre ticket neste grupo (#42). */
+  inboundEmail: string | null;
 }
 
 export interface CategoryItem extends CatalogItem {
@@ -42,19 +44,26 @@ export const updateCatalogItemSchema = z
   .refine(anyField, anyFieldMessage);
 export type UpdateCatalogItemInput = z.infer<typeof updateCatalogItemSchema>;
 
-/** Vazio vira `null` (sem e-mail de aviso). */
+/** Vazio vira `null` (sem e-mail). */
 const groupEmail = z
   .union([z.literal(''), z.email().max(254)])
   .nullable()
   .transform((value) => value || null);
 
 /** `POST /api/admin/groups`. */
-export const createGroupSchema = z.object({ name, email: groupEmail.optional() }).strict();
+export const createGroupSchema = z
+  .object({ name, email: groupEmail.optional(), inboundEmail: groupEmail.optional() })
+  .strict();
 export type CreateGroupInput = z.infer<typeof createGroupSchema>;
 
 /** `PATCH /api/admin/groups/:id`. */
 export const updateGroupSchema = z
-  .object({ name: name.optional(), email: groupEmail.optional(), active: z.boolean().optional() })
+  .object({
+    name: name.optional(),
+    email: groupEmail.optional(),
+    inboundEmail: groupEmail.optional(),
+    active: z.boolean().optional(),
+  })
   .strict()
   .refine(anyField, anyFieldMessage);
 export type UpdateGroupInput = z.infer<typeof updateGroupSchema>;

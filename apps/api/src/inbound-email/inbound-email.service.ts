@@ -7,6 +7,7 @@ import { AttachmentsService, type IncomingFile } from '../attachments/attachment
 import { CategoriesService } from '../categories/categories.service.js';
 import type { Env } from '../config/env.js';
 import type { Prisma } from '../generated/prisma/client.js';
+import { GroupsService } from '../groups/groups.service.js';
 import { mailboxAddress } from '../notifications/notification.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { isAgent } from '../tickets/ticket-scope.js';
@@ -20,6 +21,7 @@ import {
   type MailboxSource,
   type RawEmail,
 } from './mailbox-source.js';
+import { recipientAddresses } from './recipients.js';
 
 export type InboundOutcome = 'processed' | 'discarded' | 'failed' | 'duplicate';
 
@@ -98,6 +100,7 @@ export class InboundEmailService {
     private readonly prisma: PrismaService,
     private readonly users: UsersService,
     private readonly categories: CategoriesService,
+    private readonly groups: GroupsService,
     private readonly tickets: TicketsService,
     private readonly attachments: AttachmentsService,
     @Inject(MAILBOX_SOURCE) private readonly source: MailboxSource,
@@ -277,13 +280,18 @@ export class InboundEmailService {
       }
       // RN-13: resposta a ticket fechado abre um novo, ligado ao anterior.
       const category = await this.categories.findActiveByName(DEFAULT_CATEGORY_NAME);
-      if (!category?.defaultGroup.active) throw new InboundRejection('no_default_category');
+      if (!category) throw new InboundRejection('no_default_category');
+      // #42: enviado (ou encaminhado) para a caixa de entrada de um grupo → esse grupo.
+      const routed = await this.groups.findActiveByInboundEmail(recipientAddresses(parsed));
+      if (!routed && !category.defaultGroup.active) {
+        throw new InboundRejection('no_default_category');
+      }
       await this.tickets.createFromEmail(
         author,
         {
           subject: ticketSubject(parsed.subject),
           categoryId: category.id,
-          groupId: category.defaultGroup.id,
+          groupId: routed?.id ?? category.defaultGroup.id,
           ...body,
           ...(target ? { relatedTicketId: target.id } : {}),
         },
