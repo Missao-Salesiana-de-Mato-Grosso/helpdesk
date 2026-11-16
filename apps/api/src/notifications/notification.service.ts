@@ -54,6 +54,8 @@ export type NotificationEvent =
        * pessoa (o solicitante ou um terceiro no thread), ao responsável ou ao grupo.
        */
       authorIsAgent: boolean;
+      /** Por onde a mensagem entrou. Só a resposta escrita no portal leva assinatura (T31 RN-08). */
+      via: 'portal' | 'email';
       message: NotifiedMessage;
       /** A mesma requisição resolveu o ticket (RN-04): um e-mail só. */
       resolved: boolean;
@@ -159,6 +161,12 @@ export class NotificationService {
     ]);
     const nameOf = (id: string) => contacts.find((c) => c.id === id)?.name ?? '';
     const message = event.type === 'resolved' ? null : event.message;
+    // T31 RN-09: a assinatura do autor é congelada aqui, como o resto do payload.
+    const signed =
+      event.type === 'public_reply' &&
+      event.via === 'portal' &&
+      recipients.some(({ template }) => template === 'reply');
+    const signatureHtml = signed ? await this.users.signatureOf(event.actorId) : null;
 
     await tx.notification.createMany({
       data: recipients.map(({ template, to }) => {
@@ -181,6 +189,7 @@ export class NotificationService {
           requesterName: nameOf(ticket.requesterId),
           companyName: companies[0]?.name ?? null,
           categoryName: categories[0]?.name ?? null,
+          ...(template === 'reply' && signatureHtml ? { signatureHtml } : {}),
         };
         return {
           ticketId: ticket.id,

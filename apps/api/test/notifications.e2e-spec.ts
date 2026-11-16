@@ -22,6 +22,9 @@ type Login = Exclude<FixtureUser, 'ext1'>;
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- corpo do Supertest é `any`.
 const detailOf = (res: Response) => res.body as TicketDetail;
 
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- payload gravado pelo enqueue.
+const payloadOf = (row: { payload: unknown }) => row.payload as Record<string, unknown>;
+
 const MAILPIT = 'http://127.0.0.1:8025/api/v1';
 const OWN = 'suporte@missaosalesiana.org.br';
 const timeout = () => Object.assign(new Error('Connection timeout'), { code: 'ETIMEDOUT' });
@@ -509,6 +512,136 @@ describe('notificações — T14 (e2e)', () => {
       expect(logs.length).toBeGreaterThan(0);
       expect(logs.join('\n')).not.toContain('wifi');
       expect(logs.join('\n')).not.toContain(email('req1'));
+    });
+  });
+
+  // Spec docs/specs/T31-assinatura-email.md — a assinatura do agente no `reply`.
+  describe('assinatura do agente (T31)', () => {
+    const SIGNATURE = '<p><strong>Ag Um</strong></p><p>Suporte de TI</p>';
+    const sign = (user: FixtureUser, signatureHtml: string | null = SIGNATURE) =>
+      t.prisma.user.update({ where: { id: f.users[user] }, data: { signatureHtml } });
+
+    it('T31 CT-07 resposta pelo portal: assinatura no payload e depois do corpo, no HTML e no texto', async () => {
+      await sign('ag1');
+      const ticket = await f.ticket({ requester: 'req1' });
+      expect((await message('ag1', ticket.id, reply)).status).toBe(201);
+
+      const [row] = await rows();
+      expect(row!.template).toBe('reply');
+      expect(payloadOf(row!)).toMatchObject({ signatureHtml: SIGNATURE });
+
+      await outbox.processOutbox();
+      const [mail] = mailer.sent;
+      expect(mail!.html).toContain(
+        `<p>Troque o toner</p><div style="margin:16px 0 0">${SIGNATURE}</div></div>`,
+      );
+      expect(mail!.text).toContain('Troque o toner\n\n-- \nAg Um\nSuporte de TI\n\nResponda');
+    });
+
+    it('T31 CT-08 agente sem assinatura: e-mail como antes', async () => {
+      const ticket = await f.ticket({ requester: 'req1' });
+      await message('ag1', ticket.id, reply);
+      const [row] = await rows();
+      expect(payloadOf(row!)).not.toHaveProperty('signatureHtml');
+
+      await outbox.processOutbox();
+      const [mail] = mailer.sent;
+      expect(mail!.html).toContain('<p>Troque o toner</p></div>');
+      expect(mail!.text).not.toContain('-- \n');
+    });
+
+    it('T31 CT-10 nota interna, chamado aberto pelo agente, resolver sem texto e agente como solicitante: sem assinatura', async () => {
+      await sign('ag1');
+      const ticket = await f.ticket({ requester: 'req1' });
+      await message('ag1', ticket.id, { kind: 'internal', bodyHtml: '<p>Só a equipe</p>' });
+      await patch('ag1', ticket.id, { status: 'resolved', version: 1 });
+      await create('ag1', { requesterId: f.users.ext1 });
+      const own = await f.ticket({ requester: 'ag1', assignee: 'ag2', group: 'G2' });
+      await message('ag1', own.id, reply);
+
+      const created = await rows();
+      expect(created.map((n) => n.template).toSorted()).toEqual([
+        'requester_reply',
+        'resolved',
+        'ticket_created',
+      ]);
+      for (const row of created) expect(payloadOf(row)).not.toHaveProperty('signatureHtml');
+    });
+
+    it('T31 CT-11 trocar a assinatura depois do enqueue não muda o e-mail pendente', async () => {
+      await sign('ag1', '<p>Assinatura A</p>');
+      const ticket = await f.ticket({ requester: 'req1' });
+      await message('ag1', ticket.id, reply);
+      await sign('ag1', '<p>Assinatura B</p>');
+
+      await outbox.processOutbox();
+      expect(mailer.sent[0]!.html).toContain('Assinatura A');
+      expect(mailer.sent[0]!.html).not.toContain('Assinatura B');
+    });
+
+    it('T31 CT-12 linha antiga da outbox, sem signatureHtml no payload, continua sendo enviada', async () => {
+      const ticket = await f.ticket({ requester: 'req1' });
+      await message('ag1', ticket.id, reply);
+      const [row] = await rows();
+      expect(payloadOf(row!)).not.toHaveProperty('signatureHtml');
+      await sign('ag1');
+
+      expect(await outbox.processOutbox()).toEqual({ sent: 1, failed: 0, retried: 0 });
+      expect(mailer.sent[0]!.html).not.toContain('Suporte de TI');
+    });
+
+    it('T31 CT-13 responder e resolver: a assinatura vem antes do aviso de resolução', async () => {
+      await sign('ag1');
+      const ticket = await f.ticket({ requester: 'req1' });
+      await message('ag1', ticket.id, { ...reply, status: 'resolved', version: 1 });
+      expect((await rows()).map((n) => n.template)).toEqual(['reply']);
+
+      await outbox.processOutbox();
+      for (const part of [mailer.sent[0]!.html, mailer.sent[0]!.text]) {
+        expect(part.indexOf('Suporte de TI')).toBeGreaterThan(part.indexOf('Troque o toner'));
+        expect(part.indexOf('Suporte de TI')).toBeLessThan(
+          part.indexOf('Marcamos este chamado como resolvido'),
+        );
+      }
+    });
+
+    it('T31 CT-14 a mensagem gravada no ticket não contém a assinatura', async () => {
+      await sign('ag1');
+      const ticket = await f.ticket({ requester: 'req1' });
+      await message('ag1', ticket.id, reply);
+
+      const stored = await t.prisma.ticketMessage.findMany({ where: { ticketId: ticket.id } });
+      expect(stored.map((m) => m.bodyHtml).toSorted()).toEqual([
+        '<p>Corpo</p>',
+        '<p>Troque o toner</p>',
+      ]);
+      const detail = await http()
+        .get(`/api/tickets/${ticket.id}`)
+        .set('Authorization', await as('req1'));
+      expect(JSON.stringify(detail.body)).not.toContain('Suporte de TI');
+    });
+
+    it('T31 CT-15 nenhum log com o texto da assinatura', async () => {
+      const logs: string[] = [];
+      for (const level of ['log', 'warn', 'error', 'debug', 'verbose'] as const) {
+        vi.spyOn(Logger.prototype, level).mockImplementation((...args: unknown[]) => {
+          logs.push(args.map(String).join(' '));
+        });
+      }
+      const saved = await http()
+        .put('/api/me/signature')
+        .set('Authorization', await as('ag1'))
+        .send({ signatureHtml: '<p>Ramal secreto 4321</p>' });
+      expect(saved.status).toBe(200);
+      const ticket = await f.ticket({ requester: 'req1' });
+      await message('ag1', ticket.id, reply);
+      await message('ag1', ticket.id, reply);
+      mailer.failures.push(new Error('Connection timeout'));
+      await outbox.processOutbox();
+
+      expect(mailer.sent[0]!.html).toContain('Ramal secreto 4321');
+      expect(logs.length).toBeGreaterThan(0);
+      expect(logs.join('\n')).not.toContain('4321');
     });
   });
 });

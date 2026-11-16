@@ -235,6 +235,20 @@ export class UsersService {
     return this.prisma.user.update({ where: { id }, data, ...userWithGroupIds });
   }
 
+  /** Assinatura de e-mail (T31): a do próprio usuário, ou a do autor de um `reply`. */
+  async signatureOf(id: string): Promise<string | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: { signatureHtml: true },
+    });
+    return user?.signatureHtml ?? null;
+  }
+
+  /** Grava a assinatura já sanitizada; `null` apaga (T31 RN-05). */
+  async setSignature(id: string, signatureHtml: string | null): Promise<void> {
+    await this.prisma.user.update({ where: { id }, data: { signatureHtml } });
+  }
+
   findProfile(id: string): Promise<UserProfile | null> {
     return this.prisma.user.findUnique({ where: { id }, ...userProfile });
   }

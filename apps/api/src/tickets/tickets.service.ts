@@ -416,6 +416,7 @@ export class TicketsService {
             ticket: notified(ticket),
             actorId: actor.id,
             authorIsAgent: agent,
+            via: 'portal',
             message: { bodyHtml, attachments: stored },
             resolved,
           });
@@ -781,6 +782,7 @@ export class TicketsService {
         ticket: notified(ticket),
         actorId: author.id,
         authorIsAgent: agent,
+        via: 'email',
         message: { bodyHtml: input.bodyHtml, attachments: stored },
         resolved: false,
       });

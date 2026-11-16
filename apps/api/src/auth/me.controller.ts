@@ -1,18 +1,22 @@
-import { Body, Controller, Get, HttpStatus, Patch } from '@nestjs/common';
+import { Body, Controller, Get, HttpStatus, Patch, Put } from '@nestjs/common';
 import {
   ApiErrorCode,
   ROLES,
   updateMeSchema,
+  updateSignatureSchema,
   type MeResponse,
+  type SignatureResponse,
   type UpdateMeInput,
+  type UpdateSignatureInput,
 } from '@helpdesk/shared';
 import { ApiException } from '../common/api-exception.js';
+import { sanitizeSignatureHtml } from '../common/sanitize-html.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { CompaniesService } from '../companies/companies.service.js';
 import { DepartmentsService } from '../departments/departments.service.js';
 import { UsersService, type UserProfile } from '../users/users.service.js';
 import type { CurrentUser as CurrentUserType } from './current-user.js';
-import { AllowDuringOnboarding, AllowWhilePending, CurrentUser } from './decorators.js';
+import { AllowDuringOnboarding, AllowWhilePending, CurrentUser, Roles } from './decorators.js';
 import { UserCache } from './user-cache.js';
 
 @Controller('me')
@@ -62,6 +66,25 @@ export class MeController {
     );
     this.cache.invalidate(user.zitadelSub);
     return toMeResponse(profile, user);
+  }
+
+  /** T31: a assinatura de e-mail do próprio agente (RN-01, RN-02). */
+  @Get('signature')
+  @Roles('agente', 'supervisor', 'admin')
+  async getSignature(@CurrentUser() user: CurrentUserType): Promise<SignatureResponse> {
+    return { signatureHtml: await this.users.signatureOf(user.id) };
+  }
+
+  /** T31: sanitiza antes de gravar; sem texto visível apaga (RN-04, RN-05). */
+  @Put('signature')
+  @Roles('agente', 'supervisor', 'admin')
+  async updateSignature(
+    @CurrentUser() user: CurrentUserType,
+    @Body(new ZodValidationPipe(updateSignatureSchema)) body: UpdateSignatureInput,
+  ): Promise<SignatureResponse> {
+    const signatureHtml = sanitizeSignatureHtml(body.signatureHtml);
+    await this.users.setSignature(user.id, signatureHtml);
+    return { signatureHtml };
   }
 }
 

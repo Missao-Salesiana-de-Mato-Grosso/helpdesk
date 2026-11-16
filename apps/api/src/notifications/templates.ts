@@ -61,6 +61,11 @@ export const notificationPayload = z.object({
   requesterEmail: z.string().nullable().optional(),
   companyName: z.string().nullable(),
   categoryName: z.string().nullable(),
+  /**
+   * Assinatura do agente, já sanitizada, só no `reply` escrito no portal (T31 RN-08). Ausente
+   * nas linhas gravadas antes da T31 (RN-10).
+   */
+  signatureHtml: z.string().nullable().optional(),
 });
 
 export type NotificationPayload = z.infer<typeof notificationPayload>;
@@ -111,7 +116,8 @@ export interface RenderedMail {
   text: string;
 }
 
-type Block = { kind: 'text'; value: string } | { kind: 'message'; html: string };
+type Block =
+  { kind: 'text'; value: string } | { kind: 'message'; html: string; signatureHtml: string | null };
 
 const text = (value: string): Block => ({ kind: 'text', value });
 
@@ -127,7 +133,14 @@ export function renderNotification(
   attached: boolean,
 ): RenderedMail {
   const blocks = [...intro(template, payload)];
-  if (payload.bodyHtml) blocks.push({ kind: 'message', html: payload.bodyHtml });
+  if (payload.bodyHtml) {
+    blocks.push({
+      kind: 'message',
+      html: payload.bodyHtml,
+      // T31 RN-08: só a resposta do agente leva assinatura.
+      signatureHtml: template === 'reply' ? (payload.signatureHtml ?? null) : null,
+    });
+  }
   if (payload.attachments.length > 0 && !attached) {
     const names = payload.attachments.map((a) => a.filename).join(', ');
     blocks.push(
@@ -213,7 +226,7 @@ function toHtml(blocks: Block[], portalUrl: string | null): string {
   const parts = blocks.map((block) =>
     block.kind === 'text'
       ? `<p style="margin:0 0 12px">${escapeHtml(block.value)}</p>`
-      : `<div style="margin:0 0 12px;padding:12px;border-left:3px solid #ccc;background:#f7f7f7">${block.html}</div>`,
+      : `<div style="margin:0 0 12px;padding:12px;border-left:3px solid #ccc;background:#f7f7f7">${block.html}${signatureBlock(block.signatureHtml)}</div>`,
   );
   if (portalUrl) {
     const href = escapeHtml(portalUrl);
@@ -229,11 +242,23 @@ function toHtml(blocks: Block[], portalUrl: string | null): string {
 
 function toText(blocks: Block[], portalUrl: string | null): string {
   const parts = blocks.map((block) =>
-    block.kind === 'text' ? block.value : htmlToText(block.html),
+    block.kind === 'text'
+      ? block.value
+      : `${htmlToText(block.html)}${signatureText(block.signatureHtml)}`,
   );
   if (portalUrl) parts.push(`Ou acompanhe pelo portal: ${portalUrl}`);
   parts.push('--\nSuporte MSMT — Missão Salesiana de Mato Grosso');
   return `${parts.join('\n\n')}\n`;
+}
+
+/** T31 RN-11: a assinatura fica no bloco da mensagem, depois do corpo. */
+function signatureBlock(signature: string | null): string {
+  return signature ? `<div style="margin:16px 0 0">${signature}</div>` : '';
+}
+
+/** T31 RN-12: depois do corpo, o separador de assinatura (`-- `) e a assinatura em texto. */
+function signatureText(signature: string | null): string {
+  return signature ? `\n\n-- \n${htmlToText(signature)}` : '';
 }
 
 const ENTITIES: Record<string, string> = {

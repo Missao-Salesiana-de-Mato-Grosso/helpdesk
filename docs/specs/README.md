@@ -10,6 +10,7 @@ Uma spec por tarefa (ou grupo de tarefas) do backlog em `docs/discovery/05-plano
 | [T21-inbound-email.md](T21-inbound-email.md)               | T21                                | implementada                              | qui 22/10       |
 | [T17-deploy.md](T17-deploy.md)                             | T17 (e etapas 4, 5 e 8 do rollout) | implementada                              | dom 25/10       |
 | [T22-onboarding-liberacao.md](T22-onboarding-liberacao.md) | T22 (ADR-011; depende da T15)      | implementada (RN-01–20; RN-21–26 adiadas) | ter 28/10       |
+| [T31-assinatura-email.md](T31-assinatura-email.md)         | T31 (#45; depende da T14)          | implementada                              | seg 16/11       |
 
 ## Como usar uma spec numa sessão do Claude Code
 

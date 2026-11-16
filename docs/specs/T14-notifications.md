@@ -190,6 +190,7 @@ Fixture de tickets da spec T08–T10 §9 (req1, req2, ext1, ag1 em G1, ag2 em G2
 - Anexo sumido do storage: o e-mail sai só com os nomes, e o log registra o id da notificação.
 - Nota interna que resolve o ticket gera o `resolved`, sem o texto da nota.
 - Os CTs viraram `test/notifications.e2e-spec.ts` (30 testes; os 📬 conferem o e-mail no Mailpit) e os unitários `templates.spec.ts` e `mailer.spec.ts`.
+- **T31 (16/11/2026):** o `reply` de resposta escrita no portal leva a assinatura do agente depois do corpo (RN-18). O `payload` ganhou `signatureHtml` (opcional) e o evento `public_reply`, o campo `via`. Ver `T31-assinatura-email.md`.
 
 ## 11. Prompt sugerido para a sessão
 
