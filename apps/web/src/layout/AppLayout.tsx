@@ -17,7 +17,7 @@ import { useAuth } from 'react-oidc-context';
 import { Link, Outlet, useLocation } from 'react-router';
 import { useMe } from '../auth/useMe.ts';
 import { useTicketCounters } from '../features/tickets/queries.ts';
-import { visibleSections } from './navigation.ts';
+import { SIGNATURE_PATH, visibleSections } from './navigation.ts';
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Administrador',
@@ -85,6 +85,11 @@ export function AppLayout() {
                 <Text size="xs">{roleLabel}</Text>
               </Menu.Label>
               <Menu.Divider />
+              {me.isAgent && (
+                <Menu.Item component={Link} to={SIGNATURE_PATH}>
+                  Minha assinatura
+                </Menu.Item>
+              )}
               <Menu.Item onClick={() => void auth.signoutRedirect()}>Sair</Menu.Item>
             </Menu.Dropdown>
           </Menu>

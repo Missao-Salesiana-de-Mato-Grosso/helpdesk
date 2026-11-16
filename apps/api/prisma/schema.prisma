@@ -120,6 +120,8 @@ model User {
   accessDecidedById String?          @map("access_decided_by") @db.Uuid
   /// Nota interna da recusa. Nunca exposta ao usuário.
   accessNote        String?          @map("access_note")
+  /// Assinatura de e-mail do agente (T31), já sanitizada. Nulo = sem assinatura.
+  signatureHtml     String?          @map("signature_html")
   /// Soft-delete da lixeira (RN-19): só pedidos `pending` sem decisão há 30 dias.
   trashedAt         DateTime?        @map("trashed_at") @db.Timestamptz(6)
   createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)

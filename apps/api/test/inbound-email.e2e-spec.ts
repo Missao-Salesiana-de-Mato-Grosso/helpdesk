@@ -346,6 +346,19 @@ describe('e-mail de entrada — T21 (e2e)', () => {
       expect(await outbox()).toEqual([['reply', email('req1')]]);
     });
 
+    it('T31 CT-09 agente com assinatura responde pelo Gmail: o reply sai sem a assinatura do helpdesk', async () => {
+      await t.prisma.user.update({
+        where: { id: f.users.ag1 },
+        data: { signatureHtml: '<p>Ag Um — Suporte de TI</p>' },
+      });
+      await ticketWithOurRef('open');
+      await drop(eml({ from: email('ag1'), inReplyTo: OUR_REF, body: 'Já troquei o toner.' }));
+      await poll();
+      const [row] = await t.prisma.notification.findMany();
+      expect(row!.template).toBe('reply');
+      expect(row!.payload).not.toHaveProperty('signatureHtml');
+    });
+
     it('agente de outro grupo responde ao thread: aceito (escopo do e-mail)', async () => {
       const ticket = await ticketWithOurRef('open');
       await drop(eml({ from: email('ag2'), inReplyTo: OUR_REF }));

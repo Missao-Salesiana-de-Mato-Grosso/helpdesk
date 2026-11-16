@@ -54,6 +54,38 @@ export function sanitizeHtml(html: string): string {
   return sanitize(html, OPTIONS).trim();
 }
 
+// T31 RN-04: a assinatura aceita só o que o editor do portal produz. Sem imagens, tabelas,
+// títulos nem `pre`.
+const SIGNATURE_OPTIONS: sanitize.IOptions = {
+  ...OPTIONS,
+  allowedTags: [
+    'p',
+    'br',
+    'div',
+    'span',
+    'b',
+    'strong',
+    'i',
+    'em',
+    'u',
+    's',
+    'a',
+    'ul',
+    'ol',
+    'li',
+    'blockquote',
+    'code',
+  ],
+  allowedAttributes: { a: ['href', 'title', 'target', 'rel'] },
+  allowedSchemesByTag: { a: ['http', 'https', 'mailto'] },
+};
+
+/** Sanitiza a assinatura de e-mail (T31). Sem texto visível → `null` (RN-05). */
+export function sanitizeSignatureHtml(html: string): string | null {
+  const clean = sanitize(html, SIGNATURE_OPTIONS).trim();
+  return htmlHasContent(clean) ? clean : null;
+}
+
 /** Texto visível do HTML (sem tags e espaços), para detectar corpo vazio (RN-33). */
 export function htmlHasContent(html: string): boolean {
   const text = sanitize(html, { allowedTags: [], allowedAttributes: {} })

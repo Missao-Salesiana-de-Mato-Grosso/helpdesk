@@ -65,6 +65,41 @@ describe('templates de notificação (T14)', () => {
     );
   });
 
+  describe('assinatura do agente (spec T31)', () => {
+    const signatureHtml = '<p><strong>Ana Souza</strong></p><p>TI &amp; Suporte</p>';
+
+    it('CT-16 reply com assinatura: depois do corpo, no HTML e no texto', () => {
+      const mail = renderNotification('reply', payload({ signatureHtml }), true);
+      expect(mail.html).toContain(
+        `reinicie.</p><div style="margin:16px 0 0">${signatureHtml}</div></div>`,
+      );
+      expect(mail.text).toContain(
+        'Troque o toner & reinicie.\n\n-- \nAna Souza\nTI & Suporte\n\nResponda este e-mail',
+      );
+    });
+
+    it('CT-16 reply com resolved: a assinatura vem antes do aviso de resolução', () => {
+      const mail = renderNotification('reply', payload({ signatureHtml, resolved: true }), true);
+      for (const part of [mail.html, mail.text]) {
+        expect(part.indexOf('Ana Souza')).toBeGreaterThan(part.indexOf('Troque o'));
+        expect(part.indexOf('Ana Souza')).toBeLessThan(part.indexOf('Marcamos este chamado'));
+      }
+    });
+
+    it('CT-16 sem assinatura (ausente ou nula), a saída é a de antes', () => {
+      const before = renderNotification('reply', payload(), true);
+      expect(renderNotification('reply', payload({ signatureHtml: null }), true)).toEqual(before);
+      expect(before.text).not.toContain('-- \n');
+      expect(before.html).toContain('reinicie.</p></div>');
+    });
+
+    it('CT-16 só o reply usa a assinatura do payload', () => {
+      const mail = renderNotification('requester_reply', payload({ signatureHtml }), true);
+      expect(mail.html).not.toContain('Ana Souza');
+      expect(mail.text).not.toContain('Ana Souza');
+    });
+  });
+
   it('aviso ao grupo traz solicitante, unidade e categoria', () => {
     const mail = renderNotification('ticket_created_group', payload(), true);
     expect(mail.text).toContain('Novo chamado na fila Suporte TI');

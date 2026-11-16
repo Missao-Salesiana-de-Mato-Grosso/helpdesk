@@ -16,6 +16,9 @@ export interface NavSection {
 
 export const AGENT_ROLES: Role[] = ['agente', 'supervisor', 'admin'];
 
+/** T31: "Minha assinatura", no menu do usuário (só agentes). */
+export const SIGNATURE_PATH = '/assinatura';
+
 /** Rotas das filas do agente. O segmento vira o parâmetro `view` da API (T08). */
 export const QUEUE_VIEWS = {
   meus: { label: 'Meus', view: 'mine', counter: 'mine' },

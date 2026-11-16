@@ -347,6 +347,14 @@ const MATRIX: RouteCase[] = [
     label: 'DELETE /api/canned-responses/:id',
     expected: { ...ADMIN_OR_SUPERVISOR, supervisor: 204, admin: 204 },
   },
+  // T31 (CT-03): assinatura de e-mail — só agentes, cada um a própria.
+  { method: 'get', path: '/api/me/signature', expected: AGENT_ONLY },
+  {
+    method: 'put',
+    path: '/api/me/signature',
+    body: () => ({ signatureHtml: '<p>Assinatura</p>' }),
+    expected: AGENT_ONLY,
+  },
   // T25: cadastros de referência — só admin.
   ...(['companies', 'departments', 'groups', 'categories'] as const).flatMap(
     (kind): RouteCase[] => [

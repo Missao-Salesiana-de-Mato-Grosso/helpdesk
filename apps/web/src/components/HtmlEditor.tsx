@@ -37,6 +37,8 @@ export interface HtmlEditorProps {
   onChange: (html: string) => void;
   error?: string | undefined;
   disabled?: boolean;
+  /** Marca o campo como obrigatório no rótulo. A assinatura (T31) é opcional. */
+  required?: boolean;
   handleRef?: Ref<HtmlEditorHandle>;
 }
 
@@ -50,6 +52,7 @@ export function HtmlEditor({
   onChange,
   error,
   disabled = false,
+  required = true,
   handleRef,
 }: HtmlEditorProps) {
   // O Input.Wrapper do Mantine dá ao rótulo o id `<id>-label`.
@@ -98,7 +101,7 @@ export function HtmlEditor({
   );
 
   return (
-    <Input.Wrapper label={label} id={labelId} required error={error}>
+    <Input.Wrapper label={label} id={labelId} required={required} error={error}>
       <RichTextEditor editor={editor} labels={LABELS} mt={4}>
         <RichTextEditor.Toolbar>
           <RichTextEditor.ControlsGroup>

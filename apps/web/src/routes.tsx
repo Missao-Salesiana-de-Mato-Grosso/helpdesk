@@ -19,12 +19,13 @@ import { GroupsPage } from './features/admin/GroupsPage.tsx';
 import { UsersPage } from './features/admin/UsersPage.tsx';
 import { CannedResponsesPage } from './features/canned-responses/CannedResponsesPage.tsx';
 import { QueuePage } from './features/queue/QueuePage.tsx';
+import { SignaturePage } from './features/signature/SignaturePage.tsx';
 import { SlaSettingsPage } from './features/sla/SlaSettingsPage.tsx';
 import { MyTicketsPage } from './features/tickets/MyTicketsPage.tsx';
 import { NewTicketPage } from './features/tickets/NewTicketPage.tsx';
 import { TicketDetailPage } from './features/tickets/TicketDetailPage.tsx';
 import { AppLayout } from './layout/AppLayout.tsx';
-import { AGENT_ROLES, homePath } from './layout/navigation.ts';
+import { AGENT_ROLES, homePath, SIGNATURE_PATH } from './layout/navigation.ts';
 
 function HomeRedirect() {
   const { data: me } = useMe();
@@ -90,6 +91,15 @@ export function AppRoutes() {
             element={
               <RequireRole roles={['admin', 'supervisor']}>
                 <CannedResponsesPage />
+              </RequireRole>
+            }
+          />
+          {/* T31: assinatura de e-mail — cada agente a própria. */}
+          <Route
+            path={SIGNATURE_PATH.slice(1)}
+            element={
+              <RequireRole roles={AGENT_ROLES}>
+                <SignaturePage />
               </RequireRole>
             }
           />
