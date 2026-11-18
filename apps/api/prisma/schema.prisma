@@ -299,6 +299,8 @@ model Attachment {
   filename   String
   mimeType   String   @map("mime_type")
   sizeBytes  Int      @map("size_bytes")
+  /// T32: imagem inserida no texto (`<img data-attachment-id>` no corpo); fora da lista de anexos.
+  inline     Boolean  @default(false)
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   message TicketMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)

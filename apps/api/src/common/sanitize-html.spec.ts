@@ -1,4 +1,9 @@
-import { htmlHasContent, sanitizeHtml, sanitizeSignatureHtml } from './sanitize-html.js';
+import {
+  htmlHasContent,
+  referencedImageIds,
+  sanitizeHtml,
+  sanitizeSignatureHtml,
+} from './sanitize-html.js';
 
 describe('sanitizeHtml (spec T08–T10 §7)', () => {
   it('remove script, eventos, style, class e id', () => {
@@ -56,6 +61,42 @@ describe('sanitizeSignatureHtml (spec T31)', () => {
     expect(sanitizeSignatureHtml('<p> &nbsp; </p>')).toBeNull();
     expect(sanitizeSignatureHtml('<img src="https://x.org/logo.png">')).toBeNull();
     expect(sanitizeSignatureHtml('<script>x()</script>')).toBeNull();
+  });
+});
+
+describe('imagens no texto (spec T32)', () => {
+  const ids: Record<string, string> = { a: 'id-a', b: 'id-b' };
+  const byKey = (attribs: Record<string, string>) => ids[attribs['data-inline-key'] ?? ''];
+
+  it('CT-17 troca a chave conhecida pelo id do anexo, sem src', () => {
+    expect(sanitizeHtml('<p>x</p><img data-inline-key="a" alt="print" width="9">', byKey)).toBe(
+      '<p>x</p><img data-attachment-id="id-a" alt="print" />',
+    );
+  });
+
+  it('CT-17 descarta chave desconhecida, data-attachment-id do cliente, data: e blob:', () => {
+    expect(sanitizeHtml('<img data-inline-key="zzz">', byKey)).toBe('');
+    expect(sanitizeHtml('<img data-attachment-id="outro">', byKey)).toBe('');
+    expect(sanitizeHtml('<img data-attachment-id="outro">')).toBe('');
+    expect(sanitizeHtml('<img src="data:image/png;base64,AAA" data-inline-key="zzz">', byKey)).toBe(
+      '',
+    );
+    expect(sanitizeHtml('<img src="blob:https://x/1">', byKey)).toBe('');
+  });
+
+  it('CT-17 mantém imagem https e remove o atributo forjado dela', () => {
+    expect(sanitizeHtml('<img src="https://x.org/a.png" data-attachment-id="forjado">')).toBe(
+      '<img src="https://x.org/a.png" />',
+    );
+  });
+
+  it('CT-17 lista os ids referenciados, sem repetir', () => {
+    const html = sanitizeHtml(
+      '<img data-inline-key="b"><p>t</p><img data-inline-key="a"><img data-inline-key="b">',
+      byKey,
+    );
+    expect(referencedImageIds(html)).toEqual(['id-b', 'id-a']);
+    expect(htmlHasContent(html)).toBe(true);
   });
 });
 

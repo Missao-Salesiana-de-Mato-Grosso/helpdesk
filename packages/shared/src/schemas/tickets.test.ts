@@ -81,3 +81,30 @@ describe('createMessageSchema', () => {
     ).toBe(true);
   });
 });
+
+const message = (inlineImages: unknown) =>
+  createMessageSchema.safeParse({ kind: 'public', bodyHtml: '<p>x</p>', inlineImages });
+
+describe('inlineImages (spec T32)', () => {
+  it('CT-19 aceita até 10 chaves válidas, na mensagem e na abertura do chamado', () => {
+    const keys = Array.from({ length: 10 }, (_, i) => `img-${i}_A`);
+    expect(message(keys).success).toBe(true);
+    expect(
+      createTicketSchema.safeParse({
+        subject: 'abc',
+        bodyHtml: 'x',
+        categoryId: uuid,
+        inlineImages: ['a1'],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('CT-19 recusa 11 chaves, chave repetida e chave com caracteres inválidos', () => {
+    expect(message(Array.from({ length: 11 }, (_, i) => `k${i}`)).success).toBe(false);
+    expect(message(['a', 'a']).success).toBe(false);
+    expect(message(['a b']).success).toBe(false);
+    expect(message(['"><script>']).success).toBe(false);
+    expect(message(['']).success).toBe(false);
+    expect(message(['x'.repeat(65)]).success).toBe(false);
+  });
+});

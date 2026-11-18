@@ -1,5 +1,5 @@
 import { escapeHtml } from '../notifications/templates.js';
-import { htmlHasContent, sanitizeHtml } from '../common/sanitize-html.js';
+import { htmlHasContent, sanitizeHtml, type InlineImageResolver } from '../common/sanitize-html.js';
 import { splitHtmlReply, splitTextReply } from './reply-splitter.js';
 
 export interface EmailBody {
@@ -24,18 +24,21 @@ const stripHead = (html: string) => html.replace(/<head\b[\s\S]*?<\/head>/gi, ''
 
 /**
  * RN-17 a RN-19: a parte HTML (ou o texto convertido), separada em texto novo e citado,
- * sanitizada, com o aviso dos anexos não importados no fim.
+ * sanitizada, com o aviso dos anexos não importados no fim. `resolveImage` liga as imagens
+ * `cid:` aos anexos inline (T32 RN-20).
  */
 export function emailBody(
   html: string | null,
   text: string | null,
   rejectedAttachments: readonly string[],
+  resolveImage?: InlineImageResolver,
 ): EmailBody {
+  const sanitizeBody = (value: string) => sanitizeHtml(value, resolveImage);
   let body: EmailBody | null = null;
   let htmlTooLong = false;
   if (html) {
     const split = splitHtmlReply(stripHead(html));
-    body = finish(split.body, split.quoted, html);
+    body = finish(sanitizeBody, split.body, split.quoted, html);
     htmlTooLong = Buffer.byteLength(body.bodyHtml) > MAX_HTML_BYTES;
     if (htmlTooLong) body = null;
   }
@@ -43,7 +46,12 @@ export function emailBody(
     const plain = text ?? '';
     const textTooLong = plain.length > MAX_TEXT_CHARS;
     const split = splitTextReply(textTooLong ? plain.slice(0, MAX_TEXT_CHARS) : plain);
-    body = finish(textToHtml(split.body), split.quoted && textToHtml(split.quoted), null);
+    body = finish(
+      sanitizeBody,
+      textToHtml(split.body),
+      split.quoted && textToHtml(split.quoted),
+      null,
+    );
     if (htmlTooLong || textTooLong) {
       body.bodyHtml += '<p>(e-mail muito longo; o original completo está guardado)</p>';
     }
@@ -57,9 +65,14 @@ export function emailBody(
 }
 
 /** Sanitiza as duas partes; se o corte deixou o corpo vazio, tudo volta para o corpo (RN-18). */
-function finish(body: string, quoted: string | null, whole: string | null): EmailBody {
-  const cleanBody = sanitizeHtml(body);
-  const cleanQuoted = quoted === null ? null : sanitizeHtml(quoted);
+function finish(
+  clean: (html: string) => string,
+  body: string,
+  quoted: string | null,
+  whole: string | null,
+): EmailBody {
+  const cleanBody = clean(body);
+  const cleanQuoted = quoted === null ? null : clean(quoted);
   if (htmlHasContent(cleanBody)) {
     return {
       bodyHtml: cleanBody,
@@ -67,7 +80,7 @@ function finish(body: string, quoted: string | null, whole: string | null): Emai
     };
   }
   if (cleanQuoted && htmlHasContent(cleanQuoted)) {
-    const all = sanitizeHtml(whole === null ? `${body}${quoted ?? ''}` : stripHead(whole));
+    const all = clean(whole === null ? `${body}${quoted ?? ''}` : stripHead(whole));
     return { bodyHtml: all, quotedHtml: null };
   }
   return { bodyHtml: EMPTY_BODY, quotedHtml: null };

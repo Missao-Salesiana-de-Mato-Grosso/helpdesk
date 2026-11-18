@@ -36,6 +36,9 @@ const payloadAttachment = z.object({
   storageKey: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number(),
+  /** T32 RN-19: só nas imagens do texto (o corpo as referencia pelo id). Ausente antes da T32. */
+  id: z.string().optional(),
+  inline: z.boolean().optional(),
 });
 
 /**
@@ -117,32 +120,80 @@ export interface RenderedMail {
 }
 
 type Block =
-  { kind: 'text'; value: string } | { kind: 'message'; html: string; signatureHtml: string | null };
+  | { kind: 'text'; value: string }
+  | { kind: 'message'; html: string; plain: string; signatureHtml: string | null };
 
 const text = (value: string): Block => ({ kind: 'text', value });
 
 const REPLY_LINE = 'Responda este e-mail para continuar o atendimento.';
 
+/** T32: `<img data-attachment-id>` do corpo sanitizado (o atributo só sai do servidor). */
+const INLINE_IMAGE = /<img\b[^>]*\sdata-attachment-id="([^"]+)"[^>]*>/gi;
+const ALT = /\salt="([^"]*)"/i;
+
 /**
- * RN-16 e RN-18. `attached`: os anexos foram junto no e-mail; senão, só os nomes aparecem
- * no corpo (RN-19).
+ * T32 RN-15 a RN-18: cada imagem do texto vira `<img src="cid:…">` quando foi embutida, ou o
+ * texto `[imagem: nome]`; na versão texto, sempre o texto.
+ */
+function withInlineImages(
+  html: string,
+  attachments: readonly PayloadAttachment[],
+  inlineCids: ReadonlyMap<string, string> | null,
+): { html: string; plain: string; missing: boolean } {
+  const label = (id: string) => {
+    const name = attachments.find((a) => a.inline && a.id === id)?.filename;
+    return name ? `[imagem: ${name}]` : '[imagem]';
+  };
+  let missing = false;
+  const embedded = html.replace(INLINE_IMAGE, (tag, id: string) => {
+    const cid = inlineCids?.get(id);
+    if (!cid) {
+      missing = true;
+      return escapeHtml(label(id));
+    }
+    const alt = ALT.exec(tag)?.[1] ?? '';
+    return `<img src="cid:${escapeHtml(cid)}" alt="${alt}" style="max-width:100%;height:auto">`;
+  });
+  const plain = htmlToText(html.replace(INLINE_IMAGE, (_tag, id: string) => escapeHtml(label(id))));
+  return { html: embedded, plain, missing };
+}
+
+/**
+ * RN-16 e RN-18. `attached`: os anexos comuns foram junto no e-mail; senão, só os nomes aparecem
+ * no corpo (RN-19). `inlineCids`: o `cid` de cada imagem do texto embutida, pelo id do anexo;
+ * `null` quando não foram embutidas (T32 RN-18).
  */
 export function renderNotification(
   template: NotificationTemplate,
   payload: NotificationPayload,
   attached: boolean,
+  inlineCids: ReadonlyMap<string, string> | null = null,
 ): RenderedMail {
   const blocks = [...intro(template, payload)];
+  let imagesMissing = false;
   if (payload.bodyHtml) {
+    const body = withInlineImages(payload.bodyHtml, payload.attachments, inlineCids);
+    imagesMissing = body.missing;
     blocks.push({
       kind: 'message',
-      html: payload.bodyHtml,
+      html: body.html,
+      plain: body.plain,
       // T31 RN-08: só a resposta do agente leva assinatura.
       signatureHtml: template === 'reply' ? (payload.signatureHtml ?? null) : null,
     });
   }
-  if (payload.attachments.length > 0 && !attached) {
-    const names = payload.attachments.map((a) => a.filename).join(', ');
+  if (imagesMissing) {
+    blocks.push(
+      text(
+        payload.portalUrl
+          ? 'Imagens grandes demais para o e-mail, disponíveis no portal.'
+          : 'Imagens grandes demais para o e-mail.',
+      ),
+    );
+  }
+  const regular = payload.attachments.filter((a) => !a.inline);
+  if (regular.length > 0 && !attached) {
+    const names = regular.map((a) => a.filename).join(', ');
     blocks.push(
       text(
         payload.portalUrl
@@ -242,9 +293,7 @@ function toHtml(blocks: Block[], portalUrl: string | null): string {
 
 function toText(blocks: Block[], portalUrl: string | null): string {
   const parts = blocks.map((block) =>
-    block.kind === 'text'
-      ? block.value
-      : `${htmlToText(block.html)}${signatureText(block.signatureHtml)}`,
+    block.kind === 'text' ? block.value : `${block.plain}${signatureText(block.signatureHtml)}`,
   );
   if (portalUrl) parts.push(`Ou acompanhe pelo portal: ${portalUrl}`);
   parts.push('--\nSuporte MSMT — Missão Salesiana de Mato Grosso');

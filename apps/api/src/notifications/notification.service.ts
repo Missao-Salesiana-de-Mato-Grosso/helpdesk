@@ -3,6 +3,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AttachmentsService, type StoredFile } from '../attachments/attachments.service.js';
 import { CategoriesService } from '../categories/categories.service.js';
+import { referencedImageIds } from '../common/sanitize-html.js';
 import { CompaniesService } from '../companies/companies.service.js';
 import type { Env } from '../config/env.js';
 import type { Prisma } from '../generated/prisma/client.js';
@@ -23,6 +24,7 @@ import {
   renderNotification,
   type NotificationPayload,
   type NotificationTemplate,
+  type PayloadAttachment,
 } from './templates.js';
 
 /** O ticket como estava na transação que gerou o evento. */
@@ -183,6 +185,8 @@ export class NotificationService {
             storageKey: a.storageKey,
             mimeType: a.mimeType,
             sizeBytes: a.sizeBytes,
+            // T32 RN-19: a imagem do texto é achada no corpo pelo id do anexo.
+            ...(a.inlineId ? { id: a.inlineId, inline: true } : {}),
           })),
           resolved: event.type === 'public_reply' && event.resolved,
           groupName: group?.name ?? null,
@@ -367,8 +371,8 @@ export class NotificationService {
       ? await this.threadOf(row.ticketId, row.toEmail, messageId)
       : [];
 
-    const attachments = await this.openAttachments(row.id, payload);
-    const rendered = renderNotification(row.template, payload, attachments !== null);
+    const files = await this.openAttachments(row.id, payload);
+    const rendered = renderNotification(row.template, payload, files.attached, files.inlineCids);
 
     return {
       from: this.from,
@@ -385,7 +389,7 @@ export class NotificationService {
           : {}),
         ...(AUTO_SUBMITTED[row.template] ? { 'Auto-Submitted': 'auto-generated' } : {}),
       },
-      attachments: attachments ?? [],
+      attachments: files.attachments,
     };
   }
 
@@ -426,19 +430,58 @@ export class NotificationService {
       .map((entry) => entry.id);
   }
 
-  /** RN-19: os arquivos, se couberem no limite; `null` = só listar os nomes. */
+  /**
+   * RN-19 e T32 RN-17/RN-18: primeiro as imagens do texto que o corpo referencia (embutidas por
+   * `cid`), depois os anexos comuns, cada grupo só se couber no que sobra do teto.
+   */
   private async openAttachments(
     id: string,
     payload: NotificationPayload,
+  ): Promise<{
+    attachments: OutgoingMail['attachments'];
+    attached: boolean;
+    inlineCids: Map<string, string> | null;
+  }> {
+    const referenced = new Set(referencedImageIds(payload.bodyHtml ?? ''));
+    const inline = payload.attachments.filter(
+      (a) => a.inline === true && a.id !== undefined && referenced.has(a.id),
+    );
+    const regular = payload.attachments.filter((a) => a.inline !== true);
+
+    const cidOf = (a: PayloadAttachment) => `${a.id}@${this.messageIdDomain}`;
+    const embedded =
+      inline.length === 0
+        ? []
+        : bytes(inline) <= this.maxAttachmentBytes
+          ? await this.openAll(id, inline, cidOf)
+          : null;
+    const budget = this.maxAttachmentBytes - (embedded ? bytes(inline) : 0);
+    const files =
+      regular.length === 0 ? [] : bytes(regular) <= budget ? await this.openAll(id, regular) : null;
+
+    return {
+      attachments: [...(embedded ?? []), ...(files ?? [])],
+      attached: files !== null,
+      inlineCids: embedded ? new Map(inline.map((a) => [a.id!, cidOf(a)])) : null,
+    };
+  }
+
+  /** Abre todos os arquivos do storage ou nenhum (`null`, com o que já abriu fechado). */
+  private async openAll(
+    id: string,
+    list: PayloadAttachment[],
+    cidOf?: (a: PayloadAttachment) => string,
   ): Promise<OutgoingMail['attachments'] | null> {
-    if (payload.attachments.length === 0) return [];
-    const total = payload.attachments.reduce((sum, a) => sum + a.sizeBytes, 0);
-    if (total > this.maxAttachmentBytes) return null;
     const opened: OutgoingMail['attachments'] = [];
     try {
-      for (const a of payload.attachments) {
+      for (const a of list) {
         const content = await this.attachments.open(a.storageKey);
-        opened.push({ filename: a.filename, contentType: a.mimeType, content });
+        opened.push({
+          filename: a.filename,
+          contentType: a.mimeType,
+          content,
+          ...(cidOf ? { cid: cidOf(a) } : {}),
+        });
       }
       return opened;
     } catch {
@@ -448,6 +491,8 @@ export class NotificationService {
     }
   }
 }
+
+const bytes = (list: PayloadAttachment[]) => list.reduce((sum, a) => sum + a.sizeBytes, 0);
 
 function userPlanned(
   template: NotificationTemplate,

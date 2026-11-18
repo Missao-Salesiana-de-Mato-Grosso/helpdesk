@@ -11,8 +11,13 @@ import {
   type NestInterceptor,
   type PipeTransform,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
-import { ATTACHMENT_MAX_BYTES, ATTACHMENT_MAX_FILES, ApiErrorCode } from '@helpdesk/shared';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import {
+  ATTACHMENT_MAX_BYTES,
+  ATTACHMENT_MAX_FILES,
+  ApiErrorCode,
+  INLINE_IMAGE_MAX_FILES,
+} from '@helpdesk/shared';
 import { catchError, type Observable } from 'rxjs';
 import type { z } from 'zod';
 import { ApiException } from '../common/api-exception.js';
@@ -21,6 +26,8 @@ import { fileTooLarge, tooManyFiles, type IncomingFile } from './attachments.ser
 
 /** Campo multipart dos arquivos. O JSON da requisição vai no campo `data`. */
 export const FILES_FIELD = 'files';
+/** T32: campo multipart das imagens do texto, na ordem de `inlineImages`. */
+export const INLINE_FIELD = 'inline';
 
 /** Traduz os erros do multer para os códigos da API. */
 @Injectable()
@@ -46,30 +53,51 @@ class UploadErrorsInterceptor implements NestInterceptor {
 }
 
 /**
- * Aceita `multipart/form-data` com até `ATTACHMENT_MAX_FILES` arquivos no campo `files`, em
- * memória (20 MB cada). O multer conta 1 a mais para o serviço responder TOO_MANY_FILES com a
+ * Aceita `multipart/form-data` com até `ATTACHMENT_MAX_FILES` arquivos no campo `files` e as
+ * imagens do texto no campo `inline` (T32), em memória (20 MB cada; o limite das imagens é
+ * conferido no serviço). O multer conta 1 a mais em cada campo para o serviço responder com a
  * mensagem certa. Requisições JSON continuam funcionando.
  */
 export function AcceptsAttachments() {
   return applyDecorators(
     UseInterceptors(
       UploadErrorsInterceptor,
-      FilesInterceptor(FILES_FIELD, ATTACHMENT_MAX_FILES + 1, {
-        limits: {
-          fileSize: ATTACHMENT_MAX_BYTES,
-          files: ATTACHMENT_MAX_FILES + 1,
-          fields: 1,
-          fieldSize: 1024 * 1024,
+      FileFieldsInterceptor(
+        [
+          { name: FILES_FIELD, maxCount: ATTACHMENT_MAX_FILES + 1 },
+          { name: INLINE_FIELD, maxCount: INLINE_IMAGE_MAX_FILES + 1 },
+        ],
+        {
+          limits: {
+            fileSize: ATTACHMENT_MAX_BYTES,
+            files: ATTACHMENT_MAX_FILES + INLINE_IMAGE_MAX_FILES + 2,
+            fields: 1,
+            fieldSize: 1024 * 1024,
+          },
+          defParamCharset: 'utf8',
         },
-        defParamCharset: 'utf8',
-      }),
+      ),
     ),
   );
 }
 
-/** `Express.Multer.File[]` → o formato do `AttachmentsService`. */
-export const incomingFiles = (files: Express.Multer.File[] | undefined): IncomingFile[] =>
+/** Arquivos de cada campo, como o `FileFieldsInterceptor` entrega. */
+export type UploadedFields = Partial<Record<string, Express.Multer.File[]>> | undefined;
+
+export interface IncomingUpload {
+  files: IncomingFile[];
+  /** T32: imagens do texto, na ordem de `inlineImages`. */
+  inline: IncomingFile[];
+}
+
+const toIncoming = (files: Express.Multer.File[] | undefined): IncomingFile[] =>
   (files ?? []).map((file) => ({ filename: file.originalname, buffer: file.buffer }));
+
+/** Campos multipart → o formato do `AttachmentsService`. */
+export const incomingUpload = (fields: UploadedFields): IncomingUpload => ({
+  files: toIncoming(fields?.[FILES_FIELD]),
+  inline: toIncoming(fields?.[INLINE_FIELD]),
+});
 
 /** Corpo JSON ou, em multipart, o JSON do campo `data`, validado pelo schema. */
 export class JsonOrMultipartPipe<T extends z.ZodType> implements PipeTransform<

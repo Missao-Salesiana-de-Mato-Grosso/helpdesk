@@ -37,14 +37,19 @@ export function jsonBody(init: RequestInit | undefined): unknown {
   return typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
 }
 
-/** Corpo multipart enviado (`data` como JSON e os nomes dos `files`). */
+/** Corpo multipart enviado (`data` como JSON e os nomes dos `files` e das imagens `inline`). */
 export function formBody(
   init: RequestInit | undefined,
-): { data: unknown; files: string[] } | undefined {
+): { data: unknown; files: string[]; inline: string[] } | undefined {
   if (!(init?.body instanceof FormData)) return undefined;
   const raw = init.body.get('data');
+  const names = (field: string) =>
+    init.body instanceof FormData
+      ? init.body.getAll(field).map((file) => (file instanceof File ? file.name : ''))
+      : [];
   return {
     data: typeof raw === 'string' ? JSON.parse(raw) : undefined,
-    files: init.body.getAll('files').map((file) => (file instanceof File ? file.name : '')),
+    files: names('files'),
+    inline: names('inline'),
   };
 }

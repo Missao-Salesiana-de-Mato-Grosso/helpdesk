@@ -189,8 +189,15 @@ export function useCreateTicket() {
   const api = useApi();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ data, files = [] }: { data: CreateTicketInput; files?: readonly File[] }) =>
-      api<TicketDetail>('/tickets', { method: 'POST', body: requestBody(data, files) }),
+    mutationFn: ({
+      data,
+      files = [],
+      inline = [],
+    }: {
+      data: CreateTicketInput;
+      files?: readonly File[];
+      inline?: readonly File[];
+    }) => api<TicketDetail>('/tickets', { method: 'POST', body: requestBody(data, files, inline) }),
     onSuccess: (ticket) => {
       queryClient.setQueryData(ticketKeys.detail(ticket.id), ticket);
       void queryClient.invalidateQueries({ queryKey: [...ticketKeys.all, 'list'] });
@@ -202,10 +209,19 @@ export function useReply(ticketId: string) {
   const api = useApi();
   const callbacks = useTicketWriteCallbacks();
   return useMutation({
-    mutationFn: ({ data, files = [] }: { data: CreateMessageInput; files?: readonly File[] }) =>
+    mutationFn: ({
+      data,
+      files = [],
+      inline = [],
+    }: {
+      data: CreateMessageInput;
+      files?: readonly File[];
+      /** T32: imagens do texto, na ordem de `data.inlineImages`. */
+      inline?: readonly File[];
+    }) =>
       api<TicketDetail>(`/tickets/${ticketId}/messages`, {
         method: 'POST',
-        body: requestBody(data, files),
+        body: requestBody(data, files, inline),
       }),
     onSuccess: callbacks.onSuccess,
     onError: (error) => callbacks.reloadOnConflict(ticketId, error),

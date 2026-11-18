@@ -1,8 +1,16 @@
-import { Input } from '@mantine/core';
+import { Input, Text } from '@mantine/core';
+import { INLINE_IMAGE_ACCEPT } from '@helpdesk/shared';
 import { Link, RichTextEditor, type RichTextEditorLabels } from '@mantine/tiptap';
-import { useEditor } from '@tiptap/react';
+import Image from '@tiptap/extension-image';
+import { useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { useEffect, useId, useImperativeHandle, type Ref } from 'react';
+import { useEffect, useId, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import {
+  inlineImageError,
+  inlineKeysIn,
+  withExtension,
+  type InlineImageStore,
+} from '../features/attachments/inline-images.ts';
 
 const LABELS: Partial<RichTextEditorLabels> = {
   boldControlLabel: 'Negrito',
@@ -40,11 +48,41 @@ export interface HtmlEditorProps {
   /** Marca o campo como obrigatório no rótulo. A assinatura (T31) é opcional. */
   required?: boolean;
   handleRef?: Ref<HtmlEditorHandle>;
+  /**
+   * T32: liga as imagens no texto (botão, colar e arrastar), guardadas nesta store até o envio.
+   * Sem ela, o editor não aceita imagens (respostas prontas, assinatura).
+   */
+  images?: InlineImageStore | undefined;
 }
 
 /**
+ * Imagem do texto (T32): a prévia usa `blob:` e a chave vai em `data-inline-key`, que o servidor
+ * troca pelo id do anexo. `data:` (base64) não entra.
+ */
+const InlineImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      inlineKey: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-inline-key'),
+        renderHTML: (attributes) =>
+          typeof attributes['inlineKey'] === 'string'
+            ? { 'data-inline-key': attributes['inlineKey'] }
+            : {},
+      },
+    };
+  },
+}).configure({ inline: true, allowBase64: false });
+
+const hasImage = (html: string) => /<img\s/i.test(html);
+const imageFiles = (list: FileList | null | undefined) =>
+  [...(list ?? [])].filter((file) => file.type.startsWith('image/'));
+
+/**
  * Editor rico (Tiptap via `@mantine/tiptap`) com o subconjunto que a allowlist do backend aceita:
- * negrito, itálico, sublinhado, tachado, listas, citação, código e link. Sem imagens (anexos: T13).
+ * negrito, itálico, sublinhado, tachado, listas, citação, código e link. Imagens no texto só com
+ * `images` (T32); os demais arquivos vão como anexos (T13).
  */
 export function HtmlEditor({
   label,
@@ -54,9 +92,15 @@ export function HtmlEditor({
   disabled = false,
   required = true,
   handleRef,
+  images,
 }: HtmlEditorProps) {
   // O Input.Wrapper do Mantine dá ao rótulo o id `<id>-label`.
   const labelId = useId();
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  // Colar e arrastar chegam pelo ProseMirror, que guarda os handlers da criação do editor.
+  const insertImages = useRef<(files: File[]) => void>(() => {});
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -66,6 +110,7 @@ export function HtmlEditor({
         horizontalRule: false,
       }),
       Link.configure({ openOnClick: false }),
+      ...(images ? [InlineImage] : []),
     ],
     content: value,
     editable: !disabled,
@@ -75,15 +120,49 @@ export function HtmlEditor({
         'aria-multiline': 'true',
         'aria-labelledby': `${labelId}-label`,
       },
+      handlePaste: (_view, event) => {
+        const files = imageFiles(event.clipboardData?.files);
+        if (!images || files.length === 0) return false;
+        insertImages.current(files);
+        return true;
+      },
+      handleDrop: (_view, event, _slice, moved) => {
+        const files = imageFiles(event.dataTransfer?.files);
+        if (!images || moved || files.length === 0) return false;
+        event.preventDefault();
+        insertImages.current(files);
+        return true;
+      },
     },
     onUpdate: ({ editor: current }) => {
-      onChange(current.getText().trim() === '' ? '' : current.getHTML());
+      const html = current.getHTML();
+      onChange(current.getText().trim() === '' && !hasImage(html) ? '' : html);
     },
   });
 
+  useEffect(() => {
+    insertImages.current = (files) => {
+      if (!editor || !images) return;
+      let count = inlineKeysIn(editor.getHTML()).length;
+      const errors: string[] = [];
+      for (const picked of files) {
+        const file = withExtension(picked);
+        const problem = inlineImageError(file, count);
+        if (problem) {
+          errors.push(problem);
+          continue;
+        }
+        const { key, url } = images.add(file);
+        insertImage(editor, { src: url, alt: file.name, inlineKey: key });
+        count += 1;
+      }
+      setImageError(errors.length > 0 ? errors.join(' ') : null);
+    };
+  }, [editor, images]);
+
   // O pai limpa o campo (ex.: depois de enviar) passando `value = ''`.
   useEffect(() => {
-    if (editor && value === '' && editor.getText().trim() !== '') editor.commands.clearContent();
+    if (editor && value === '' && !editor.isEmpty) editor.commands.clearContent();
   }, [editor, value]);
 
   useEffect(() => {
@@ -119,10 +198,63 @@ export function HtmlEditor({
           <RichTextEditor.ControlsGroup>
             <RichTextEditor.Link />
             <RichTextEditor.Unlink />
+            {images && (
+              <RichTextEditor.Control
+                aria-label="Inserir imagem"
+                title="Inserir imagem"
+                disabled={disabled}
+                onClick={() => fileInput.current?.click()}
+              >
+                <ImageIcon />
+              </RichTextEditor.Control>
+            )}
           </RichTextEditor.ControlsGroup>
         </RichTextEditor.Toolbar>
         <RichTextEditor.Content mih={160} />
       </RichTextEditor>
+      {images && (
+        <input
+          ref={fileInput}
+          type="file"
+          accept={INLINE_IMAGE_ACCEPT}
+          multiple
+          hidden
+          aria-label="Arquivo de imagem"
+          onChange={(event) => {
+            insertImages.current([...(event.currentTarget.files ?? [])]);
+            event.currentTarget.value = '';
+          }}
+        />
+      )}
+      {imageError && (
+        <Text size="sm" c="red" mt={4} role="alert">
+          {imageError}
+        </Text>
+      )}
     </Input.Wrapper>
+  );
+}
+
+function insertImage(editor: Editor, attrs: { src: string; alt: string; inlineKey: string }) {
+  editor.chain().focus().insertContent({ type: 'image', attrs }).run();
+}
+
+function ImageIcon() {
+  return (
+    <svg
+      width={16}
+      height={16}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x={3} y={3} width={18} height={18} rx={2} />
+      <circle cx={8.5} cy={8.5} r={1.5} />
+      <path d="M21 15l-5-5L5 21" />
+    </svg>
   );
 }

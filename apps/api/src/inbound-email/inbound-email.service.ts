@@ -1,9 +1,14 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DEFAULT_CATEGORY_NAME } from '@helpdesk/shared';
+import { DEFAULT_CATEGORY_NAME, inlineImageMimeType } from '@helpdesk/shared';
 import { simpleParser, type ParsedMail } from 'mailparser';
-import { AttachmentsService, type IncomingFile } from '../attachments/attachments.service.js';
+import {
+  AttachmentsService,
+  type IncomingFile,
+  type IncomingInlineImage,
+} from '../attachments/attachments.service.js';
+import { referencedImageIds } from '../common/sanitize-html.js';
 import { CategoriesService } from '../categories/categories.service.js';
 import type { Env } from '../config/env.js';
 import type { Prisma } from '../generated/prisma/client.js';
@@ -75,6 +80,12 @@ export function ticketSubject(subject: string | undefined): string {
 }
 
 const IMAGE_EXTENSIONS: Record<string, string> = { jpeg: 'jpg', pjpeg: 'jpg', 'x-png': 'png' };
+
+/** Content-ID sem `<>` e em minúsculas, para casar o anexo com o `cid:` do corpo. */
+function normalizeCid(cid: string | undefined): string | undefined {
+  const clean = cid?.trim().replace(/^<|>$/g, '').toLowerCase();
+  return clean ? clean : undefined;
+}
 
 /** Nome do anexo; imagens coladas (inline) costumam vir sem nome. */
 function attachmentName(filename: string | undefined, contentType: string, index: number) {
@@ -258,13 +269,43 @@ export class InboundEmailService {
     });
     const author: EmailAuthor = { id: user.id, roles: user.roles, companyId: user.companyId };
 
-    const files: IncomingFile[] = parsed.attachments.map((attachment, index) => ({
-      filename: attachmentName(attachment.filename, attachment.contentType, index),
-      buffer: attachment.content,
-    }));
+    const cids = new Map<IncomingFile, string>();
+    const files: IncomingFile[] = parsed.attachments.map((attachment, index) => {
+      const file = {
+        filename: attachmentName(attachment.filename, attachment.contentType, index),
+        buffer: attachment.content,
+      };
+      const cid = normalizeCid(attachment.cid);
+      if (cid) cids.set(file, cid);
+      return file;
+    });
     const { accepted, rejected } = this.attachments.partition(files);
-    const body = emailBody(parsed.html || null, parsed.text ?? null, rejected);
-    const stored = await this.attachments.storeAll(accepted);
+    // T32 RN-20: cada imagem aceita com Content-ID ganha um id; o corpo troca `cid:` por ele.
+    const byCid = new Map<string, IncomingInlineImage>();
+    for (const file of accepted) {
+      const cid = cids.get(file);
+      if (cid && !byCid.has(cid) && inlineImageMimeType(file.filename)) {
+        byCid.set(cid, { id: randomUUID(), file });
+      }
+    }
+    const body = emailBody(parsed.html || null, parsed.text ?? null, rejected, (attribs) => {
+      const src = attribs['src'] ?? '';
+      return /^cid:/i.test(src) ? byCid.get(normalizeCid(src.slice(4)) ?? '')?.id : undefined;
+    });
+    // RN-21: só vira imagem do texto o que o corpo gravado (novo ou citado) referencia.
+    const referenced = new Set([
+      ...referencedImageIds(body.bodyHtml),
+      ...referencedImageIds(body.quotedHtml ?? ''),
+    ]);
+    const inline = [...byCid.values()].filter((image) => referenced.has(image.id));
+    const inlineFiles = new Set(inline.map((image) => image.file));
+    const stored = await this.attachments.storeAll(accepted.filter((f) => !inlineFiles.has(f)));
+    try {
+      stored.push(...(await this.attachments.storeInline(inline)));
+    } catch (error) {
+      await this.attachments.discard(stored);
+      throw error;
+    }
 
     let ticketNumber = 0;
     const write: EmailWrite = async (tx, ticket) => {

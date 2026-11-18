@@ -43,3 +43,29 @@ export function attachmentMimeType(filename: string): string | null {
   const extension = /\.([a-z0-9]+)$/i.exec(filename)?.[1]?.toLowerCase();
   return extension && isAttachmentExtension(extension) ? ATTACHMENT_TYPES[extension] : null;
 }
+
+// ── Imagens no texto (T32) ────────────────────────────────────────────────────
+
+/** RN-04: cada imagem inserida no texto. */
+export const INLINE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+/** RN-05: imagens no texto por mensagem, contadas à parte dos anexos comuns. */
+export const INLINE_IMAGE_MAX_FILES = 10;
+
+/** RN-03: extensões aceitas como imagem no texto. */
+export const INLINE_IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp'] as const;
+
+/** Valor do `accept` do seletor de imagem do editor. */
+export const INLINE_IMAGE_ACCEPT = INLINE_IMAGE_EXTENSIONS.map((extension) => `.${extension}`).join(
+  ',',
+);
+
+/** Tipo MIME de uma imagem aceita no texto, ou `null`. */
+export function inlineImageMimeType(filename: string): string | null {
+  const extension = /\.([a-z0-9]+)$/i.exec(filename)?.[1]?.toLowerCase();
+  return extension && (INLINE_IMAGE_EXTENSIONS as readonly string[]).includes(extension)
+    ? attachmentMimeType(filename)
+    : null;
+}
+
+/** Chave que o cliente dá a cada imagem no `bodyHtml` (`data-inline-key`), até o servidor gravar. */
+export const INLINE_IMAGE_KEY = /^[A-Za-z0-9_-]{1,64}$/;

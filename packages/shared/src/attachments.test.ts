@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ATTACHMENT_ACCEPT, attachmentMimeType } from './attachments.js';
+import { ATTACHMENT_ACCEPT, attachmentMimeType, inlineImageMimeType } from './attachments.js';
 
 describe('attachmentMimeType', () => {
   it('usa a extensão, sem diferenciar maiúsculas', () => {
@@ -19,5 +19,17 @@ describe('attachmentMimeType', () => {
 
   it('monta o accept do input de arquivo', () => {
     expect(ATTACHMENT_ACCEPT.split(',')).toContain('.xlsx');
+  });
+});
+
+describe('inlineImageMimeType (spec T32 RN-03)', () => {
+  it('aceita só as imagens', () => {
+    expect(inlineImageMimeType('print.PNG')).toBe('image/png');
+    expect(inlineImageMimeType('foto.jpeg')).toBe('image/jpeg');
+    expect(inlineImageMimeType('anim.gif')).toBe('image/gif');
+    expect(inlineImageMimeType('x.webp')).toBe('image/webp');
+    expect(inlineImageMimeType('doc.pdf')).toBeNull();
+    expect(inlineImageMimeType('imagem.svg')).toBeNull();
+    expect(inlineImageMimeType('png')).toBeNull();
   });
 });
