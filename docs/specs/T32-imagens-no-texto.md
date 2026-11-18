@@ -178,6 +178,7 @@ Nenhuma variável nova. Constantes em `packages/shared`: `INLINE_IMAGE_MAX_BYTES
 - **E-mail de entrada.** Só vira inline o anexo aceito (regras da T21) que é imagem e cujo `Content-ID` o corpo gravado (novo ou citado) referencia; isso é decidido depois do corte da citação e do fallback para texto. O limite de 5 MB não se aplica (RN-22).
 - **Editor.** `@tiptap/extension-image` (aprovada em 16/11/2026), com `allowBase64: false` e o atributo `data-inline-key`; só os formulários de mensagem passam a store de imagens (`useInlineImages`), então respostas prontas e assinatura seguem sem imagem. Imagem colada sem extensão ganha a do tipo (`imagem.png`).
 - **Conversa.** Cada `<img data-attachment-id>` é baixada por `fetch` com o token e exibida por `blob:` (URLs liberadas ao desmontar). Na falha, a imagem vira o texto `[alt]`.
+- **T21 CT-19 mudou.** E-mail só com uma imagem colada não fica mais com o corpo "(e-mail sem texto)": a imagem é o corpo, como imagem do texto (RN-20). O teste da T21 foi atualizado.
 - **E2e só no CI.** Sem Docker nesta máquina, os testes de `inline-images.e2e-spec.ts` e os novos de `notifications` e `inbound-email` rodam pela primeira vez no PR.
 
 ## 11. Pendências

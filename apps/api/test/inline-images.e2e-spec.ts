@@ -139,11 +139,13 @@ describe('imagens no texto — T32 (e2e)', () => {
 
   it('CT-03 arquivo que não é imagem no campo inline → 415 e nada gravado', async () => {
     const ticket = await f.ticket({ requester: 'req1' });
+    const messages = () => t.prisma.ticketMessage.count({ where: { ticketId: ticket.id } });
+    const before = await messages();
     const res = await reply('ag1', ticket.id, withImage(), [[pdf, 'doc.pdf']]);
     expect(res.status).toBe(415);
     expect(res.body.code).toBe('UNSUPPORTED_FILE_TYPE');
     expect(await storedFiles()).toHaveLength(0);
-    expect(await t.prisma.ticketMessage.count({ where: { ticketId: ticket.id } })).toBe(0);
+    expect(await messages()).toBe(before);
   });
 
   it('CT-04 imagem acima de 5 MB → 413 FILE_TOO_LARGE', async () => {

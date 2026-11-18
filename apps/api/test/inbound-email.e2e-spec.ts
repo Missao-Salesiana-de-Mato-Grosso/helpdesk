@@ -568,7 +568,8 @@ describe('e-mail de entrada — T21 (e2e)', () => {
       expect(reply.bodyHtml).not.toContain('<script');
     });
 
-    it('CT-19 só uma imagem colada: corpo "(e-mail sem texto)" e a imagem como anexo', async () => {
+    // T32 RN-20: a imagem colada agora aparece no texto (antes da T32, o corpo ficava vazio).
+    it('CT-19 só uma imagem colada: a imagem é o corpo, como imagem do texto', async () => {
       const png = Buffer.from('\x89PNG teste').toString('base64');
       await drop(
         eml({
@@ -591,8 +592,11 @@ describe('e-mail de entrada — T21 (e2e)', () => {
       );
       await poll();
       const [message] = await messagesOf((await t.prisma.ticket.findFirstOrThrow()).id);
-      expect(message!.bodyHtml).toBe('<p>(e-mail sem texto)</p>');
       expect(message!.attachments).toHaveLength(1);
+      expect(message!.attachments[0]!.inline).toBe(true);
+      expect(message!.bodyHtml).toBe(
+        `<div><img data-attachment-id="${message!.attachments[0]!.id}" /></div>`,
+      );
     });
 
     it('CT-20 primeira execução com MAILBOX_START_SINCE: os anteriores não viram ticket', async () => {
