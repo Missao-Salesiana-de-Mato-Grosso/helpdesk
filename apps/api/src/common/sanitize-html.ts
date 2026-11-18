@@ -1,5 +1,11 @@
 import sanitize from 'sanitize-html';
 
+/**
+ * T32: o id do anexo de uma imagem do texto (`<img data-attachment-id>`, sem `src`). Só o
+ * servidor escreve este atributo (RN-07); o que vier na entrada é descartado.
+ */
+export const IMAGE_ATTRIBUTE = 'data-attachment-id';
+
 // Allowlist da spec T08–T10 §7. Reutilizada pelo canal de e-mail (T21).
 const OPTIONS: sanitize.IOptions = {
   allowedTags: [
@@ -35,7 +41,7 @@ const OPTIONS: sanitize.IOptions = {
   ],
   allowedAttributes: {
     a: ['href', 'title', 'target', 'rel'],
-    img: ['src', 'alt', 'width', 'height'],
+    img: ['src', 'alt', 'width', 'height', IMAGE_ATTRIBUTE],
     td: ['colspan', 'rowspan'],
     th: ['colspan', 'rowspan'],
   },
@@ -46,12 +52,39 @@ const OPTIONS: sanitize.IOptions = {
   transformTags: {
     a: sanitize.simpleTransform('a', { target: '_blank', rel: 'noopener noreferrer' }),
   },
-  exclusiveFilter: (frame) => frame.tag === 'img' && !frame.attribs['src'],
+  exclusiveFilter: (frame) =>
+    frame.tag === 'img' && !frame.attribs['src'] && !frame.attribs[IMAGE_ATTRIBUTE],
 };
 
+/**
+ * T32: liga uma `<img>` da entrada a um anexo inline. Recebe os atributos originais da tag e
+ * devolve o id do anexo, ou `undefined` para tratá-la como imagem comum.
+ */
+export type InlineImageResolver = (attribs: Record<string, string>) => string | undefined;
+
 /** Sanitiza HTML de usuário antes de gravar. Nunca grave `body_html` sem passar por aqui. */
-export function sanitizeHtml(html: string): string {
-  return sanitize(html, OPTIONS).trim();
+export function sanitizeHtml(html: string, resolveImage?: InlineImageResolver): string {
+  return sanitize(html, {
+    ...OPTIONS,
+    transformTags: {
+      ...OPTIONS.transformTags,
+      img: (tagName, attribs) => {
+        const id = resolveImage?.(attribs);
+        if (id) {
+          const alt = attribs['alt'];
+          return { tagName, attribs: { [IMAGE_ATTRIBUTE]: id, ...(alt ? { alt } : {}) } };
+        }
+        const { [IMAGE_ATTRIBUTE]: _ignored, ...rest } = attribs;
+        return { tagName, attribs: rest };
+      },
+    },
+  }).trim();
+}
+
+/** T32: ids dos anexos que o HTML já sanitizado referencia, na ordem em que aparecem. */
+export function referencedImageIds(html: string): string[] {
+  const ids = [...html.matchAll(/<img\b[^>]*\sdata-attachment-id="([^"]+)"/gi)].map((m) => m[1]!);
+  return [...new Set(ids)];
 }
 
 // T31 RN-04: a assinatura aceita só o que o editor do portal produz. Sem imagens, tabelas,

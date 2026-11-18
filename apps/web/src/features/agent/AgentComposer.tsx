@@ -10,6 +10,7 @@ import { useRef, useState } from 'react';
 import { useMe } from '../../auth/useMe.ts';
 import { HtmlEditor, type HtmlEditorHandle } from '../../components/HtmlEditor.tsx';
 import { AttachmentPicker } from '../attachments/AttachmentPicker.tsx';
+import { useInlineImages, withInlineImages } from '../attachments/inline-images.ts';
 import { CannedResponsePicker } from '../canned-responses/CannedResponsePicker.tsx';
 import { STATUS_LABEL } from '../tickets/format.ts';
 import { useReply } from '../tickets/queries.ts';
@@ -42,6 +43,8 @@ export function AgentComposer({ ticket, onError, onCompanyRequired }: AgentCompo
   const [replyFiles, setReplyFiles] = useState<File[]>([]);
   const [noteFiles, setNoteFiles] = useState<File[]>([]);
   const [emptyTab, setEmptyTab] = useState<'reply' | 'note' | null>(null);
+  const replyImages = useInlineImages();
+  const noteImages = useInlineImages();
 
   if (ticket.status === 'closed') {
     return (
@@ -63,13 +66,17 @@ export function AgentComposer({ ticket, onError, onCompanyRequired }: AgentCompo
       return;
     }
     setEmptyTab(null);
-    const body: CreateMessageInput = status
-      ? { kind, bodyHtml, status, version: ticket.version }
-      : { kind, bodyHtml };
+    const images = kind === 'public' ? replyImages : noteImages;
+    const upload = images.collect(bodyHtml);
+    const body: CreateMessageInput = withInlineImages(
+      status ? { kind, bodyHtml, status, version: ticket.version } : { kind, bodyHtml },
+      upload,
+    );
     send.mutate(
-      { data: body, files: kind === 'public' ? replyFiles : noteFiles },
+      { data: body, files: kind === 'public' ? replyFiles : noteFiles, inline: upload.inline },
       {
         onSuccess: () => {
+          images.clear();
           if (kind === 'public') {
             setReplyHtml('');
             setReplyFiles([]);
@@ -107,6 +114,7 @@ export function AgentComposer({ ticket, onError, onCompanyRequired }: AgentCompo
             error={emptyError('reply')}
             disabled={send.isPending}
             handleRef={replyEditor}
+            images={replyImages}
           />
           <AttachmentPicker files={replyFiles} onChange={setReplyFiles} disabled={send.isPending} />
           <Group justify="flex-end" gap={4}>
@@ -150,6 +158,7 @@ export function AgentComposer({ ticket, onError, onCompanyRequired }: AgentCompo
             error={emptyError('note')}
             disabled={send.isPending}
             handleRef={noteEditor}
+            images={noteImages}
           />
           <AttachmentPicker files={noteFiles} onChange={setNoteFiles} disabled={send.isPending} />
           <Group justify="flex-end">

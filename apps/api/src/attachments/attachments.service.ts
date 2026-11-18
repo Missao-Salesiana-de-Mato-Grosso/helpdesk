@@ -5,7 +5,9 @@ import {
   ATTACHMENT_MAX_BYTES,
   ATTACHMENT_MAX_FILES,
   ApiErrorCode,
+  INLINE_IMAGE_MAX_BYTES,
   attachmentMimeType,
+  inlineImageMimeType,
 } from '@helpdesk/shared';
 import { ApiException } from '../common/api-exception.js';
 import type { Prisma } from '../generated/prisma/client.js';
@@ -25,11 +27,23 @@ export interface StoredFile {
   filename: string;
   mimeType: string;
   sizeBytes: number;
+  /**
+   * T32: imagem do texto, com o id do anexo. Gerado antes de gravar, porque o corpo sanitizado
+   * já o referencia.
+   */
+  inlineId?: string;
 }
 
-export interface AttachmentRecord extends StoredFile {
+/** T32: imagem do texto recebida, com o id que o corpo sanitizado já referencia. */
+export interface IncomingInlineImage {
+  id: string;
+  file: IncomingFile;
+}
+
+export interface AttachmentRecord extends Omit<StoredFile, 'inlineId'> {
   id: string;
   messageId: string;
+  inline: boolean;
 }
 
 export const fileTooLarge = () =>
@@ -44,6 +58,13 @@ export const tooManyFiles = () =>
     HttpStatus.UNPROCESSABLE_ENTITY,
     ApiErrorCode.TOO_MANY_FILES,
     `Envie no máximo ${ATTACHMENT_MAX_FILES} arquivos por mensagem.`,
+  );
+
+const inlineImageTooLarge = () =>
+  new ApiException(
+    HttpStatus.PAYLOAD_TOO_LARGE,
+    ApiErrorCode.FILE_TOO_LARGE,
+    `Cada imagem no texto pode ter no máximo ${INLINE_IMAGE_MAX_BYTES / 1024 / 1024} MB.`,
   );
 
 const unsupportedType = (filename: string) =>
@@ -70,6 +91,33 @@ export class AttachmentsService {
   validate(files: readonly IncomingFile[]): void {
     if (files.length > ATTACHMENT_MAX_FILES) throw tooManyFiles();
     for (const file of files) this.mimeTypeOf(file);
+  }
+
+  /** T32 RN-03 e RN-04: só imagens, até 5 MB cada. A quantidade vem do schema. */
+  validateInline(files: readonly IncomingFile[]): void {
+    for (const file of files) {
+      if (!inlineImageMimeType(sanitizeFilename(file.filename))) {
+        throw unsupportedType(sanitizeFilename(file.filename));
+      }
+      if (file.buffer.length > INLINE_IMAGE_MAX_BYTES) throw inlineImageTooLarge();
+    }
+  }
+
+  /**
+   * T32: grava as imagens do texto, todas ou nenhuma, com os ids já referenciados no corpo. Quem
+   * chama valida antes (`validateInline` no portal; no e-mail valem só as regras da T21, RN-22).
+   */
+  async storeInline(images: readonly IncomingInlineImage[]): Promise<StoredFile[]> {
+    const stored: StoredFile[] = [];
+    try {
+      for (const { id, file } of images) {
+        stored.push({ ...(await this.storeFromBuffer(file.buffer, file)), inlineId: id });
+      }
+    } catch (error) {
+      await this.discard(stored);
+      throw error;
+    }
+    return stored;
   }
 
   /** Grava todos ou nenhum: se um falhar, apaga os que já foram. */
@@ -146,8 +194,9 @@ export class AttachmentsService {
     // `now()` é o mesmo em toda a transação: 1 ms entre os anexos preserva a ordem do envio.
     const base = Date.now();
     await tx.attachment.createMany({
-      data: files.map((file, index) => ({
+      data: files.map(({ inlineId, ...file }, index) => ({
         ...file,
+        ...(inlineId ? { id: inlineId, inline: true } : {}),
         messageId,
         createdAt: new Date(base + index),
       })),
@@ -164,6 +213,7 @@ export class AttachmentsService {
         filename: true,
         mimeType: true,
         sizeBytes: true,
+        inline: true,
       },
     });
   }

@@ -164,6 +164,7 @@ describe('Solicitante — tickets (T11)', () => {
       expect(body).toEqual({
         data: expect.objectContaining({ subject: 'Impressora da secretaria' }),
         files: ['print.pdf'],
+        inline: [],
       });
     });
 
@@ -243,7 +244,13 @@ describe('Solicitante — tickets (T11)', () => {
         messages: [
           message({
             attachments: [
-              { id: 'att1', filename: 'print.png', mimeType: 'image/png', sizeBytes: 2048 },
+              {
+                id: 'att1',
+                filename: 'print.png',
+                mimeType: 'image/png',
+                sizeBytes: 2048,
+                inline: false,
+              },
             ],
           }),
         ],

@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useMe } from '../../auth/useMe.ts';
 import { HtmlEditor } from '../../components/HtmlEditor.tsx';
+import { useInlineImages, withInlineImages } from '../attachments/inline-images.ts';
 import { AttachmentPicker } from '../attachments/AttachmentPicker.tsx';
 import { useCategories, useCompanies, useCreateTicket, useTicket } from './queries.ts';
 
@@ -58,6 +59,7 @@ export function NewTicketPage() {
   const [companyChoice, setCompanyChoice] = useState<string | null | undefined>(undefined);
   const [bodyHtml, setBodyHtml] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const images = useInlineImages();
   const [submitted, setSubmitted] = useState(false);
 
   const companyId = companyChoice === undefined ? (me?.company?.id ?? null) : companyChoice;
@@ -76,8 +78,9 @@ export function NewTicketPage() {
     event.preventDefault();
     setSubmitted(true);
     if (!validation.data || Object.keys(validation.errors).length > 0) return;
+    const upload = images.collect(bodyHtml);
     create.mutate(
-      { data: validation.data, files },
+      { data: withInlineImages(validation.data, upload), files, inline: upload.inline },
       {
         onSuccess: (ticket) => void navigate(`/tickets/${ticket.id}`, { replace: true }),
       },
@@ -154,6 +157,7 @@ export function NewTicketPage() {
               onChange={setBodyHtml}
               error={errors.bodyHtml}
               disabled={create.isPending}
+              images={images}
             />
             <AttachmentPicker files={files} onChange={setFiles} disabled={create.isPending} />
 

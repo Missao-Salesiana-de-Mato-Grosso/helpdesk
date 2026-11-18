@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { INLINE_IMAGE_KEY, INLINE_IMAGE_MAX_FILES } from '../attachments.js';
 import type { NamedRef } from './me.js';
 import type { TicketSla } from './sla.js';
 
@@ -35,6 +36,15 @@ const bodyHtml = z
   .max(MAX_BODY_HTML_LENGTH, 'A mensagem passa do limite de 100 KB')
   .min(1, 'Escreva a mensagem');
 
+/**
+ * T32: chaves das imagens inseridas no texto, na ordem dos arquivos do campo multipart `inline`.
+ * No `bodyHtml`, cada imagem é `<img data-inline-key="<chave>">`.
+ */
+export const inlineImagesSchema = z
+  .array(z.string().regex(INLINE_IMAGE_KEY, 'Chave de imagem inválida'))
+  .max(INLINE_IMAGE_MAX_FILES, `Envie no máximo ${INLINE_IMAGE_MAX_FILES} imagens no texto`)
+  .refine((keys) => new Set(keys).size === keys.length, 'Chave de imagem repetida');
+
 /** `POST /api/tickets` (RN-04). */
 export const createTicketSchema = z
   .object({
@@ -44,6 +54,7 @@ export const createTicketSchema = z
       .min(3, 'O assunto precisa de ao menos 3 caracteres')
       .max(200, 'O assunto pode ter no máximo 200 caracteres'),
     bodyHtml,
+    inlineImages: inlineImagesSchema.optional(),
     categoryId: z.uuid(),
     priority: z.enum(TICKET_PRIORITIES).default('medium'),
     companyId: z.uuid().optional(),
@@ -108,6 +119,7 @@ export const createMessageSchema = z
   .object({
     kind: z.enum(MESSAGE_KINDS),
     bodyHtml,
+    inlineImages: inlineImagesSchema.optional(),
     status: z.enum(TICKET_STATUSES).optional(),
     version: z.number().int().min(1).optional(),
   })
@@ -165,6 +177,8 @@ export interface TicketAttachment {
   filename: string;
   mimeType: string;
   sizeBytes: number;
+  /** T32: imagem inserida no texto; aparece no corpo, não na lista de anexos. */
+  inline: boolean;
 }
 
 export interface TicketMessage {

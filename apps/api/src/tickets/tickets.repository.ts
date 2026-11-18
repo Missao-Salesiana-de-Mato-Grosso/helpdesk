@@ -43,7 +43,7 @@ function detailInclude(viewer: Pick<ScopeUser, 'roles'>) {
       include: {
         author: { select: { id: true, name: true, roles: true } },
         attachments: {
-          select: { id: true, filename: true, mimeType: true, sizeBytes: true },
+          select: { id: true, filename: true, mimeType: true, sizeBytes: true, inline: true },
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         },
       },

@@ -24,6 +24,12 @@ const detailOf = (res: Response) => res.body as TicketDetail;
 
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- payload gravado pelo enqueue.
 const payloadOf = (row: { payload: unknown }) => row.payload as Record<string, unknown>;
+/** T32: resposta com uma imagem no texto (o arquivo vai no campo `inline`). */
+const withImage = (kind = 'public') => ({
+  kind,
+  bodyHtml: '<p>Veja:</p><img data-inline-key="a" alt="tela">',
+  inlineImages: ['a'],
+});
 
 const MAILPIT = 'http://127.0.0.1:8025/api/v1';
 const OWN = 'suporte@missaosalesiana.org.br';
@@ -148,6 +154,8 @@ describe('notificações — T14 (e2e)', () => {
   const rows = () =>
     t.prisma.notification.findMany({ orderBy: [{ createdAt: 'asc' }, { toEmail: 'asc' }] });
   const sent = async () => (await rows()).map((n) => [n.template, n.toEmail]);
+  const imageIdOf = async () =>
+    (await t.prisma.attachment.findFirstOrThrow({ where: { inline: true } })).id;
   const addToG1 = (user: FixtureUser) =>
     t.prisma.groupMember.create({ data: { groupId: f.G1, userId: f.users[user] } });
 
@@ -516,6 +524,97 @@ describe('notificações — T14 (e2e)', () => {
   });
 
   // Spec docs/specs/T31-assinatura-email.md — a assinatura do agente no `reply`.
+  describe('imagens no texto (T32)', () => {
+    const png = Buffer.from('imagem de teste');
+    const post = async (user: Login, path: string, data: object, withFile = false) => {
+      let req = http()
+        .post(path)
+        .set('Authorization', await as(user))
+        .field('data', JSON.stringify(data))
+        .attach('inline', png, 'print.png');
+      if (withFile) req = req.attach('files', Buffer.from('log'), 'servidor.log.txt');
+      return req;
+    };
+    type StoredPayload = { attachments: { sizeBytes: number; inline?: boolean }[] };
+    const inflate = async (which: 'inline' | 'regular') => {
+      const [row] = await rows();
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- payload gravado pelo enqueue.
+      const payload = row!.payload as StoredPayload;
+      for (const a of payload.attachments) {
+        if ((which === 'inline') === (a.inline === true)) a.sizeBytes = 30 * 1024 * 1024;
+      }
+      await t.prisma.notification.update({ where: { id: row!.id }, data: { payload } });
+    };
+
+    it('T32 CT-11 reply: imagem embutida por cid e [imagem: nome] no texto', async () => {
+      const ticket = await f.ticket({ requester: 'req1' });
+      expect((await post('ag1', `/api/tickets/${ticket.id}/messages`, withImage())).status).toBe(
+        201,
+      );
+      const id = await imageIdOf();
+      expect(payloadOf((await rows())[0]!)).toMatchObject({
+        attachments: [expect.objectContaining({ id, inline: true, filename: 'print.png' })],
+      });
+
+      await outbox.processOutbox();
+      const [mail] = mailer.sent;
+      const cid = mail!.attachments[0]!.cid!;
+      expect(cid.startsWith(`${id}@`)).toBe(true);
+      expect(mail!.html).toContain(`<img src="cid:${cid}" alt="tela"`);
+      expect(mail!.html).not.toContain('data-attachment-id');
+      expect(mail!.text).toContain('Veja:\n[imagem: print.png]');
+    });
+
+    it('T32 CT-12 requester_reply e ticket_created_group também embutem a imagem', async () => {
+      const ticket = await f.ticket({ requester: 'req1', assignee: 'ag1' });
+      await post('req1', `/api/tickets/${ticket.id}/messages`, withImage());
+      await post('req1', '/api/tickets', {
+        subject: 'Com print',
+        categoryId: f.C1,
+        bodyHtml: '<img data-inline-key="a">',
+        inlineImages: ['a'],
+      });
+
+      await outbox.processOutbox();
+      const byTemplate = new Map(
+        (await rows()).map((row) => [row.template, row.emailMessageId] as const),
+      );
+      for (const template of ['requester_reply', 'ticket_created_group']) {
+        const mail = mailer.sent.find((m) => m.messageId === byTemplate.get(template));
+        expect(mail, template).toBeDefined();
+        expect(mail!.attachments.some((a) => a.cid)).toBe(true);
+        expect(mail!.html).toContain('src="cid:');
+      }
+    });
+
+    it('T32 CT-13 imagem cabe no teto e os anexos comuns não: só a imagem vai', async () => {
+      const ticket = await f.ticket({ requester: 'req1' });
+      await post('ag1', `/api/tickets/${ticket.id}/messages`, withImage(), true);
+      await inflate('regular');
+
+      await outbox.processOutbox();
+      const [mail] = mailer.sent;
+      expect(mail!.attachments.map((a) => [a.filename, Boolean(a.cid)])).toEqual([
+        ['print.png', true],
+      ]);
+      expect(mail!.text).toContain('servidor.log.txt');
+      expect(mail!.html).toContain('src="cid:');
+    });
+
+    it('T32 CT-14 imagem acima do teto: texto no lugar e aviso', async () => {
+      const ticket = await f.ticket({ requester: 'req1' });
+      await post('ag1', `/api/tickets/${ticket.id}/messages`, withImage());
+      await inflate('inline');
+
+      await outbox.processOutbox();
+      const [mail] = mailer.sent;
+      expect(mail!.attachments).toEqual([]);
+      expect(mail!.html).not.toContain('<img');
+      expect(mail!.html).toContain('[imagem: print.png]');
+      expect(mail!.text).toContain('Imagens grandes demais para o e-mail, disponíveis no portal.');
+    });
+  });
+
   describe('assinatura do agente (T31)', () => {
     const SIGNATURE = '<p><strong>Ag Um</strong></p><p>Suporte de TI</p>';
     const sign = (user: FixtureUser, signatureHtml: string | null = SIGNATURE) =>

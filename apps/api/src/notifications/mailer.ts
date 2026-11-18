@@ -14,7 +14,8 @@ export interface OutgoingMail {
   inReplyTo?: string;
   references?: string[];
   headers: Record<string, string>;
-  attachments: { filename: string; contentType: string; content: Readable }[];
+  /** `cid`: imagem embutida no HTML (`<img src="cid:…">`, T32 RN-15), não anexo comum. */
+  attachments: { filename: string; contentType: string; content: Readable; cid?: string }[];
 }
 
 export interface Mailer {

@@ -274,6 +274,7 @@ describe('Agente — filas e detalhe (T12)', () => {
         expect(body).toEqual({
           data: { kind: 'internal', bodyHtml: 'Log anexo' },
           files: ['servidor.txt'],
+          inline: [],
         }),
       );
     });

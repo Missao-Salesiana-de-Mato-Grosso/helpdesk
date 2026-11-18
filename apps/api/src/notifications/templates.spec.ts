@@ -100,6 +100,66 @@ describe('templates de notificação (T14)', () => {
     });
   });
 
+  describe('imagens no texto (spec T32)', () => {
+    const image = {
+      id: 'img-1',
+      inline: true,
+      filename: 'print.png',
+      storageKey: 'attachments/k1',
+      mimeType: 'image/png',
+      sizeBytes: 10,
+    };
+    const doc = {
+      filename: 'nota.pdf',
+      storageKey: 'k2',
+      mimeType: 'application/pdf',
+      sizeBytes: 5,
+    };
+    const withImage = payload({
+      bodyHtml: '<p>Veja:</p><img data-attachment-id="img-1" alt="tela" />',
+      attachments: [image, doc],
+    });
+
+    it('CT-18 embutida: cid no HTML e [imagem: nome] no texto', () => {
+      const mail = renderNotification(
+        'reply',
+        withImage,
+        true,
+        new Map([['img-1', 'img-1@x.org']]),
+      );
+      expect(mail.html).toContain('<img src="cid:img-1@x.org" alt="tela"');
+      expect(mail.html).not.toContain('data-attachment-id');
+      expect(mail.text).toContain('Veja:\n[imagem: print.png]');
+      expect(mail.html).not.toContain('Imagens grandes demais');
+    });
+
+    it('CT-18 não embutida: texto no lugar da imagem e aviso', () => {
+      const mail = renderNotification('reply', withImage, true, null);
+      expect(mail.html).toContain('[imagem: print.png]');
+      expect(mail.html).not.toContain('<img');
+      expect(mail.text).toContain('Imagens grandes demais para o e-mail, disponíveis no portal.');
+      const external = renderNotification('reply', { ...withImage, portalUrl: null }, true, null);
+      expect(external.text).toContain('Imagens grandes demais para o e-mail.');
+      expect(external.text).not.toContain('disponíveis no portal');
+    });
+
+    it('CT-18 a imagem do texto não entra na lista de anexos não enviados', () => {
+      const mail = renderNotification('reply', withImage, false, null);
+      expect(mail.text).toContain(
+        'Anexos (grandes demais para o e-mail, disponíveis no portal): nota.pdf.',
+      );
+      expect(mail.text).not.toContain('print.png.');
+    });
+
+    it('CT-18 payload anterior à T32 (sem id nem inline) renderiza como antes', () => {
+      const old = payload({ attachments: [doc] });
+      expect(renderNotification('reply', old, false)).toEqual(
+        renderNotification('reply', old, false, null),
+      );
+      expect(renderNotification('reply', old, false).text).toContain('nota.pdf');
+    });
+  });
+
   it('aviso ao grupo traz solicitante, unidade e categoria', () => {
     const mail = renderNotification('ticket_created_group', payload(), true);
     expect(mail.text).toContain('Novo chamado na fila Suporte TI');

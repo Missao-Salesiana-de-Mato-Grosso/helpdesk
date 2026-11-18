@@ -499,6 +499,52 @@ describe('e-mail de entrada — T21 (e2e)', () => {
       expect(message!.bodyHtml).toMatch(/Anexos não importados .*: programa\.exe<\/p>$/);
     });
 
+    it('T32 CT-15 imagem cid do corpo vira imagem do texto (anexo inline)', async () => {
+      await drop(await fixture('com-anexos.eml'));
+      await poll();
+      const ticket = await t.prisma.ticket.findFirstOrThrow();
+      const [message] = await messagesOf(ticket.id);
+      const image = message!.attachments.find((a) => a.filename === 'imagem-1.png')!;
+      const pdf = message!.attachments.find((a) => a.filename === 'relatório.pdf')!;
+      expect(image.inline).toBe(true);
+      expect(pdf.inline).toBe(false);
+      expect(message!.bodyHtml).toContain(
+        `Segue o print: <img data-attachment-id="${image.id}" />`,
+      );
+    });
+
+    it('T32 CT-16 cid sem anexo some do texto; anexo com Content-ID não citado fica comum', async () => {
+      await drop(
+        eml({
+          from: email('req1'),
+          headers: ['MIME-Version: 1.0'],
+          contentType: 'multipart/related; boundary="rel"',
+          body: [
+            '--rel',
+            'Content-Type: text/html; charset="UTF-8"',
+            '',
+            '<p>Antes <img src="cid:nao-existe@x"> depois</p>',
+            '',
+            '--rel',
+            'Content-Type: image/png; name="logo.png"',
+            'Content-ID: <logo@x>',
+            'Content-Disposition: inline; filename="logo.png"',
+            'Content-Transfer-Encoding: base64',
+            '',
+            'iVBORw0KGgp0ZXN0ZQ==',
+            '--rel--',
+          ].join('\n'),
+        }),
+      );
+      await poll();
+      const ticket = await t.prisma.ticket.findFirstOrThrow();
+      const [message] = await messagesOf(ticket.id);
+      expect(message!.bodyHtml).toBe('<p>Antes  depois</p>');
+      expect(message!.attachments.map((a) => [a.filename, a.inline])).toEqual([
+        ['logo.png', false],
+      ]);
+    });
+
     it.each([
       ['gmail-reply.eml', 'Ainda não funciona, testei de novo.'],
       ['outlook-reply.eml', 'Resolvido, obrigado!'],

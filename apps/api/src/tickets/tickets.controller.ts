@@ -26,7 +26,12 @@ import {
   type UpdateTicketInput,
 } from '@helpdesk/shared';
 import type { Request, Response } from 'express';
-import { AcceptsAttachments, JsonOrMultipartPipe, incomingFiles } from '../attachments/upload.js';
+import {
+  AcceptsAttachments,
+  JsonOrMultipartPipe,
+  incomingUpload,
+  type UploadedFields,
+} from '../attachments/upload.js';
 import type { CurrentUser as CurrentUserType } from '../auth/current-user.js';
 import { CurrentUser, Roles } from '../auth/decorators.js';
 import { clientIp } from '../common/client-ip.js';
@@ -42,10 +47,10 @@ export class TicketsController {
   create(
     @CurrentUser() user: CurrentUserType,
     @Body(new JsonOrMultipartPipe(createTicketSchema)) body: CreateTicketData,
-    @UploadedFiles() files: Express.Multer.File[] | undefined,
+    @UploadedFiles() files: UploadedFields,
     @Req() request: Request,
   ): Promise<TicketDetail> {
-    return this.tickets.create(user, body, clientIp(request), incomingFiles(files));
+    return this.tickets.create(user, body, clientIp(request), incomingUpload(files));
   }
 
   @Get()
@@ -84,10 +89,10 @@ export class TicketsController {
     @CurrentUser() user: CurrentUserType,
     @Param('id') id: string,
     @Body(new JsonOrMultipartPipe(createMessageSchema)) body: CreateMessageInput,
-    @UploadedFiles() files: Express.Multer.File[] | undefined,
+    @UploadedFiles() files: UploadedFields,
     @Req() request: Request,
   ): Promise<TicketDetail> {
-    return this.tickets.addMessage(user, id, body, clientIp(request), incomingFiles(files));
+    return this.tickets.addMessage(user, id, body, clientIp(request), incomingUpload(files));
   }
 }
 

@@ -47,3 +47,25 @@ describe('corpo do e-mail (RN-17 a RN-19)', () => {
     );
   });
 });
+
+const resolve = (attribs: Record<string, string>) =>
+  attribs['src'] === 'cid:print@x' ? 'id-1' : undefined;
+
+describe('imagens cid no corpo (spec T32 RN-20, RN-21)', () => {
+  it('liga o cid conhecido ao anexo, no corpo e na citação; o desconhecido some', () => {
+    const body = emailBody(
+      '<p>Novo <img src="cid:print@x"> <img src="cid:outro"></p><div class="gmail_quote"><img src="cid:print@x"></div>',
+      '',
+      [],
+      resolve,
+    );
+    expect(body.bodyHtml).toBe('<p>Novo <img data-attachment-id="id-1" /> </p>');
+    expect(body.quotedHtml).toContain('data-attachment-id="id-1"');
+  });
+
+  it('só imagem cid conhecida já conta como conteúdo', () => {
+    expect(emailBody('<div><img src="cid:print@x"></div>', '', [], resolve).bodyHtml).toBe(
+      '<div><img data-attachment-id="id-1" /></div>',
+    );
+  });
+});

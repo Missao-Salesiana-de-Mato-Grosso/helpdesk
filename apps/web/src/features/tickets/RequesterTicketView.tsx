@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { HtmlEditor } from '../../components/HtmlEditor.tsx';
 import { AttachmentPicker } from '../attachments/AttachmentPicker.tsx';
+import { useInlineImages, withInlineImages } from '../attachments/inline-images.ts';
 import { Conversation, TicketHeader } from './Conversation.tsx';
 import { useReply } from './queries.ts';
 
@@ -11,6 +12,7 @@ function ReplyForm({ ticket }: { ticket: TicketDetail }) {
   const reply = useReply(ticket.id);
   const [bodyHtml, setBodyHtml] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const images = useInlineImages();
   const [submitted, setSubmitted] = useState(false);
 
   if (ticket.status === 'closed') {
@@ -30,10 +32,16 @@ function ReplyForm({ ticket }: { ticket: TicketDetail }) {
     event.preventDefault();
     setSubmitted(true);
     if (bodyHtml === '') return;
+    const upload = images.collect(bodyHtml);
     reply.mutate(
-      { data: { kind: 'public', bodyHtml }, files },
+      {
+        data: withInlineImages({ kind: 'public' as const, bodyHtml }, upload),
+        files,
+        inline: upload.inline,
+      },
       {
         onSuccess: () => {
+          images.clear();
           setBodyHtml('');
           setFiles([]);
           setSubmitted(false);
@@ -56,6 +64,7 @@ function ReplyForm({ ticket }: { ticket: TicketDetail }) {
           onChange={setBodyHtml}
           error={submitted && bodyHtml === '' ? 'Escreva a mensagem' : undefined}
           disabled={reply.isPending}
+          images={images}
         />
         <AttachmentPicker files={files} onChange={setFiles} disabled={reply.isPending} />
         {reply.error && (

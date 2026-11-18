@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Readable } from 'node:stream';
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -17,11 +18,18 @@ import {
   AttachmentsService,
   type AttachmentRecord,
   type IncomingFile,
+  type IncomingInlineImage,
   type StoredFile,
 } from '../attachments/attachments.service.js';
+import type { IncomingUpload } from '../attachments/upload.js';
 import { StorageObjectNotFoundError } from '../attachments/storage/storage-driver.js';
 import { ApiException } from '../common/api-exception.js';
-import { htmlHasContent, sanitizeHtml } from '../common/sanitize-html.js';
+import {
+  htmlHasContent,
+  referencedImageIds,
+  sanitizeHtml,
+  type InlineImageResolver,
+} from '../common/sanitize-html.js';
 import { CategoriesService } from '../categories/categories.service.js';
 import { CompaniesService } from '../companies/companies.service.js';
 import { GroupsService } from '../groups/groups.service.js';
@@ -180,8 +188,8 @@ const slaBreached = (now: Date): Prisma.TicketWhereInput => ({
 });
 
 /** Corpo sanitizado; vazio depois de sanitizar → 422 EMPTY_BODY (RN-33). */
-export function cleanBody(html: string): string {
-  const clean = sanitizeHtml(html);
+export function cleanBody(html: string, resolveImage?: InlineImageResolver): string {
+  const clean = sanitizeHtml(html, resolveImage);
   if (!htmlHasContent(clean)) {
     throw new ApiException(
       HttpStatus.UNPROCESSABLE_ENTITY,
@@ -190,6 +198,36 @@ export function cleanBody(html: string): string {
     );
   }
   return clean;
+}
+
+const NO_UPLOAD: IncomingUpload = { files: [], inline: [] };
+
+/**
+ * T32 (RN-06 a RN-09): corpo sanitizado com as imagens do texto ligadas aos anexos. Cada chave
+ * de `inlineImages` ganha um id agora; só as imagens que o corpo sanitizado referencia são
+ * gravadas.
+ */
+export function prepareBody(
+  input: { bodyHtml: string; inlineImages?: string[] | undefined },
+  inline: readonly IncomingFile[],
+): { bodyHtml: string; images: IncomingInlineImage[] } {
+  const keys = input.inlineImages ?? [];
+  if (keys.length !== inline.length) {
+    throw new ApiException(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      ApiErrorCode.VALIDATION_ERROR,
+      'inlineImages: a quantidade de chaves não confere com a de imagens enviadas',
+    );
+  }
+  const byKey = new Map(
+    keys.map((key, index) => [key, { id: randomUUID(), file: inline[index]! }]),
+  );
+  const bodyHtml = cleanBody(input.bodyHtml, (attribs) => {
+    const key = attribs['data-inline-key'];
+    return key === undefined ? undefined : byKey.get(key)?.id;
+  });
+  const used = new Set(referencedImageIds(bodyHtml));
+  return { bodyHtml, images: [...byKey.values()].filter((image) => used.has(image.id)) };
 }
 
 @Injectable()
@@ -331,7 +369,7 @@ export class TicketsService {
     id: string,
     input: CreateMessageInput,
     ip: string | null,
-    files: readonly IncomingFile[] = [],
+    upload: IncomingUpload = NO_UPLOAD,
   ): Promise<TicketDetail> {
     const agent = isAgent(actor);
     if (!agent && input.kind === 'internal') {
@@ -341,11 +379,17 @@ export class TicketsService {
       throw forbidden('Só agentes mudam o status do ticket.');
     }
     if (!UUID.test(id)) throw notFound();
-    const bodyHtml = cleanBody(input.bodyHtml);
-    this.attachments.validate(files);
+    const { bodyHtml, images } = prepareBody(input, upload.inline);
+    this.attachments.validate(upload.files);
+    this.attachments.validateInline(upload.inline);
     // Antes de gravar arquivos: quem não vê o ticket recebe 404 sem tocar no storage.
-    if (files.length > 0 && !(await this.tickets.existsInScope(actor, id))) throw notFound();
-    const stored = await this.attachments.storeAll(files);
+    if (
+      (upload.files.length > 0 || images.length > 0) &&
+      !(await this.tickets.existsInScope(actor, id))
+    ) {
+      throw notFound();
+    }
+    const stored = await this.storeUpload(upload.files, images);
 
     const emits = await this.withStoredFiles(stored, () =>
       this.tickets.transaction(async (tx) => {
@@ -470,6 +514,18 @@ export class TicketsService {
     }
   }
 
+  /** Anexos comuns e imagens do texto (T32), todos ou nenhum. */
+  private async storeUpload(
+    files: readonly IncomingFile[],
+    images: readonly IncomingInlineImage[],
+  ): Promise<StoredFile[]> {
+    const stored = await this.attachments.storeAll(files);
+    return this.withStoredFiles(stored, async () => [
+      ...stored,
+      ...(await this.attachments.storeInline(images)),
+    ]);
+  }
+
   /** Se a gravação no banco falhar, os arquivos já gravados no storage são apagados. */
   private async withStoredFiles<T>(stored: StoredFile[], write: () => Promise<T>): Promise<T> {
     try {
@@ -547,7 +603,7 @@ export class TicketsService {
     actor: TicketActor,
     input: CreateTicketData,
     ip: string | null,
-    files: readonly IncomingFile[] = [],
+    upload: IncomingUpload = NO_UPLOAD,
   ): Promise<TicketDetail> {
     const requester = await this.resolveRequester(actor, input.requesterId);
     const source = requester.id === actor.id ? 'portal' : 'agent';
@@ -578,10 +634,11 @@ export class TicketsService {
       throw notFound();
     }
 
-    const bodyHtml = cleanBody(input.bodyHtml);
+    const { bodyHtml, images } = prepareBody(input, upload.inline);
+    this.attachments.validateInline(upload.inline);
     const createdAt = new Date();
     const sla = await this.sla.initial(input.priority, createdAt);
-    const stored = await this.attachments.storeAll(files);
+    const stored = await this.storeUpload(upload.files, images);
 
     const created = await this.withStoredFiles(stored, () =>
       this.tickets.transaction(async (tx) => {
