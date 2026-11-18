@@ -2,11 +2,20 @@ import { Alert, Button, Group, Loader, Paper, Stack, Text, Title, Typography } f
 import { MAX_SIGNATURE_HTML_LENGTH } from '@helpdesk/shared';
 import { useState } from 'react';
 import { HtmlEditor } from '../../components/HtmlEditor.tsx';
-import { useSaveSignature, useSignature } from './queries.ts';
+import {
+  SIGNATURE_IMAGE_RULES,
+  useInlineImages,
+  withInlineImages,
+} from '../attachments/inline-images.ts';
+import { useSaveSignature, useSignature, useSignatureImageUrls, withImageUrls } from './queries.ts';
 
-/** T31: o agente cadastra a assinatura que vai nos e-mails das respostas dele. */
+/** T31: o agente cadastra a assinatura que vai nos e-mails das respostas dele (T33: com imagens). */
 export function SignaturePage() {
   const signature = useSignature();
+  const save = useSaveSignature();
+  const saved = signature.data?.signatureHtml ?? null;
+  const images = useSignatureImageUrls(signature.data ? saved : undefined);
+  const savedWithUrls = saved && withImageUrls(saved, images.urls);
 
   return (
     <Stack maw={720}>
@@ -17,22 +26,46 @@ export function SignaturePage() {
           na conversa do chamado.
         </Text>
       </div>
-      {signature.isPending && <Loader aria-label="Carregando" />}
+      {(signature.isPending || (signature.data && !images.ready)) && (
+        <Loader aria-label="Carregando" />
+      )}
       {signature.error && (
         <Alert color="red" title="Não foi possível carregar a assinatura">
           {signature.error.message}
         </Alert>
       )}
-      {/* O editor só recebe o conteúdo inicial ao montar: espera a assinatura chegar. */}
-      {signature.data && <SignatureForm saved={signature.data.signatureHtml} />}
+      {/*
+        O editor só recebe o conteúdo inicial ao montar: espera a assinatura e as imagens dela.
+        Depois de salvar, monta de novo com o que o servidor gravou (as imagens novas já com id).
+      */}
+      {signature.data && images.ready && (
+        <SignatureForm key={saved ?? ''} initial={savedWithUrls ?? ''} save={save} />
+      )}
+      {save.isSuccess && (
+        <Alert color="green" role="status">
+          {saved ? 'Assinatura salva.' : 'Assinatura removida.'}
+        </Alert>
+      )}
+      {signature.data && images.ready && <SignaturePreview html={savedWithUrls} />}
     </Stack>
   );
 }
 
-function SignatureForm({ saved }: { saved: string | null }) {
-  const save = useSaveSignature();
-  const [html, setHtml] = useState(saved ?? '');
+function SignatureForm({
+  initial,
+  save,
+}: {
+  initial: string;
+  save: ReturnType<typeof useSaveSignature>;
+}) {
+  const [html, setHtml] = useState(initial);
+  const images = useInlineImages(SIGNATURE_IMAGE_RULES);
   const tooLong = html.length > MAX_SIGNATURE_HTML_LENGTH;
+
+  const submit = () => {
+    const upload = images.collect(html);
+    save.mutate({ data: withInlineImages({ signatureHtml: html }, upload), inline: upload.inline });
+  };
 
   return (
     <Stack>
@@ -50,36 +83,28 @@ function SignatureForm({ saved }: { saved: string | null }) {
         }
         disabled={save.isPending}
         required={false}
+        images={images}
       />
       <Text c="dimmed" size="xs">
-        Texto formatado e links, sem imagens. Para remover a assinatura, apague o texto e salve.
+        Texto formatado, links e até 2 imagens (PNG ou JPG, até 200 KB cada), como o logo da
+        unidade. Para remover a assinatura, apague tudo e salve.
       </Text>
       {save.error && (
         <Alert color="red" title="Não foi possível salvar">
           {save.error.message}
         </Alert>
       )}
-      {save.isSuccess && (
-        <Alert color="green" role="status">
-          {saved ? 'Assinatura salva.' : 'Assinatura removida.'}
-        </Alert>
-      )}
       <Group justify="flex-end">
-        <Button
-          loading={save.isPending}
-          disabled={tooLong}
-          onClick={() => save.mutate({ signatureHtml: html })}
-        >
+        <Button loading={save.isPending} disabled={tooLong} onClick={submit}>
           Salvar
         </Button>
       </Group>
-      <SignaturePreview saved={saved} />
     </Stack>
   );
 }
 
 /** Como a assinatura salva aparece abaixo de uma resposta, no e-mail. */
-function SignaturePreview({ saved }: { saved: string | null }) {
+function SignaturePreview({ html }: { html: string | null }) {
   return (
     <section aria-label="Prévia no e-mail">
       <Text fw={500} size="sm" mb={4}>
@@ -89,9 +114,12 @@ function SignaturePreview({ saved }: { saved: string | null }) {
         <Text size="sm" c="dimmed">
           (texto da sua resposta)
         </Text>
-        {saved ? (
-          // oxlint-disable-next-line react/no-danger -- HTML já sanitizado no backend antes de gravar.
-          <Typography mt="md" dangerouslySetInnerHTML={{ __html: saved }} />
+        {html ? (
+          <Typography
+            mt="md"
+            // oxlint-disable-next-line react/no-danger -- HTML já sanitizado no backend; só ganha o `src` blob: das imagens.
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
         ) : (
           <Text size="sm" c="dimmed" mt="md" fs="italic">
             Sem assinatura: o e-mail termina no texto da resposta.

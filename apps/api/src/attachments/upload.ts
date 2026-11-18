@@ -17,6 +17,7 @@ import {
   ATTACHMENT_MAX_FILES,
   ApiErrorCode,
   INLINE_IMAGE_MAX_FILES,
+  SIGNATURE_IMAGE_MAX_FILES,
 } from '@helpdesk/shared';
 import { catchError, type Observable } from 'rxjs';
 import type { z } from 'zod';
@@ -77,6 +78,27 @@ export function AcceptsAttachments() {
           defParamCharset: 'utf8',
         },
       ),
+    ),
+  );
+}
+
+/**
+ * T33: `PUT /api/me/signature` aceita só as imagens novas da assinatura, no campo `inline`. O
+ * multer conta 1 a mais para o serviço responder com a mensagem certa; o tamanho é conferido lá.
+ */
+export function AcceptsSignatureImages() {
+  return applyDecorators(
+    UseInterceptors(
+      UploadErrorsInterceptor,
+      FileFieldsInterceptor([{ name: INLINE_FIELD, maxCount: SIGNATURE_IMAGE_MAX_FILES + 1 }], {
+        limits: {
+          fileSize: ATTACHMENT_MAX_BYTES,
+          files: SIGNATURE_IMAGE_MAX_FILES + 1,
+          fields: 1,
+          fieldSize: 64 * 1024,
+        },
+        defParamCharset: 'utf8',
+      }),
     ),
   );
 }

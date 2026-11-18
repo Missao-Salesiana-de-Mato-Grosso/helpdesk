@@ -87,8 +87,14 @@ export function referencedImageIds(html: string): string[] {
   return [...new Set(ids)];
 }
 
-// T31 RN-04: a assinatura aceita só o que o editor do portal produz. Sem imagens, tabelas,
-// títulos nem `pre`.
+/**
+ * T33: o id de uma imagem da assinatura (`<img data-signature-image-id>`, sem `src`). Como o
+ * `data-attachment-id`, só o servidor escreve este atributo (RN-05).
+ */
+export const SIGNATURE_IMAGE_ATTRIBUTE = 'data-signature-image-id';
+
+// T31 RN-04: a assinatura aceita só o que o editor do portal produz. Sem tabelas, títulos nem
+// `pre`; imagem só na forma da T33 (RN-05).
 const SIGNATURE_OPTIONS: sanitize.IOptions = {
   ...OPTIONS,
   allowedTags: [
@@ -108,15 +114,48 @@ const SIGNATURE_OPTIONS: sanitize.IOptions = {
     'li',
     'blockquote',
     'code',
+    'img',
   ],
-  allowedAttributes: { a: ['href', 'title', 'target', 'rel'] },
+  allowedAttributes: {
+    a: ['href', 'title', 'target', 'rel'],
+    img: [SIGNATURE_IMAGE_ATTRIBUTE, 'alt'],
+  },
   allowedSchemesByTag: { a: ['http', 'https', 'mailto'] },
+  exclusiveFilter: (frame) => frame.tag === 'img' && !frame.attribs[SIGNATURE_IMAGE_ATTRIBUTE],
 };
 
-/** Sanitiza a assinatura de e-mail (T31). Sem texto visível → `null` (RN-05). */
-export function sanitizeSignatureHtml(html: string): string | null {
-  const clean = sanitize(html, SIGNATURE_OPTIONS).trim();
+/**
+ * Sanitiza a assinatura de e-mail (T31). Sem conteúdo → `null` (RN-05); uma imagem sozinha
+ * conta como conteúdo (T33 RN-07). `resolveImage` devolve o id da imagem da assinatura que a
+ * `<img>` representa; sem id, a imagem some.
+ */
+export function sanitizeSignatureHtml(
+  html: string,
+  resolveImage?: InlineImageResolver,
+): string | null {
+  const clean = sanitize(html, {
+    ...SIGNATURE_OPTIONS,
+    transformTags: {
+      ...SIGNATURE_OPTIONS.transformTags,
+      img: (tagName, attribs) => {
+        const id = resolveImage?.(attribs);
+        const alt = attribs['alt'];
+        return {
+          tagName,
+          attribs: id ? { [SIGNATURE_IMAGE_ATTRIBUTE]: id, ...(alt ? { alt } : {}) } : {},
+        };
+      },
+    },
+  }).trim();
   return htmlHasContent(clean) ? clean : null;
+}
+
+/** T33: ids das imagens que a assinatura já sanitizada referencia, sem repetir. */
+export function referencedSignatureImageIds(html: string): string[] {
+  const ids = [...html.matchAll(/<img\b[^>]*\sdata-signature-image-id="([^"]+)"/gi)].map(
+    (m) => m[1]!,
+  );
+  return [...new Set(ids)];
 }
 
 /** Texto visível do HTML (sem tags e espaços), para detectar corpo vazio (RN-33). */

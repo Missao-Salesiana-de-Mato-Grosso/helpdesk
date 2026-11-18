@@ -15,3 +15,15 @@ describe('updateSignatureSchema (spec T31)', () => {
     );
   });
 });
+
+const parse = (inlineImages: unknown) =>
+  updateSignatureSchema.safeParse({ signatureHtml: '<p>x</p>', inlineImages }).success;
+
+describe('inlineImages na assinatura (spec T33)', () => {
+  it('CT-13 aceita até 2 chaves válidas e sem repetir', () => {
+    expect(parse(['a', 'b'])).toBe(true);
+    expect(parse(['a', 'b', 'c'])).toBe(false);
+    expect(parse(['a', 'a'])).toBe(false);
+    expect(parse(['a b'])).toBe(false);
+  });
+});

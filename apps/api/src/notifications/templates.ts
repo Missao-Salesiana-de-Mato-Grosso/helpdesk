@@ -69,6 +69,18 @@ export const notificationPayload = z.object({
    * nas linhas gravadas antes da T31 (RN-10).
    */
   signatureHtml: z.string().nullable().optional(),
+  /** T33 RN-11: as imagens que a assinatura referencia. Ausente sem imagem e antes da T33. */
+  signatureImages: z
+    .array(
+      z.object({
+        id: z.string(),
+        storageKey: z.string(),
+        filename: z.string(),
+        mimeType: z.string(),
+        sizeBytes: z.number(),
+      }),
+    )
+    .optional(),
 });
 
 export type NotificationPayload = z.infer<typeof notificationPayload>;
@@ -158,29 +170,57 @@ function withInlineImages(
   return { html: embedded, plain, missing };
 }
 
+/** T33: `<img data-signature-image-id>` da assinatura sanitizada. */
+const SIGNATURE_IMAGE = /<img\b[^>]*\sdata-signature-image-id="([^"]+)"[^>]*>/gi;
+
+/**
+ * T33 RN-10 e RN-12: cada imagem da assinatura vira `<img src="cid:…">` com largura limitada;
+ * a que não foi embutida some, sem aviso. A versão texto já descarta as tags (RN-13).
+ */
+function withSignatureImages(
+  signature: string,
+  signatureCids: ReadonlyMap<string, string> | null,
+): string {
+  return signature.replace(SIGNATURE_IMAGE, (tag, id: string) => {
+    const cid = signatureCids?.get(id);
+    if (!cid) return '';
+    const alt = ALT.exec(tag)?.[1] ?? '';
+    return `<img src="cid:${escapeHtml(cid)}" alt="${alt}" style="max-width:300px;height:auto">`;
+  });
+}
+
 /**
  * RN-16 e RN-18. `attached`: os anexos comuns foram junto no e-mail; senão, só os nomes aparecem
  * no corpo (RN-19). `inlineCids`: o `cid` de cada imagem do texto embutida, pelo id do anexo;
- * `null` quando não foram embutidas (T32 RN-18).
+ * `null` quando não foram embutidas (T32 RN-18). `signatureCids`: o mesmo para as imagens da
+ * assinatura (T33 RN-10, RN-12).
  */
 export function renderNotification(
   template: NotificationTemplate,
   payload: NotificationPayload,
   attached: boolean,
   inlineCids: ReadonlyMap<string, string> | null = null,
+  signatureCids: ReadonlyMap<string, string> | null = null,
 ): RenderedMail {
   const blocks = [...intro(template, payload)];
   let imagesMissing = false;
   if (payload.bodyHtml) {
     const body = withInlineImages(payload.bodyHtml, payload.attachments, inlineCids);
     imagesMissing = body.missing;
+    // T31 RN-08: só a resposta do agente leva assinatura.
+    const signature = template === 'reply' ? (payload.signatureHtml ?? null) : null;
     blocks.push({
       kind: 'message',
       html: body.html,
       plain: body.plain,
-      // T31 RN-08: só a resposta do agente leva assinatura.
-      signatureHtml: template === 'reply' ? (payload.signatureHtml ?? null) : null,
+      signatureHtml: signature && withSignatureImages(signature, signatureCids),
     });
+  }
+  // Assinatura só com imagens que não foram embutidas: nada sobra para mostrar.
+  const last = blocks.at(-1);
+  if (last?.kind === 'message' && last.signatureHtml !== null) {
+    const empty = htmlToText(last.signatureHtml) === '' && !/<img\s/i.test(last.signatureHtml);
+    if (empty) last.signatureHtml = null;
   }
   if (imagesMissing) {
     blocks.push(

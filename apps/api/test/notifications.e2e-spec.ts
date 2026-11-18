@@ -154,6 +154,19 @@ describe('notificações — T14 (e2e)', () => {
   const rows = () =>
     t.prisma.notification.findMany({ orderBy: [{ createdAt: 'asc' }, { toEmail: 'asc' }] });
   const sent = async () => (await rows()).map((n) => [n.template, n.toEmail]);
+  const signWithLogo = async (html = '<p>Ag Um</p>') =>
+    http()
+      .put('/api/me/signature')
+      .set('Authorization', await as('ag1'))
+      .field(
+        'data',
+        JSON.stringify({
+          signatureHtml: `${html}<img data-inline-key="logo" alt="logo">`,
+          inlineImages: ['logo'],
+        }),
+      )
+      .attach('inline', Buffer.from('logo de teste'), 'logo.png');
+  const logoId = async () => (await t.prisma.signatureImage.findFirstOrThrow()).id;
   const imageIdOf = async () =>
     (await t.prisma.attachment.findFirstOrThrow({ where: { inline: true } })).id;
   const addToG1 = (user: FixtureUser) =>
@@ -612,6 +625,60 @@ describe('notificações — T14 (e2e)', () => {
       expect(mail!.html).not.toContain('<img');
       expect(mail!.html).toContain('[imagem: print.png]');
       expect(mail!.text).toContain('Imagens grandes demais para o e-mail, disponíveis no portal.');
+    });
+  });
+
+  describe('imagem na assinatura (T33)', () => {
+    it('T33 CT-07 resposta pelo portal: logo congelado no payload e embutido no e-mail', async () => {
+      expect((await signWithLogo()).status).toBe(200);
+      const id = await logoId();
+      const ticket = await f.ticket({ requester: 'req1' });
+      await message('ag1', ticket.id, reply);
+
+      const [row] = await rows();
+      expect(payloadOf(row!)).toMatchObject({
+        signatureImages: [expect.objectContaining({ id, filename: 'logo.png' })],
+      });
+      await outbox.processOutbox();
+      const [mail] = mailer.sent;
+      const embedded = mail!.attachments.find((a) => a.cid?.startsWith(`sig-${id}@`));
+      expect(embedded).toBeDefined();
+      expect(mail!.html).toContain(`<img src="cid:${embedded!.cid}" alt="logo"`);
+      expect(mail!.text).toContain('-- \nAg Um');
+      expect(mail!.text).not.toContain('imagem');
+    });
+
+    it('T33 CT-08 trocar a assinatura depois do enqueue: o e-mail sai com o logo antigo', async () => {
+      await signWithLogo();
+      const oldId = await logoId();
+      const ticket = await f.ticket({ requester: 'req1' });
+      await message('ag1', ticket.id, reply);
+      await http()
+        .put('/api/me/signature')
+        .set('Authorization', await as('ag1'))
+        .send({ signatureHtml: '<p>Sem logo</p>' });
+
+      await outbox.processOutbox();
+      const [mail] = mailer.sent;
+      expect(mail!.attachments.some((a) => a.cid?.startsWith(`sig-${oldId}@`))).toBe(true);
+      expect(mail!.html).not.toContain('Sem logo');
+    });
+
+    it('T33 CT-09 imagens da assinatura acima do teto: texto da assinatura sem o logo', async () => {
+      await signWithLogo();
+      const ticket = await f.ticket({ requester: 'req1' });
+      await message('ag1', ticket.id, reply);
+      const [row] = await rows();
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- payload gravado pelo enqueue.
+      const payload = row!.payload as { signatureImages: { sizeBytes: number }[] };
+      payload.signatureImages[0]!.sizeBytes = 30 * 1024 * 1024;
+      await t.prisma.notification.update({ where: { id: row!.id }, data: { payload } });
+
+      await outbox.processOutbox();
+      const [mail] = mailer.sent;
+      expect(mail!.attachments).toEqual([]);
+      expect(mail!.html).toContain('Ag Um');
+      expect(mail!.html).not.toContain('cid:sig-');
     });
   });
 

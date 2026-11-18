@@ -67,5 +67,27 @@ export function inlineImageMimeType(filename: string): string | null {
     : null;
 }
 
+// ── Imagens da assinatura (T33) ───────────────────────────────────────────────
+
+/** RN-03: cada imagem da assinatura. */
+export const SIGNATURE_IMAGE_MAX_BYTES = 200 * 1024;
+/** RN-04: imagens que a assinatura gravada referencia. */
+export const SIGNATURE_IMAGE_MAX_FILES = 2;
+/** RN-02: extensões aceitas na assinatura. */
+export const SIGNATURE_IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg'] as const;
+
+/** Valor do `accept` do seletor de imagem da assinatura. */
+export const SIGNATURE_IMAGE_ACCEPT = SIGNATURE_IMAGE_EXTENSIONS.map(
+  (extension) => `.${extension}`,
+).join(',');
+
+/** Tipo MIME de uma imagem aceita na assinatura, ou `null`. */
+export function signatureImageMimeType(filename: string): string | null {
+  const extension = /\.([a-z0-9]+)$/i.exec(filename)?.[1]?.toLowerCase();
+  return extension && (SIGNATURE_IMAGE_EXTENSIONS as readonly string[]).includes(extension)
+    ? attachmentMimeType(filename)
+    : null;
+}
+
 /** Chave que o cliente dá a cada imagem no `bodyHtml` (`data-inline-key`), até o servidor gravar. */
 export const INLINE_IMAGE_KEY = /^[A-Za-z0-9_-]{1,64}$/;

@@ -1,4 +1,16 @@
-import { Body, Controller, Get, HttpStatus, Patch, Put } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpStatus,
+  Param,
+  Patch,
+  Put,
+  Res,
+  StreamableFile,
+  UploadedFiles,
+} from '@nestjs/common';
+import type { Response } from 'express';
 import {
   ApiErrorCode,
   ROLES,
@@ -9,11 +21,17 @@ import {
   type UpdateMeInput,
   type UpdateSignatureInput,
 } from '@helpdesk/shared';
+import {
+  AcceptsSignatureImages,
+  JsonOrMultipartPipe,
+  incomingUpload,
+  type UploadedFields,
+} from '../attachments/upload.js';
 import { ApiException } from '../common/api-exception.js';
-import { sanitizeSignatureHtml } from '../common/sanitize-html.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { CompaniesService } from '../companies/companies.service.js';
 import { DepartmentsService } from '../departments/departments.service.js';
+import { SignatureService } from '../users/signature.service.js';
 import { UsersService, type UserProfile } from '../users/users.service.js';
 import type { CurrentUser as CurrentUserType } from './current-user.js';
 import { AllowDuringOnboarding, AllowWhilePending, CurrentUser, Roles } from './decorators.js';
@@ -28,6 +46,7 @@ export class MeController {
     private readonly companies: CompaniesService,
     private readonly departments: DepartmentsService,
     private readonly cache: UserCache,
+    private readonly signatures: SignatureService,
   ) {}
 
   @Get()
@@ -72,19 +91,38 @@ export class MeController {
   @Get('signature')
   @Roles('agente', 'supervisor', 'admin')
   async getSignature(@CurrentUser() user: CurrentUserType): Promise<SignatureResponse> {
-    return { signatureHtml: await this.users.signatureOf(user.id) };
+    return { signatureHtml: await this.signatures.signatureOf(user.id) };
   }
 
   /** T31: sanitiza antes de gravar; sem texto visível apaga (RN-04, RN-05). */
   @Put('signature')
   @Roles('agente', 'supervisor', 'admin')
+  @AcceptsSignatureImages()
   async updateSignature(
     @CurrentUser() user: CurrentUserType,
-    @Body(new ZodValidationPipe(updateSignatureSchema)) body: UpdateSignatureInput,
+    @Body(new JsonOrMultipartPipe(updateSignatureSchema)) body: UpdateSignatureInput,
+    @UploadedFiles() files: UploadedFields,
   ): Promise<SignatureResponse> {
-    const signatureHtml = sanitizeSignatureHtml(body.signatureHtml);
-    await this.users.setSignature(user.id, signatureHtml);
+    const signatureHtml = await this.signatures.save(user.id, body, incomingUpload(files).inline);
     return { signatureHtml };
+  }
+
+  /** T33 RN-09: só a própria imagem, sempre como anexo e com `nosniff`. */
+  @Get('signature/images/:id')
+  @Roles('agente', 'supervisor', 'admin')
+  async signatureImage(
+    @CurrentUser() user: CurrentUserType,
+    @Param('id') id: string,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    const { image, stream } = await this.signatures.openImage(user.id, id);
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.setHeader('Cache-Control', 'private, no-store');
+    return new StreamableFile(stream, {
+      type: image.mimeType,
+      length: image.sizeBytes,
+      disposition: 'attachment; filename="assinatura"',
+    });
   }
 }
 

@@ -1,6 +1,7 @@
 import {
   htmlHasContent,
   referencedImageIds,
+  referencedSignatureImageIds,
   sanitizeHtml,
   sanitizeSignatureHtml,
 } from './sanitize-html.js';
@@ -61,6 +62,42 @@ describe('sanitizeSignatureHtml (spec T31)', () => {
     expect(sanitizeSignatureHtml('<p> &nbsp; </p>')).toBeNull();
     expect(sanitizeSignatureHtml('<img src="https://x.org/logo.png">')).toBeNull();
     expect(sanitizeSignatureHtml('<script>x()</script>')).toBeNull();
+  });
+});
+
+const resolveSignature = (attribs: Record<string, string>) =>
+  attribs['data-inline-key'] === 'novo' || attribs['data-signature-image-id'] === 'meu'
+    ? (attribs['data-signature-image-id'] ?? 'id-novo')
+    : undefined;
+
+describe('imagens na assinatura (spec T33)', () => {
+  it('CT-11 aceita só img resolvida, sem src', () => {
+    expect(
+      sanitizeSignatureHtml(
+        '<p>Ana</p><img data-inline-key="novo" src="blob:x" alt="logo"><img data-signature-image-id="meu" src="https://x/a.png">',
+        resolveSignature,
+      ),
+    ).toBe(
+      '<p>Ana</p><img data-signature-image-id="id-novo" alt="logo" /><img data-signature-image-id="meu" />',
+    );
+  });
+
+  it('CT-11 descarta src, id desconhecido e data-attachment-id', () => {
+    expect(
+      sanitizeSignatureHtml(
+        '<p>Ana</p><img src="https://x/a.png"><img data-signature-image-id="alheio"><img data-attachment-id="a">',
+        resolveSignature,
+      ),
+    ).toBe('<p>Ana</p>');
+    expect(sanitizeSignatureHtml('<p>Ana</p><img data-signature-image-id="meu">')).toBe(
+      '<p>Ana</p>',
+    );
+  });
+
+  it('CT-11 imagem sozinha é conteúdo e os ids são listados', () => {
+    const html = sanitizeSignatureHtml('<img data-signature-image-id="meu">', resolveSignature)!;
+    expect(html).toBe('<img data-signature-image-id="meu" />');
+    expect(referencedSignatureImageIds(`${html}${html}`)).toEqual(['meu']);
   });
 });
 
