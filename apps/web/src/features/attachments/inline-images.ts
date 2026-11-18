@@ -1,7 +1,12 @@
 import {
+  INLINE_IMAGE_ACCEPT,
   INLINE_IMAGE_MAX_BYTES,
   INLINE_IMAGE_MAX_FILES,
+  SIGNATURE_IMAGE_ACCEPT,
+  SIGNATURE_IMAGE_MAX_BYTES,
+  SIGNATURE_IMAGE_MAX_FILES,
   inlineImageMimeType,
+  signatureImageMimeType,
 } from '@helpdesk/shared';
 import { useEffect, useState } from 'react';
 
@@ -30,6 +35,43 @@ export function inlineImageError(file: File, current: number): string | null {
   return null;
 }
 
+/** T33 RN-02 a RN-04: as regras da assinatura (PNG/JPG, 200 KB, 2 imagens). */
+export function signatureImageError(file: File, current: number): string | null {
+  if (!signatureImageMimeType(file.name))
+    return `${file.name}: só imagens PNG ou JPG na assinatura.`;
+  if (file.size > SIGNATURE_IMAGE_MAX_BYTES) {
+    return `${file.name}: imagem acima de ${SIGNATURE_IMAGE_MAX_BYTES / 1024} KB.`;
+  }
+  if (current >= SIGNATURE_IMAGE_MAX_FILES) {
+    return `No máximo ${SIGNATURE_IMAGE_MAX_FILES} imagens na assinatura.`;
+  }
+  return null;
+}
+
+/** O que o editor aceita como imagem: tipos do seletor e a checagem de cada arquivo. */
+export interface ImageRules {
+  accept: string;
+  /** `current`: quantas imagens o texto já tem. Devolve o motivo da recusa, ou `null`. */
+  check(file: File, current: number): string | null;
+}
+
+/** T32: imagens no texto das mensagens. */
+export const MESSAGE_IMAGE_RULES: ImageRules = {
+  accept: INLINE_IMAGE_ACCEPT,
+  check: inlineImageError,
+};
+
+/** T33: imagens da assinatura. */
+export const SIGNATURE_IMAGE_RULES: ImageRules = {
+  accept: SIGNATURE_IMAGE_ACCEPT,
+  check: signatureImageError,
+};
+
+/** Imagens no HTML do editor: as novas (`data-inline-key`) e as já salvas da assinatura (T33). */
+export function imageCountIn(html: string): number {
+  return [...html.matchAll(/<img\b[^>]*\sdata-(?:inline-key|signature-image-id)="/gi)].length;
+}
+
 /** Imagem colada costuma vir como `image.png`, mas pode vir sem extensão: o tipo decide. */
 export function withExtension(file: File): File {
   if (/\.[a-z0-9]+$/i.test(file.name)) return file;
@@ -48,6 +90,7 @@ export interface InlineUpload {
  * URL `blob:` para a prévia; o arquivo só sobe no envio.
  */
 export interface InlineImageStore {
+  rules: ImageRules;
   add(file: File): { key: string; url: string };
   /** As imagens que o HTML ainda referencia (as apagadas do texto ficam de fora, RN-08). */
   collect(html: string): InlineUpload;
@@ -55,9 +98,10 @@ export interface InlineImageStore {
   clear(): void;
 }
 
-export function createInlineImageStore(): InlineImageStore {
+export function createInlineImageStore(rules: ImageRules = MESSAGE_IMAGE_RULES): InlineImageStore {
   const images = new Map<string, { file: File; url: string }>();
   return {
+    rules,
     add(file) {
       const key = crypto.randomUUID();
       const url = URL.createObjectURL(file);
@@ -76,8 +120,8 @@ export function createInlineImageStore(): InlineImageStore {
 }
 
 /** Uma store por formulário, liberada ao desmontar. */
-export function useInlineImages(): InlineImageStore {
-  const [store] = useState(createInlineImageStore);
+export function useInlineImages(rules: ImageRules = MESSAGE_IMAGE_RULES): InlineImageStore {
+  const [store] = useState(() => createInlineImageStore(rules));
   useEffect(() => () => store.clear(), [store]);
   return store;
 }

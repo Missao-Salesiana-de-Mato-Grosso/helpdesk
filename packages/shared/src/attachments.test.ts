@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { ATTACHMENT_ACCEPT, attachmentMimeType, inlineImageMimeType } from './attachments.js';
+import {
+  ATTACHMENT_ACCEPT,
+  attachmentMimeType,
+  inlineImageMimeType,
+  signatureImageMimeType,
+} from './attachments.js';
 
 describe('attachmentMimeType', () => {
   it('usa a extensão, sem diferenciar maiúsculas', () => {
@@ -31,5 +36,14 @@ describe('inlineImageMimeType (spec T32 RN-03)', () => {
     expect(inlineImageMimeType('doc.pdf')).toBeNull();
     expect(inlineImageMimeType('imagem.svg')).toBeNull();
     expect(inlineImageMimeType('png')).toBeNull();
+  });
+});
+
+describe('signatureImageMimeType (spec T33 RN-02)', () => {
+  it('aceita só PNG e JPG', () => {
+    expect(signatureImageMimeType('logo.PNG')).toBe('image/png');
+    expect(signatureImageMimeType('logo.jpeg')).toBe('image/jpeg');
+    expect(signatureImageMimeType('anim.gif')).toBeNull();
+    expect(signatureImageMimeType('x.webp')).toBeNull();
   });
 });

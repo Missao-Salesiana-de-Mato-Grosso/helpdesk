@@ -100,6 +100,60 @@ describe('templates de notificação (T14)', () => {
     });
   });
 
+  describe('imagem na assinatura (spec T33)', () => {
+    const logo = {
+      id: 'sig1',
+      storageKey: 'attachments/s1',
+      filename: 'logo.png',
+      mimeType: 'image/png',
+      sizeBytes: 10,
+    };
+    const signed = payload({
+      signatureHtml: '<p>Ana Souza</p><img data-signature-image-id="sig1" alt="logo" />',
+      signatureImages: [logo],
+    });
+
+    it('CT-12 embutida: cid com largura limitada; nada no texto', () => {
+      const mail = renderNotification(
+        'reply',
+        signed,
+        true,
+        null,
+        new Map([['sig1', 'sig-sig1@x.org']]),
+      );
+      expect(mail.html).toContain(
+        '<img src="cid:sig-sig1@x.org" alt="logo" style="max-width:300px;height:auto">',
+      );
+      expect(mail.html).not.toContain('data-signature-image-id');
+      expect(mail.text).toContain('-- \nAna Souza\n');
+      expect(mail.text).not.toContain('imagem');
+    });
+
+    it('CT-12 não embutida: a imagem some sem aviso e o texto da assinatura fica', () => {
+      const mail = renderNotification('reply', signed, true, null, null);
+      expect(mail.html).toContain('Ana Souza');
+      expect(mail.html).not.toContain('<img');
+      expect(mail.text).not.toContain('Imagens grandes demais');
+    });
+
+    it('CT-12 assinatura só com imagem não embutida: sem bloco de assinatura', () => {
+      const onlyLogo = payload({
+        signatureHtml: '<img data-signature-image-id="sig1" />',
+        signatureImages: [logo],
+      });
+      const mail = renderNotification('reply', onlyLogo, true, null, null);
+      expect(mail.text).not.toContain('-- \n');
+      expect(mail).toEqual(renderNotification('reply', payload(), true));
+    });
+
+    it('CT-12 payload anterior à T33 renderiza como antes', () => {
+      const old = payload({ signatureHtml: '<p>Ana Souza</p>' });
+      expect(renderNotification('reply', old, true, null, null)).toEqual(
+        renderNotification('reply', old, true),
+      );
+    });
+  });
+
   describe('imagens no texto (spec T32)', () => {
     const image = {
       id: 'img-1',

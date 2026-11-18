@@ -137,6 +137,7 @@ model User {
   messages         TicketMessage[]
   events           TicketEvent[]
   cannedResponses  CannedResponse[]
+  signatureImages  SignatureImage[]
 
   @@index([companyId])
   @@index([accessRequestedAt], map: "users_access_requested_at_pending_idx")
@@ -290,6 +291,23 @@ model TicketMessage {
 
   @@index([ticketId, createdAt])
   @@map("ticket_messages")
+}
+
+/// T33: imagem da assinatura de e-mail do agente (`<img data-signature-image-id>` em `signature_html`).
+/// Não é apagada quando sai da assinatura: um e-mail pendente pode referenciá-la (RN-08).
+model SignatureImage {
+  id         String   @id @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  storageKey String   @map("storage_key")
+  filename   String
+  mimeType   String   @map("mime_type")
+  sizeBytes  Int      @map("size_bytes")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("signature_images")
 }
 
 model Attachment {

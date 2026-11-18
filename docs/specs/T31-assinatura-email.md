@@ -146,6 +146,7 @@ Fixture de tickets da spec T08–T10 §9 (req1, ag1 em G1 etc.). Os testes de no
 ## 10. Decisões tomadas na implementação
 
 - As decisões da §12 foram mantidas como escritas.
+- **Revisão pela T33 (18/11/2026):** a assinatura passou a aceitar até 2 imagens (`docs/specs/T33-imagem-assinatura.md`), e uma imagem sozinha conta como conteúdo, o que muda RN-04 e RN-05 desta spec.
 - **Rotas no `MeController`**, com `@Roles` por método. O controller continua liberado para pendentes e para quem está no 1º acesso, mas quem não tem papel de agente para no `@Roles` (403), como a matriz de permissões confere.
 - **Sanitizador próprio** (`sanitizeSignatureHtml`, em `common/sanitize-html.ts`), derivado da allowlist do corpo. Tag descartada perde a marcação e mantém o texto (`<h1>Título</h1>` vira `Título`), como no corpo das mensagens.
 - **O `enqueue` só lê a assinatura quando há um `reply` a gravar** e a mensagem veio do portal. Sem assinatura, o campo `signatureHtml` nem entra no payload, então as linhas novas sem assinatura ficam iguais às antigas (RN-10).

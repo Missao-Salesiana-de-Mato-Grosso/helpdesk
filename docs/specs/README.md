@@ -12,6 +12,7 @@ Uma spec por tarefa (ou grupo de tarefas) do backlog em `docs/discovery/05-plano
 | [T22-onboarding-liberacao.md](T22-onboarding-liberacao.md) | T22 (ADR-011; depende da T15)      | implementada (RN-01–20; RN-21–26 adiadas) | ter 28/10       |
 | [T31-assinatura-email.md](T31-assinatura-email.md)         | T31 (#45; depende da T14)          | implementada                              | seg 16/11       |
 | [T32-imagens-no-texto.md](T32-imagens-no-texto.md)         | T32 (#47; depende da T13 e T14)    | implementada                              | qua 18/11       |
+| [T33-imagem-assinatura.md](T33-imagem-assinatura.md)       | T33 (#50; depende da T31 e T32)    | implementada                              | qua 18/11       |
 
 ## Como usar uma spec numa sessão do Claude Code
 

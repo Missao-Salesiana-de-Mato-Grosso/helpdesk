@@ -9,6 +9,9 @@ import { createTicketsFixture, type TicketsFixture } from './setup/tickets-fixtu
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- corpo do Supertest é `any`.
 const signatureOf = (res: Response) => res.body as SignatureResponse;
 
+const imageIdIn = (html: string | null) =>
+  /data-signature-image-id="([^"]+)"/.exec(html ?? '')?.[1];
+
 describe('assinatura de e-mail — T31 (e2e)', () => {
   let t: TestApp;
   let f: TicketsFixture;
@@ -38,6 +41,10 @@ describe('assinatura de e-mail — T31 (e2e)', () => {
       .put('/api/me/signature')
       .set('Authorization', await as(user))
       .send(body);
+  const image = async (user: 'ag1' | 'ag2', id: string) =>
+    http()
+      .get(`/api/me/signature/images/${id}`)
+      .set('Authorization', await as(user));
   const stored = async (user: 'ag1' | 'ag2') =>
     (await t.prisma.user.findUniqueOrThrow({ where: { id: f.users[user] } })).signatureHtml;
 
@@ -102,5 +109,110 @@ describe('assinatura de e-mail — T31 (e2e)', () => {
   it('RN-02 solicitante não lê nem grava assinatura', async () => {
     expect((await get('req1')).status).toBe(403);
     expect((await put('req1', { signatureHtml: '<p>x</p>' })).status).toBe(403);
+  });
+  describe('imagem na assinatura (T33)', () => {
+    const png = Buffer.from('logo de teste');
+    type Upload = [Buffer, string];
+    const putWithImages = async (user: 'ag1' | 'ag2', data: object, images: Upload[]) => {
+      let req = http()
+        .put('/api/me/signature')
+        .set('Authorization', await as(user))
+        .field('data', JSON.stringify(data));
+      for (const [buffer, name] of images) req = req.attach('inline', buffer, name);
+      return req;
+    };
+    const withLogo = {
+      signatureHtml: '<p>Ana</p><img data-inline-key="logo" src="blob:x" alt="logo">',
+      inlineImages: ['logo'],
+    };
+
+    it('T33 CT-01 PUT multipart com texto e PNG: imagem gravada e referenciada pelo id', async () => {
+      const res = await putWithImages('ag1', withLogo, [[png, 'logo.png']]);
+      expect(res.status).toBe(200);
+      const [row] = await t.prisma.signatureImage.findMany();
+      expect(row).toMatchObject({
+        userId: f.users.ag1,
+        filename: 'logo.png',
+        mimeType: 'image/png',
+      });
+      expect(signatureOf(res).signatureHtml).toBe(
+        `<p>Ana</p><img data-signature-image-id="${row!.id}" alt="logo" />`,
+      );
+      expect(await stored('ag1')).toBe(signatureOf(res).signatureHtml);
+    });
+
+    it('T33 CT-02 salvar de novo mantendo a imagem pelo id: sem registro novo', async () => {
+      const first = await putWithImages('ag1', withLogo, [[png, 'logo.png']]);
+      const id = imageIdIn(signatureOf(first).signatureHtml)!;
+      const res = await put('ag1', {
+        signatureHtml: `<p>Ana Souza</p><img data-signature-image-id="${id}" src="blob:y">`,
+      });
+      expect(res.status).toBe(200);
+      expect(signatureOf(res).signatureHtml).toBe(
+        `<p>Ana Souza</p><img data-signature-image-id="${id}" />`,
+      );
+      expect(await t.prisma.signatureImage.count()).toBe(1);
+    });
+
+    it('T33 CT-03 id de outro usuário e img com src: descartados; GET só da própria imagem', async () => {
+      const first = await putWithImages('ag1', withLogo, [[png, 'logo.png']]);
+      const id = imageIdIn(signatureOf(first).signatureHtml)!;
+      const res = await put('ag2', {
+        signatureHtml: `<p>Bruno</p><img data-signature-image-id="${id}"><img src="https://x.org/a.png">`,
+      });
+      expect(signatureOf(res).signatureHtml).toBe('<p>Bruno</p>');
+
+      const own = await image('ag1', id);
+      expect(own.status).toBe(200);
+      expect(own.headers['x-content-type-options']).toBe('nosniff');
+      expect((await image('ag2', id)).status).toBe(404);
+    });
+
+    it('T33 CT-04 GIF → 415 e PNG acima de 200 KB → 413, nada gravado', async () => {
+      const gif = await putWithImages('ag1', withLogo, [[png, 'logo.gif']]);
+      expect(gif.status).toBe(415);
+      expect(gif.body.code).toBe('UNSUPPORTED_FILE_TYPE');
+      const big = await putWithImages('ag1', withLogo, [
+        [Buffer.alloc(200 * 1024 + 1), 'logo.png'],
+      ]);
+      expect(big.status).toBe(413);
+      expect(big.body.code).toBe('FILE_TOO_LARGE');
+      expect(await t.prisma.signatureImage.count()).toBe(0);
+      expect(await stored('ag1')).toBeNull();
+    });
+
+    it('T33 CT-05 três imagens referenciadas → 422', async () => {
+      const first = await putWithImages(
+        'ag1',
+        {
+          signatureHtml: '<img data-inline-key="a"><img data-inline-key="b">',
+          inlineImages: ['a', 'b'],
+        },
+        [
+          [png, 'a.png'],
+          [png, 'b.jpg'],
+        ],
+      );
+      expect(first.status).toBe(200);
+      const html = signatureOf(first).signatureHtml!;
+      const res = await putWithImages(
+        'ag1',
+        { signatureHtml: `${html}<img data-inline-key="c">`, inlineImages: ['c'] },
+        [[png, 'c.png']],
+      );
+      expect(res.status).toBe(422);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+      expect(await t.prisma.signatureImage.count()).toBe(2);
+    });
+
+    it('T33 CT-06 assinatura só com imagem é gravada', async () => {
+      const res = await putWithImages(
+        'ag1',
+        { signatureHtml: '<img data-inline-key="logo">', inlineImages: ['logo'] },
+        [[png, 'logo.png']],
+      );
+      expect(res.status).toBe(200);
+      expect(signatureOf(res).signatureHtml).toMatch(/^<img data-signature-image-id="[^"]+" \/>$/);
+    });
   });
 });

@@ -1,13 +1,11 @@
 import { Input, Text } from '@mantine/core';
-import { INLINE_IMAGE_ACCEPT } from '@helpdesk/shared';
 import { Link, RichTextEditor, type RichTextEditorLabels } from '@mantine/tiptap';
 import Image from '@tiptap/extension-image';
 import { useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { useEffect, useId, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import {
-  inlineImageError,
-  inlineKeysIn,
+  imageCountIn,
   withExtension,
   type InlineImageStore,
 } from '../features/attachments/inline-images.ts';
@@ -57,7 +55,8 @@ export interface HtmlEditorProps {
 
 /**
  * Imagem do texto (T32): a prévia usa `blob:` e a chave vai em `data-inline-key`, que o servidor
- * troca pelo id do anexo. `data:` (base64) não entra.
+ * troca pelo id do anexo. `data:` (base64) não entra. Na assinatura (T33), a imagem já salva
+ * mantém o `data-signature-image-id`.
  */
 const InlineImage = Image.extend({
   addAttributes() {
@@ -69,6 +68,14 @@ const InlineImage = Image.extend({
         renderHTML: (attributes) =>
           typeof attributes['inlineKey'] === 'string'
             ? { 'data-inline-key': attributes['inlineKey'] }
+            : {},
+      },
+      signatureImageId: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-signature-image-id'),
+        renderHTML: (attributes) =>
+          typeof attributes['signatureImageId'] === 'string'
+            ? { 'data-signature-image-id': attributes['signatureImageId'] }
             : {},
       },
     };
@@ -143,11 +150,11 @@ export function HtmlEditor({
   useEffect(() => {
     insertImages.current = (files) => {
       if (!editor || !images) return;
-      let count = inlineKeysIn(editor.getHTML()).length;
+      let count = imageCountIn(editor.getHTML());
       const errors: string[] = [];
       for (const picked of files) {
         const file = withExtension(picked);
-        const problem = inlineImageError(file, count);
+        const problem = images.rules.check(file, count);
         if (problem) {
           errors.push(problem);
           continue;
@@ -216,7 +223,7 @@ export function HtmlEditor({
         <input
           ref={fileInput}
           type="file"
-          accept={INLINE_IMAGE_ACCEPT}
+          accept={images.rules.accept}
           multiple
           hidden
           aria-label="Arquivo de imagem"

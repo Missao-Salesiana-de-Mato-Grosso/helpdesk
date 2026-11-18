@@ -355,6 +355,14 @@ const MATRIX: RouteCase[] = [
     body: () => ({ signatureHtml: '<p>Assinatura</p>' }),
     expected: AGENT_ONLY,
   },
+  // T33 (CT-10): imagem da assinatura — só agentes, e só a própria (a de ninguém → 404).
+  {
+    method: 'get',
+    path: () => '/api/me/signature/images/0b6f2a52-6f0e-4d7e-9a43-3c1d1a2b3c4d',
+    label: '/api/me/signature/images/:id (inexistente)',
+    template: '/api/me/signature/images/:id',
+    expected: { ...AGENT_ONLY, agente: 404, supervisor: 404, admin: 404 },
+  },
   // T25: cadastros de referência — só admin.
   ...(['companies', 'departments', 'groups', 'categories'] as const).flatMap(
     (kind): RouteCase[] => [

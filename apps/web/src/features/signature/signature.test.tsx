@@ -5,19 +5,33 @@ import { useAuth } from 'react-oidc-context';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HtmlEditorProps } from '../../components/HtmlEditor.tsx';
 import { AppRoutes } from '../../routes.tsx';
-import { callsTo, jsonBody, stubApi, type Handler } from '../../test/api.ts';
+import { callsTo, formBody, jsonBody, stubApi, type Handler } from '../../test/api.ts';
 import { fakeAuth, jsonResponse, renderWithProviders } from '../../test/render.tsx';
 import { me } from '../../test/tickets.ts';
 
 vi.mock('react-oidc-context', () => ({ useAuth: vi.fn() }));
 
 // O ProseMirror não aceita digitação pelo jsdom; o editor real tem teste próprio (HtmlEditor.test).
+// T33: o editor falso insere a imagem pela store, como o real faz no botão, no colar e no arrastar.
 vi.mock('../../components/HtmlEditor.tsx', () => ({
-  HtmlEditor: ({ label, value, onChange }: HtmlEditorProps) => (
-    <label>
-      {label}
-      <textarea value={value} onChange={(event) => onChange(event.currentTarget.value)} />
-    </label>
+  HtmlEditor: ({ label, value, onChange, images }: HtmlEditorProps) => (
+    <div>
+      <label>
+        {label}
+        <textarea value={value} onChange={(event) => onChange(event.currentTarget.value)} />
+      </label>
+      {images && (
+        <button
+          type="button"
+          onClick={() => {
+            const { key, url } = images.add(new File(['png'], 'logo.png', { type: 'image/png' }));
+            onChange(`${value}<img src="${url}" data-inline-key="${key}" alt="logo">`);
+          }}
+        >
+          Inserir imagem
+        </button>
+      )}
+    </div>
   ),
 }));
 
@@ -114,5 +128,57 @@ describe('Minha assinatura (spec T31)', () => {
     expect(await screen.findByRole('menuitem', { name: 'Sair' })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Minha assinatura' })).not.toBeInTheDocument();
     await waitFor(() => expect(callsTo(fetchMock, 'GET /api/me/signature')).toHaveLength(0));
+  });
+
+  it('T33 CT-14 inserir imagem e salvar manda multipart com inline e inlineImages', async () => {
+    vi.stubGlobal(
+      'URL',
+      Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:logo'), revokeObjectURL: vi.fn() }),
+    );
+    let body: ReturnType<typeof formBody>;
+    stubApi({
+      ...base(agent),
+      'GET /api/me/signature': () => jsonResponse(200, { signatureHtml: null }),
+      'PUT /api/me/signature': (init) => {
+        body = formBody(init);
+        return jsonResponse(200, { signatureHtml: '<p>Ana</p>' });
+      },
+    });
+    renderWithProviders(<AppRoutes />, { route: '/assinatura' });
+
+    await userEvent.type(await screen.findByLabelText('Assinatura'), '<p>Ana</p>');
+    await userEvent.click(screen.getByRole('button', { name: 'Inserir imagem' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+
+    await waitFor(() => expect(body).toBeDefined());
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- JSON do campo data.
+    const data = body!.data as { signatureHtml: string; inlineImages: string[] };
+    expect(body!.inline).toEqual(['logo.png']);
+    expect(data.inlineImages).toHaveLength(1);
+    expect(data.signatureHtml).toContain(`data-inline-key="${data.inlineImages[0]}"`);
+  });
+
+  it('T33 CT-15 ao abrir, a imagem salva é baixada com o token e aparece na prévia', async () => {
+    vi.stubGlobal(
+      'URL',
+      Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:salva'), revokeObjectURL: vi.fn() }),
+    );
+    const fetchMock = stubApi({
+      ...base(agent),
+      'GET /api/me/signature': () =>
+        jsonResponse(200, {
+          signatureHtml: '<p>Ana</p><img data-signature-image-id="sig1" alt="logo" />',
+        }),
+      'GET /api/me/signature/images/sig1': () => new Response('png', { status: 200 }),
+    });
+    renderWithProviders(<AppRoutes />, { route: '/assinatura' });
+
+    const preview = await screen.findByRole('region', { name: 'Prévia no e-mail' });
+    expect(within(preview).getByRole('img', { name: 'logo' })).toHaveAttribute('src', 'blob:salva');
+    const [, init] = callsTo(fetchMock, 'GET /api/me/signature/images/sig1')[0]!;
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token-123');
+    expect(screen.getByLabelText<HTMLTextAreaElement>('Assinatura').value).toContain(
+      'src="blob:salva" style="max-width:300px" data-signature-image-id="sig1"',
+    );
   });
 });

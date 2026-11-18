@@ -9,6 +9,7 @@ import type { Env } from '../config/env.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { GroupsService } from '../groups/groups.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { SignatureService } from '../users/signature.service.js';
 import { UsersService, type UserContact } from '../users/users.service.js';
 import {
   describeFailure,
@@ -136,6 +137,7 @@ export class NotificationService {
     private readonly companies: CompaniesService,
     private readonly categories: CategoriesService,
     private readonly attachments: AttachmentsService,
+    private readonly signatures: SignatureService,
     @Inject(MAILER) private readonly mailer: Mailer,
     config: ConfigService<Env, true>,
   ) {
@@ -168,7 +170,11 @@ export class NotificationService {
       event.type === 'public_reply' &&
       event.via === 'portal' &&
       recipients.some(({ template }) => template === 'reply');
-    const signatureHtml = signed ? await this.users.signatureOf(event.actorId) : null;
+    const signatureHtml = signed ? await this.signatures.signatureOf(event.actorId) : null;
+    // T33 RN-11: as imagens da assinatura também ficam congeladas.
+    const signatureImages = signatureHtml
+      ? await this.signatures.imagesIn(event.actorId, signatureHtml)
+      : [];
 
     await tx.notification.createMany({
       data: recipients.map(({ template, to }) => {
@@ -194,6 +200,7 @@ export class NotificationService {
           companyName: companies[0]?.name ?? null,
           categoryName: categories[0]?.name ?? null,
           ...(template === 'reply' && signatureHtml ? { signatureHtml } : {}),
+          ...(template === 'reply' && signatureImages.length > 0 ? { signatureImages } : {}),
         };
         return {
           ticketId: ticket.id,
@@ -372,7 +379,13 @@ export class NotificationService {
       : [];
 
     const files = await this.openAttachments(row.id, payload);
-    const rendered = renderNotification(row.template, payload, files.attached, files.inlineCids);
+    const rendered = renderNotification(
+      row.template,
+      payload,
+      files.attached,
+      files.inlineCids,
+      files.signatureCids,
+    );
 
     return {
       from: this.from,
@@ -431,8 +444,9 @@ export class NotificationService {
   }
 
   /**
-   * RN-19 e T32 RN-17/RN-18: primeiro as imagens do texto que o corpo referencia (embutidas por
-   * `cid`), depois os anexos comuns, cada grupo só se couber no que sobra do teto.
+   * RN-19, T32 RN-17/RN-18 e T33 RN-12: as imagens da assinatura, depois as imagens do texto que
+   * o corpo referencia (as duas embutidas por `cid`), depois os anexos comuns. Cada grupo só vai
+   * se couber no que sobra do teto.
    */
   private async openAttachments(
     id: string,
@@ -441,28 +455,38 @@ export class NotificationService {
     attachments: OutgoingMail['attachments'];
     attached: boolean;
     inlineCids: Map<string, string> | null;
+    signatureCids: Map<string, string> | null;
   }> {
     const referenced = new Set(referencedImageIds(payload.bodyHtml ?? ''));
     const inline = payload.attachments.filter(
       (a) => a.inline === true && a.id !== undefined && referenced.has(a.id),
     );
     const regular = payload.attachments.filter((a) => a.inline !== true);
+    const signature = payload.signatureHtml ? (payload.signatureImages ?? []) : [];
 
-    const cidOf = (a: PayloadAttachment) => `${a.id}@${this.messageIdDomain}`;
-    const embedded =
-      inline.length === 0
-        ? []
-        : bytes(inline) <= this.maxAttachmentBytes
-          ? await this.openAll(id, inline, cidOf)
-          : null;
-    const budget = this.maxAttachmentBytes - (embedded ? bytes(inline) : 0);
-    const files =
-      regular.length === 0 ? [] : bytes(regular) <= budget ? await this.openAll(id, regular) : null;
+    let remaining = this.maxAttachmentBytes;
+    const take = async (
+      list: PayloadAttachment[],
+      cidOf?: (a: PayloadAttachment) => string,
+    ): Promise<OutgoingMail['attachments'] | null> => {
+      if (list.length === 0) return [];
+      if (bytes(list) > remaining) return null;
+      const opened = await this.openAll(id, list, cidOf);
+      if (opened) remaining -= bytes(list);
+      return opened;
+    };
+
+    const signatureCidOf = (a: PayloadAttachment) => `sig-${a.id}@${this.messageIdDomain}`;
+    const inlineCidOf = (a: PayloadAttachment) => `${a.id}@${this.messageIdDomain}`;
+    const signed = await take(signature, signatureCidOf);
+    const embedded = await take(inline, inlineCidOf);
+    const files = await take(regular);
 
     return {
-      attachments: [...(embedded ?? []), ...(files ?? [])],
+      attachments: [...(signed ?? []), ...(embedded ?? []), ...(files ?? [])],
       attached: files !== null,
-      inlineCids: embedded ? new Map(inline.map((a) => [a.id!, cidOf(a)])) : null,
+      inlineCids: embedded ? new Map(inline.map((a) => [a.id!, inlineCidOf(a)])) : null,
+      signatureCids: signed ? new Map(signature.map((a) => [a.id, signatureCidOf(a)])) : null,
     };
   }
 
