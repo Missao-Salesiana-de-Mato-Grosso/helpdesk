@@ -171,6 +171,11 @@ export class AttachmentsService {
     return { storageKey, filename: file.filename, mimeType, sizeBytes: buffer.length };
   }
 
+  /** T34: apaga um objeto do storage (idempotente). Lança se o storage falhar; não loga nada. */
+  async deleteObject(storageKey: string): Promise<void> {
+    await this.storage.delete(storageKey);
+  }
+
   /** Remove do storage arquivos cuja gravação no banco não aconteceu. Melhor esforço. */
   async discard(files: readonly StoredFile[]): Promise<void> {
     for (const file of files) {
