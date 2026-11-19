@@ -65,7 +65,7 @@ export function MyTicketsPage() {
         />
         <TextInput
           aria-label="Buscar"
-          placeholder="Buscar por número ou assunto"
+          placeholder="Buscar por número, assunto, nome…"
           value={search}
           onChange={(event) => {
             setSearch(event.currentTarget.value);

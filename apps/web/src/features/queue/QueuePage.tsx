@@ -136,7 +136,7 @@ function Queue({ slug }: { slug: QueueSlug }) {
       <Group align="flex-end">
         <TextInput
           label="Buscar"
-          placeholder="Número ou assunto"
+          placeholder="Número, assunto, nome…"
           value={search}
           onChange={(event) => reset(setSearch)(event.currentTarget.value)}
           w={220}
