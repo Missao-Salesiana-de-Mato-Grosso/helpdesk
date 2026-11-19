@@ -4,6 +4,7 @@ import { UserCacheModule } from '../auth/user-cache.module.js';
 import { CompaniesModule } from '../companies/companies.module.js';
 import { DepartmentsModule } from '../departments/departments.module.js';
 import { AccessRequestsCron } from './access-requests.cron.js';
+import { SignatureImagesCron } from './signature-images.cron.js';
 import { SignatureService } from './signature.service.js';
 import { UsersController } from './users.controller.js';
 import { UsersService } from './users.service.js';
@@ -15,7 +16,7 @@ import { UsersService } from './users.service.js';
   // AttachmentsModule: storage das imagens da assinatura (T33).
   imports: [UserCacheModule, CompaniesModule, DepartmentsModule, AttachmentsModule],
   controllers: [UsersController],
-  providers: [UsersService, SignatureService, AccessRequestsCron],
+  providers: [UsersService, SignatureService, AccessRequestsCron, SignatureImagesCron],
   exports: [UsersService, SignatureService],
 })
 export class UsersModule {}

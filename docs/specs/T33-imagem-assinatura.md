@@ -128,4 +128,4 @@ Nenhuma variável nova. Constantes em `packages/shared`: `SIGNATURE_IMAGE_MAX_BY
 
 ## 11. Pendências
 
-- Limpeza das imagens que saíram da assinatura e não são mais referenciadas por e-mails pendentes (RN-08).
+- ~~Limpeza das imagens que saíram da assinatura (RN-08)~~: feita na T34 (`docs/specs/T34-limpeza-imagens-assinatura.md`).

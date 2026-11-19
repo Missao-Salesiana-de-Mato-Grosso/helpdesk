@@ -38,6 +38,23 @@ const imageNotFound = () =>
 const invalid = (message: string) =>
   new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, ApiErrorCode.VALIDATION_ERROR, message);
 
+/** T34 RN-01: folga entre criar a imagem e ela poder ser apagada. */
+const CLEANUP_MIN_AGE_MS = 24 * 60 * 60 * 1000;
+/** T34 RN-02: imagens apagadas por execução. */
+export const CLEANUP_BATCH = 200;
+
+/** Ids em `signatureImages` de um payload da outbox (formato da T33 RN-11), sem confiar no JSON. */
+function payloadImageIds(payload: unknown): string[] {
+  if (typeof payload !== 'object' || payload === null || !('signatureImages' in payload)) return [];
+  const images: unknown = payload.signatureImages;
+  if (!Array.isArray(images)) return [];
+  return images.flatMap((image: unknown) =>
+    typeof image === 'object' && image !== null && 'id' in image && typeof image.id === 'string'
+      ? [image.id]
+      : [],
+  );
+}
+
 const IMAGE_SELECT = {
   id: true,
   storageKey: true,
@@ -137,6 +154,44 @@ export class SignatureService {
       select: IMAGE_SELECT,
     });
     return ids.flatMap((id) => images.filter((image) => image.id === id));
+  }
+
+  /**
+   * T34 RN-01 a RN-03: apaga as imagens que não estão na assinatura atual do dono nem em um
+   * `reply` `pending` ou `failed`, criadas há mais de 24 h. Arquivo primeiro, depois a linha;
+   * se o storage falhar, a linha fica para a próxima execução.
+   */
+  async deleteUnusedImages(now = new Date()): Promise<{ deleted: number; failed: number }> {
+    const candidates = await this.prisma.signatureImage.findMany({
+      where: { createdAt: { lt: new Date(now.getTime() - CLEANUP_MIN_AGE_MS) } },
+      select: { id: true, storageKey: true, user: { select: { signatureHtml: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+    const unused = candidates.filter(
+      (image) => !referencedSignatureImageIds(image.user.signatureHtml ?? '').includes(image.id),
+    );
+    if (unused.length === 0) return { deleted: 0, failed: 0 };
+
+    const pending = await this.prisma.notification.findMany({
+      where: { template: 'reply', status: { in: ['pending', 'failed'] } },
+      select: { payload: true },
+    });
+    const held = new Set(pending.flatMap((row) => payloadImageIds(row.payload)));
+    const deletable = unused.filter((image) => !held.has(image.id)).slice(0, CLEANUP_BATCH);
+
+    let deleted = 0;
+    let failed = 0;
+    for (const image of deletable) {
+      try {
+        await this.attachments.deleteObject(image.storageKey);
+      } catch {
+        failed += 1;
+        continue;
+      }
+      await this.prisma.signatureImage.deleteMany({ where: { id: image.id } });
+      deleted += 1;
+    }
+    return { deleted, failed };
   }
 
   /** RN-09: só a própria imagem; qualquer outra coisa → 404. */
