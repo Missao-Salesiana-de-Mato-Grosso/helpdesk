@@ -212,6 +212,13 @@ const MATRIX: RouteCase[] = [
     expected: AGENT_ONLY,
   },
   {
+    // T35 CT-01: pedido válido responde 200 mesmo com falhas por ticket (RN-13).
+    method: 'patch',
+    path: '/api/tickets/bulk',
+    body: (ref) => ({ tickets: [{ id: ref.ticketId, version: 1 }], changes: { priority: 'high' } }),
+    expected: AGENT_ONLY,
+  },
+  {
     method: 'patch',
     path: (ref) => `/api/tickets/${ref.foreignTicketId}`,
     label: 'PATCH /api/tickets/:id (fora do escopo)',

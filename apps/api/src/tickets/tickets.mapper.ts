@@ -49,6 +49,7 @@ export function toTicketSummary(row: TicketSummaryRow, agentView: boolean): Tick
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     lastMessageAt: iso(row.messages[0]?.createdAt ?? null),
+    version: row.version,
     sla: agentView ? toSla(row) : null,
   };
 }

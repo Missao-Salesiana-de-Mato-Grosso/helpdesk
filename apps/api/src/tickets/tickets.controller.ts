@@ -13,6 +13,9 @@ import {
   UploadedFiles,
 } from '@nestjs/common';
 import {
+  bulkUpdateTicketsSchema,
+  type BulkUpdateTicketsInput,
+  type BulkUpdateTicketsResponse,
   createMessageSchema,
   createTicketSchema,
   updateTicketSchema,
@@ -65,6 +68,17 @@ export class TicketsController {
   @Roles('agente', 'supervisor', 'admin')
   counters(@CurrentUser() user: CurrentUserType): Promise<TicketCounters> {
     return this.tickets.counters(user);
+  }
+
+  /** T35. Declarada antes de `PATCH :id`, senão `bulk` casaria como id (CT-18). */
+  @Patch('bulk')
+  @Roles('agente', 'supervisor', 'admin')
+  bulkUpdate(
+    @CurrentUser() user: CurrentUserType,
+    @Body(new ZodValidationPipe(bulkUpdateTicketsSchema)) body: BulkUpdateTicketsInput,
+    @Req() request: Request,
+  ): Promise<BulkUpdateTicketsResponse> {
+    return this.tickets.bulkUpdate(user, body, clientIp(request));
   }
 
   @Get(':id')

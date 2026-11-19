@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createMessageSchema, createTicketSchema, listTicketsQuerySchema } from './tickets.js';
+import {
+  MAX_BULK_TICKETS,
+  bulkUpdateTicketsSchema,
+  createMessageSchema,
+  createTicketSchema,
+  listTicketsQuerySchema,
+} from './tickets.js';
 
 const uuid = '0b6f2a52-6f0e-4d7e-9a43-3c1d1a2b3c4d';
 
@@ -106,5 +112,38 @@ describe('inlineImages (spec T32)', () => {
     expect(message(['"><script>']).success).toBe(false);
     expect(message(['']).success).toBe(false);
     expect(message(['x'.repeat(65)]).success).toBe(false);
+  });
+});
+
+describe('bulkUpdateTicketsSchema (spec T35)', () => {
+  const ticket = (n: number) => ({
+    id: `0b6f2a52-6f0e-4d7e-9a43-${n.toString().padStart(12, '0')}`,
+    version: 1,
+  });
+  const many = (count: number) => Array.from({ length: count }, (_, n) => ticket(n));
+  const valid = (body: unknown) => bulkUpdateTicketsSchema.safeParse(body).success;
+
+  it('CT-19 aceita 1 e 100 chamados, recusa 0, 101 e repetidos', () => {
+    const changes = { priority: 'high' };
+    expect(valid({ tickets: many(1), changes })).toBe(true);
+    expect(valid({ tickets: many(MAX_BULK_TICKETS), changes })).toBe(true);
+    expect(valid({ tickets: [], changes })).toBe(false);
+    expect(valid({ tickets: many(MAX_BULK_TICKETS + 1), changes })).toBe(false);
+    expect(valid({ tickets: [ticket(1), ticket(1)], changes })).toBe(false);
+    expect(valid({ tickets: [{ id: 'abc', version: 1 }], changes })).toBe(false);
+  });
+
+  it('CT-19 exige exatamente um campo e aceita assigneeId null', () => {
+    const tickets = many(2);
+    expect(valid({ tickets, changes: { assigneeId: null } })).toBe(true);
+    expect(valid({ tickets, changes: { companyId: uuid } })).toBe(true);
+    expect(valid({ tickets, changes: {} })).toBe(false);
+    expect(valid({ tickets, changes: { priority: 'high', status: 'closed' } })).toBe(false);
+    expect(valid({ tickets, changes: { groupId: uuid, assigneeId: uuid } })).toBe(false);
+    expect(valid({ tickets, changes: { companyId: uuid, applyCompanyToRequester: true } })).toBe(
+      false,
+    );
+    expect(valid({ tickets, changes: { subject: 'x' } })).toBe(false);
+    expect(valid({ tickets, changes: { priority: 'high' }, extra: 1 })).toBe(false);
   });
 });

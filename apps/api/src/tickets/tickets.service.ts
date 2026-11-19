@@ -4,6 +4,10 @@ import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   ApiErrorCode,
+  type BulkUpdateFailure,
+  type BulkUpdateResult,
+  type BulkUpdateTicketsInput,
+  type BulkUpdateTicketsResponse,
   type CreateMessageInput,
   type CreateTicketData,
   type ListTicketsQuery,
@@ -255,9 +259,96 @@ export class TicketsService {
     input: UpdateTicketInput,
     ip: string | null,
   ): Promise<TicketDetail> {
+    await this.applyUpdate(actor, id, input, ip);
+    return this.toDetail(await this.tickets.loadAfterWrite(actor, id), actor);
+  }
+
+  /**
+   * T35: aplica a mesma alteração a vários tickets, cada um na própria transação e com as regras
+   * do `PATCH` individual (RN-05). A falha de um não impede os outros (RN-06).
+   */
+  async bulkUpdate(
+    actor: TicketActor,
+    input: BulkUpdateTicketsInput,
+    ip: string | null,
+  ): Promise<BulkUpdateTicketsResponse> {
+    const { changes } = input;
+    // RN-04: referência inválida derruba o pedido inteiro, antes de alterar qualquer ticket.
+    if (changes.groupId !== undefined && !(await this.groups.isActive(changes.groupId))) {
+      throw inactiveReference('Grupo inexistente ou inativo.');
+    }
+    if (
+      changes.categoryId !== undefined &&
+      !(await this.categories.findActive(changes.categoryId))
+    ) {
+      throw inactiveReference('Categoria inexistente ou inativa.');
+    }
+    if (changes.companyId !== undefined && !(await this.companies.isActive(changes.companyId))) {
+      throw inactiveReference('Unidade inexistente ou inativa.');
+    }
+
+    const results: BulkUpdateResult[] = [];
+    for (const { id, version } of input.tickets) {
+      const located: { number?: number } = {};
+      try {
+        const applied = await this.applyUpdate(actor, id, { ...changes, version }, ip, located);
+        results.push({ id, ok: true, ...applied });
+      } catch (error) {
+        results.push(this.bulkFailure(id, located.number, error));
+      }
+    }
+
+    const succeeded = results.filter((result) => result.ok).length;
+    const failed = results.length - succeeded;
+    // RN-12: só contagens e o nome do campo, nunca valores nem dados dos tickets.
+    this.logger.log(
+      `Alteração em lote por ${actor.id}: ${results.length} chamados, campo ${Object.keys(changes).join(', ')}, ${succeeded} com sucesso, ${failed} com falha`,
+    );
+    return { results, succeeded, failed };
+  }
+
+  /** RN-08: fora do escopo volta sem `number`; erro inesperado vira `INTERNAL_ERROR`. */
+  private bulkFailure(id: string, number: number | undefined, error: unknown): BulkUpdateFailure {
+    if (error instanceof ApiException) {
+      const { code } = error;
+      return {
+        id,
+        ok: false,
+        ...(code === ApiErrorCode.NOT_FOUND || number === undefined ? {} : { number }),
+        code,
+        message: error.message,
+      };
+    }
+    this.logger.error(
+      `Alteração em lote do ticket ${id} falhou: ${error instanceof Error ? error.message : 'erro'}`,
+      error instanceof Error ? error.stack : undefined,
+    );
+    return {
+      id,
+      ok: false,
+      ...(number === undefined ? {} : { number }),
+      code: ApiErrorCode.INTERNAL_ERROR,
+      message: 'Erro inesperado ao alterar o chamado.',
+    };
+  }
+
+  /**
+   * Miolo do `PATCH` (RN-21 a RN-29): trava, valida, grava e enfileira na transação; emite os
+   * eventos de domínio depois do commit. `located` recebe o número assim que o ticket é achado no
+   * escopo, para a ação em lote identificar a falha (T35 RN-14).
+   */
+  private async applyUpdate(
+    actor: TicketActor,
+    id: string,
+    input: UpdateTicketInput,
+    ip: string | null,
+    located: { number?: number } = {},
+  ): Promise<{ number: number; changed: boolean; version: number }> {
     if (!UUID.test(id)) throw notFound();
-    const emits = await this.tickets.transaction(async (tx) => {
+    const { emits, outcome } = await this.tickets.transaction(async (tx) => {
       const ticket = await this.lockOrThrow(tx, actor, id);
+      located.number = ticket.number;
+      const unchanged = { number: ticket.number, changed: false, version: ticket.version };
       if (ticket.status === 'closed') throw ticketClosed();
       if (input.version !== ticket.version) throw versionConflict(ticket.version);
 
@@ -331,7 +422,7 @@ export class TicketsService {
         });
       }
 
-      if (events.length === 0) return [];
+      if (events.length === 0) return { emits: [], outcome: unchanged };
       await this.applySla(ticket, changes);
       await this.tickets.update(tx, id, changes, true);
       for (const event of events) {
@@ -357,11 +448,14 @@ export class TicketsService {
           changes: events.map((e) => e.type),
         } satisfies TicketUpdatedEvent,
       });
-      return pending;
+      return {
+        emits: pending,
+        outcome: { number: ticket.number, changed: true, version: ticket.version + 1 },
+      };
     });
 
     this.emitAll(emits);
-    return this.toDetail(await this.tickets.loadAfterWrite(actor, id), actor);
+    return outcome;
   }
 
   /** RN-31 a RN-39. */
