@@ -28,6 +28,21 @@ export type MessageVia = (typeof MESSAGE_VIAS)[number];
 export type TicketView = (typeof TICKET_VIEWS)[number];
 export type TicketSort = (typeof TICKET_SORTS)[number];
 
+/** Rótulos da UI. Ficam aqui porque a busca (`q`, RN-15) também casa por eles na API. */
+export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
+  open: 'Aberto',
+  pending: 'Pendente',
+  resolved: 'Resolvido',
+  closed: 'Fechado',
+};
+
+export const TICKET_PRIORITY_LABELS: Record<TicketPriority, string> = {
+  low: 'Baixa',
+  medium: 'Média',
+  high: 'Alta',
+  urgent: 'Urgente',
+};
+
 /** 100 KB de HTML bruto (antes da sanitização). */
 export const MAX_BODY_HTML_LENGTH = 100 * 1024;
 

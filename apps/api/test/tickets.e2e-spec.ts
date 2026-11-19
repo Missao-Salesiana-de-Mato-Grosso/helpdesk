@@ -297,6 +297,37 @@ describe('tickets — T08 (e2e)', () => {
       expect((await list('req1', '?q=a')).total).toBe(2);
     });
 
+    it('CT-54 q casa qualquer coluna da lista, inclusive nomes; as palavras se somam', async () => {
+      await t.prisma.user.update({
+        where: { id: f.users.req1 },
+        data: { name: 'Maria da Silva' },
+      });
+      await t.prisma.user.update({ where: { id: f.users.ag1 }, data: { name: 'João Souza' } });
+      const maria = await f.ticket({ requester: 'req1', group: 'G1', subject: 'Impressora' });
+      const assigned = await f.ticket({
+        requester: 'req2',
+        group: 'G2',
+        assignee: 'ag1',
+        subject: 'Internet',
+        status: 'pending',
+        priority: 'urgent',
+      });
+      const search = async (q: string) =>
+        numbers(await list('sup', `?status=open&status=pending&q=${encodeURIComponent(q)}`));
+
+      expect(await search('SILVA')).toEqual([maria.number]);
+      expect(await search('req2@missaosalesiana')).toEqual([assigned.number]);
+      expect(await search('souza')).toEqual([assigned.number]);
+      expect(await search('Unidade 2')).toEqual([assigned.number]);
+      expect(await search('grupo 2')).toEqual([assigned.number]);
+      expect(await search('categoria')).toEqual([maria.number, assigned.number]);
+      expect(await search('pendente')).toEqual([assigned.number]);
+      expect(await search('urgente internet')).toEqual([assigned.number]);
+      expect(await search('maria internet')).toEqual([]);
+      // O escopo continua valendo: o solicitante não acha o ticket de outro pelo nome.
+      expect(numbers(await list('req1', '?q=souza'))).toEqual([]);
+    });
+
     it('CT-18 noCompany=true tem precedência sobre companyId', async () => {
       const without = await f.ticket({ requester: 'req1', company: null });
       await f.ticket({ requester: 'req1', company: 'U1' });

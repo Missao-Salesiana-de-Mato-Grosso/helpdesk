@@ -39,6 +39,7 @@ import { SlaService, type SlaFields } from '../sla/sla.service.js';
 import { SYSTEM_USER_EMAIL } from '../users/system-user.js';
 import { UsersService } from '../users/users.service.js';
 import { isAgent, seesAllTickets, type ScopeUser } from './ticket-scope.js';
+import { searchFilter } from './ticket-search.js';
 import { planStatusChange, ticketClosed, versionConflict } from './ticket-status.js';
 import { toTicketDetail, toTicketSummary } from './tickets.mapper.js';
 import {
@@ -1056,18 +1057,4 @@ function statusEmit(
       ...(reason ? { reason } : {}),
     } satisfies TicketStatusChangedEvent,
   };
-}
-
-/** RN-15: `#1001` ou `1001` → número; texto com 2+ caracteres → assunto; o resto é ignorado. */
-export function searchFilter(q: string | undefined): Prisma.TicketWhereInput | null {
-  const term = q?.trim() ?? '';
-  const number = /^#?(\d+)$/.exec(term);
-  if (number) {
-    const value = Number(number[1]);
-    return Number.isSafeInteger(value) && value <= 2_147_483_647
-      ? { number: value }
-      : { id: { in: [] } };
-  }
-  if (term.length < 2) return null;
-  return { subject: { contains: term, mode: 'insensitive' } };
 }

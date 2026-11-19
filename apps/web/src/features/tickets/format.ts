@@ -1,11 +1,11 @@
-import type { TicketPriority, TicketStatus } from '@helpdesk/shared';
+import {
+  TICKET_PRIORITY_LABELS,
+  TICKET_STATUS_LABELS,
+  type TicketPriority,
+  type TicketStatus,
+} from '@helpdesk/shared';
 
-export const STATUS_LABEL: Record<TicketStatus, string> = {
-  open: 'Aberto',
-  pending: 'Pendente',
-  resolved: 'Resolvido',
-  closed: 'Fechado',
-};
+export const STATUS_LABEL = TICKET_STATUS_LABELS;
 
 export const STATUS_COLOR: Record<TicketStatus, string> = {
   open: 'blue',
@@ -14,12 +14,7 @@ export const STATUS_COLOR: Record<TicketStatus, string> = {
   closed: 'gray',
 };
 
-export const PRIORITY_LABEL: Record<TicketPriority, string> = {
-  low: 'Baixa',
-  medium: 'Média',
-  high: 'Alta',
-  urgent: 'Urgente',
-};
+export const PRIORITY_LABEL = TICKET_PRIORITY_LABELS;
 
 export const PRIORITY_COLOR: Record<TicketPriority, string> = {
   low: 'gray',
