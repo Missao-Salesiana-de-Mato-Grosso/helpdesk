@@ -1,6 +1,6 @@
 # Spec T35 — Ações em lote na lista de chamados
 
-> Status: rascunho · Tarefas: T35 (#55) · Depende de: T08–T10 (`PATCH /tickets/:id`), T11 (fila do agente), T14 (notificações) · Revisada em: 19/11/2026
+> Status: implementada (19/11/2026) · Tarefas: T35 (#55) · Depende de: T08–T10 (`PATCH /tickets/:id`), T11 (fila do agente), T14 (notificações) · Revisada em: 19/11/2026
 
 ## 1. Objetivo
 
@@ -184,7 +184,15 @@ Fixture de tickets da spec T08–T10 §9 (U1, U2, G1, G2, C1, C2, `req1`, `ag1` 
 
 ## 10. Decisões tomadas na implementação
 
-Preenchido depois da sessão.
+- As decisões da §12 foram mantidas como escritas.
+- **O miolo do `PATCH` virou `applyUpdate`** (privado no `TicketsService`): transação, regras, eventos e outbox. O `update` individual chama esse método e monta o detalhe como antes; o `bulkUpdate` chama o mesmo método para cada chamado, em sequência, e converte cada `ApiException` em falha. Assim as regras do lote e do individual não podem divergir.
+- **`number` na falha:** `applyUpdate` informa o número assim que acha o chamado no escopo. Falha antes disso (fora do escopo) volta sem número (RN-08).
+- **Erro inesperado num chamado** vira `INTERNAL_ERROR` com mensagem genérica; o log leva só o id do chamado e a pilha.
+- **Rótulos do formulário:** "O que alterar" e depois "Nova situação", "Nova prioridade", "Novo grupo", "Novo responsável", "Nova categoria" ou "Nova unidade". O resultado aparece num aviso no topo da fila (o projeto não usa `@mantine/notifications`), que o agente fecha.
+- **"Fechar" usa a mesma rota** com `changes: { status: 'closed' }` e uma confirmação própria.
+- **Recarga depois de aplicar:** o hook `useBulkUpdateTickets` invalida só os contadores e os detalhes; a fila recarrega a própria lista e, com a resposta nova, tira da seleção os chamados que saíram da página (RN-21). `useGroupMembers` ganhou o parâmetro `enabled`, para não buscar membros quando não há grupo comum (RN-19).
+- **e2e só no CI:** a máquina de desenvolvimento não tem o banco local, como na T31.
+- Testes: matriz de permissões (CT-01), `test/tickets-bulk.e2e-spec.ts` (CT-02 a CT-18), `tickets.test.ts` no shared (CT-19), `features/queue/queue.test.tsx` (CT-20 a CT-23 e CT-25) e `features/tickets/tickets.test.tsx` (CT-24).
 
 ## 11. Prompt sugerido para a sessão
 

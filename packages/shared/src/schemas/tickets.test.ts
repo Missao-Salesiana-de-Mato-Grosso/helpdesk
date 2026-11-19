@@ -115,13 +115,14 @@ describe('inlineImages (spec T32)', () => {
   });
 });
 
+const valid = (body: unknown) => bulkUpdateTicketsSchema.safeParse(body).success;
+
 describe('bulkUpdateTicketsSchema (spec T35)', () => {
   const ticket = (n: number) => ({
     id: `0b6f2a52-6f0e-4d7e-9a43-${n.toString().padStart(12, '0')}`,
     version: 1,
   });
   const many = (count: number) => Array.from({ length: count }, (_, n) => ticket(n));
-  const valid = (body: unknown) => bulkUpdateTicketsSchema.safeParse(body).success;
 
   it('CT-19 aceita 1 e 100 chamados, recusa 0, 101 e repetidos', () => {
     const changes = { priority: 'high' };

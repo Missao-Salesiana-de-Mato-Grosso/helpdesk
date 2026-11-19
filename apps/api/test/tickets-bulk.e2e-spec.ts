@@ -1,11 +1,7 @@
 // Spec docs/specs/T35-acoes-em-lote.md — PATCH /api/tickets/bulk.
 import { Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import type {
-  BulkUpdateFailure,
-  BulkUpdateTicketsResponse,
-  TicketListResponse,
-} from '@helpdesk/shared';
+import type { BulkUpdateTicketsResponse, TicketListResponse } from '@helpdesk/shared';
 import request, { type Response } from 'supertest';
 import { createTestApp, type TestApp } from './setup/auth.js';
 import { truncateAll } from './setup/db.js';
@@ -178,7 +174,7 @@ describe('tickets — ações em lote, T35 (e2e)', () => {
         id: t4.id,
         ok: false,
         code: 'NOT_FOUND',
-        message: (r4 as BulkUpdateFailure).message,
+        message: expect.any(String),
       });
       expect(r4).not.toHaveProperty('number');
       expect(await row(t4.id)).toMatchObject({ priority: 'medium', version: 1 });
@@ -264,7 +260,9 @@ describe('tickets — ações em lote, T35 (e2e)', () => {
       const res = await bulk('ag1', { tickets: v1(t1, t2), changes: { status: 'resolved' } });
       expect(bulkOf(res)).toMatchObject({ succeeded: 2 });
       const resolved = (await outbox()).filter((n) => n.template === 'resolved');
-      expect(resolved.map((n) => n.ticketId).toSorted()).toEqual([t1.id, t2.id].toSorted());
+      const resolvedIds = resolved.map((n) => n.ticketId);
+      expect(resolvedIds).toHaveLength(2);
+      expect(resolvedIds).toEqual(expect.arrayContaining([t1.id, t2.id]));
       for (const ticket of [t1, t2]) expect((await row(ticket.id)).resolvedAt).not.toBeNull();
     });
 

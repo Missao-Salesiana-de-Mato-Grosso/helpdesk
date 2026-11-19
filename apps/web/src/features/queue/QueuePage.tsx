@@ -3,7 +3,9 @@ import {
   Anchor,
   Badge,
   Button,
+  Checkbox,
   Group,
+  List,
   Loader,
   MultiSelect,
   Pagination,
@@ -27,6 +29,8 @@ import { useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { QUEUE_VIEWS, type QueueSlug } from '../../layout/navigation.ts';
 import { SlaBadge } from '../tickets/SlaBadge.tsx';
+import { BulkActions } from './BulkActions.tsx';
+import type { BulkOutcome } from './bulk-outcome.ts';
 import { StatusBadge } from '../tickets/StatusBadge.tsx';
 import { PRIORITY_COLOR, PRIORITY_LABEL, STATUS_LABEL, formatDateTime } from '../tickets/format.ts';
 import {
@@ -78,6 +82,9 @@ function Queue({ slug }: { slug: QueueSlug }) {
   const [q] = useDebouncedValue(search.trim(), 300);
   const [sort, setSort] = useState<TicketSort>('updated_at:desc');
   const [page, setPage] = useState(1);
+  // T35: só os `id`; a versão vem da lista na hora de enviar (RN-16).
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [outcome, setOutcome] = useState<BulkOutcome | null>(null);
 
   const companies = useCompanies();
   const groups = useGroups();
@@ -101,7 +108,29 @@ function Queue({ slug }: { slug: QueueSlug }) {
     (value: T) => {
       setter(value);
       setPage(1);
+      setSelected(new Set()); // RN-16: filtro, busca e ordenação limpam a seleção.
     };
+  const changePage = (next: number) => {
+    setPage(next);
+    setSelected(new Set());
+  };
+  const items = tickets.data?.items ?? [];
+  const selectedItems = items.filter((ticket) => selected.has(ticket.id));
+  const allSelected = items.length > 0 && selectedItems.length === items.length;
+  const toggle = (id: string, checked: boolean) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  // RN-21: depois de aplicar, seguem marcados os que continuam na página, já com a versão nova.
+  const afterBulk = async (result: BulkOutcome) => {
+    setOutcome(result);
+    const fresh = await tickets.refetch();
+    const onPage = new Set(fresh.data?.items.map((ticket) => ticket.id));
+    setSelected((current) => new Set([...current].filter((id) => onPage.has(id))));
+  };
   const total = tickets.data?.total ?? 0;
   const pages = Math.ceil(total / QUEUE_PAGE_SIZE);
   const noCompanyCount = counters.data?.noCompany;
@@ -191,6 +220,37 @@ function Queue({ slug }: { slug: QueueSlug }) {
         />
       </Group>
 
+      {outcome && (
+        <Alert
+          color={outcome.failures.length > 0 ? 'yellow' : 'green'}
+          title={`${outcome.succeeded} ${outcome.succeeded === 1 ? 'alterado' : 'alterados'}`}
+          withCloseButton
+          closeButtonLabel="Fechar aviso"
+          onClose={() => setOutcome(null)}
+        >
+          {outcome.failures.length > 0 && (
+            <>
+              <Text size="sm">
+                {outcome.failures.length}{' '}
+                {outcome.failures.length === 1 ? 'não alterado' : 'não alterados'}:
+              </Text>
+              <List size="sm">
+                {outcome.failures.map((line) => (
+                  <List.Item key={line}>{line}</List.Item>
+                ))}
+              </List>
+            </>
+          )}
+        </Alert>
+      )}
+      {selectedItems.length > 0 && (
+        <BulkActions
+          selected={selectedItems}
+          onClear={() => setSelected(new Set())}
+          onDone={afterBulk}
+        />
+      )}
+
       {tickets.isPending && <Loader aria-label="Carregando" />}
       {tickets.error && (
         <Alert color="red" title="Não foi possível carregar a fila">
@@ -205,10 +265,22 @@ function Queue({ slug }: { slug: QueueSlug }) {
 
       {tickets.data && total > 0 && (
         <>
-          <Table.ScrollContainer minWidth={1080}>
+          <Table.ScrollContainer minWidth={1120}>
             <Table striped highlightOnHover>
               <Table.Thead>
                 <Table.Tr>
+                  <Table.Th w={40}>
+                    <Checkbox
+                      aria-label="Selecionar todos da página"
+                      checked={allSelected}
+                      indeterminate={selectedItems.length > 0 && !allSelected}
+                      onChange={() =>
+                        setSelected(
+                          allSelected ? new Set() : new Set(items.map((ticket) => ticket.id)),
+                        )
+                      }
+                    />
+                  </Table.Th>
                   <Table.Th>Nº</Table.Th>
                   <Table.Th>Assunto</Table.Th>
                   <Table.Th>Solicitante</Table.Th>
@@ -224,6 +296,13 @@ function Queue({ slug }: { slug: QueueSlug }) {
               <Table.Tbody>
                 {tickets.data.items.map((ticket) => (
                   <Table.Tr key={ticket.id}>
+                    <Table.Td>
+                      <Checkbox
+                        aria-label={`Selecionar #${ticket.number}`}
+                        checked={selected.has(ticket.id)}
+                        onChange={(event) => toggle(ticket.id, event.currentTarget.checked)}
+                      />
+                    </Table.Td>
                     <Table.Td>#{ticket.number}</Table.Td>
                     <Table.Td>
                       <Anchor component={Link} to={`/tickets/${ticket.id}`}>
@@ -266,7 +345,7 @@ function Queue({ slug }: { slug: QueueSlug }) {
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>
-          {pages > 1 && <Pagination total={pages} value={page} onChange={setPage} />}
+          {pages > 1 && <Pagination total={pages} value={page} onChange={changePage} />}
         </>
       )}
     </Stack>

@@ -206,6 +206,17 @@ describe('Solicitante — tickets (T11)', () => {
       expect(query?.getAll('status')).toEqual(['open', 'pending']);
     });
 
+    it('T35 CT-24 sem caixas de seleção nem ações em lote para o solicitante', async () => {
+      stubApi({
+        'GET /api/me': () => jsonResponse(200, me),
+        'GET /api/tickets': () => jsonResponse(200, page([summary()])),
+      });
+      renderWithProviders(<AppRoutes />, { route: '/tickets' });
+      await screen.findByRole('link', { name: 'Impressora da secretaria' });
+      expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Ações em lote' })).not.toBeInTheDocument();
+    });
+
     it('CT-09 sem chamados: mensagem e botão para abrir', async () => {
       stubApi({
         'GET /api/me': () => jsonResponse(200, me),
