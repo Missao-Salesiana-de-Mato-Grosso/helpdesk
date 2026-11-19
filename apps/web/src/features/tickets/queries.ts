@@ -1,4 +1,6 @@
 import type {
+  BulkUpdateTicketsInput,
+  BulkUpdateTicketsResponse,
   CreateMessageInput,
   CreateTicketInput,
   NamedRef,
@@ -145,11 +147,12 @@ export function useGroups() {
   });
 }
 
-export function useGroupMembers(groupId: string) {
+export function useGroupMembers(groupId: string, enabled = true) {
   const api = useApi();
   return useQuery({
     queryKey: ['groups', groupId, 'members'],
     queryFn: () => api<NamedRef[]>(`/groups/${groupId}/members`),
+    enabled,
     staleTime: 60_000,
   });
 }
@@ -182,6 +185,23 @@ export function useUpdateTicket(ticketId: string) {
       api<TicketDetail>(`/tickets/${ticketId}`, { method: 'PATCH', body: JSON.stringify(body) }),
     onSuccess: callbacks.onSuccess,
     onError: (error) => callbacks.reloadOnConflict(ticketId, error),
+  });
+}
+
+/** T35: `PATCH /tickets/bulk`. A fila recarrega a própria lista para ajustar a seleção. */
+export function useBulkUpdateTickets() {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: BulkUpdateTicketsInput) =>
+      api<BulkUpdateTicketsResponse>('/tickets/bulk', {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ticketKeys.counters });
+      void queryClient.invalidateQueries({ queryKey: ['tickets', 'detail'] });
+    },
   });
 }
 

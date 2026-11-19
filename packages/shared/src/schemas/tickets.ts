@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ApiErrorCode } from '../api-error.js';
 import { INLINE_IMAGE_KEY, INLINE_IMAGE_MAX_FILES } from '../attachments.js';
 import type { NamedRef } from './me.js';
 import type { TicketSla } from './sla.js';
@@ -129,6 +130,76 @@ export const updateTicketSchema = z
 
 export type UpdateTicketInput = z.infer<typeof updateTicketSchema>;
 
+/** T35 RN-02: chamados por operação em lote. */
+export const MAX_BULK_TICKETS = 100;
+
+const BULK_FIELDS = [
+  'status',
+  'priority',
+  'groupId',
+  'assigneeId',
+  'categoryId',
+  'companyId',
+] as const;
+
+export type BulkUpdateField = (typeof BULK_FIELDS)[number];
+
+/** `PATCH /api/tickets/bulk` (T35 RN-02, RN-03): até 100 chamados, exatamente um campo. */
+export const bulkUpdateTicketsSchema = z
+  .object({
+    tickets: z
+      .array(z.object({ id: z.uuid(), version: z.number().int().min(1) }).strict())
+      .min(1, 'Selecione ao menos um chamado')
+      .max(MAX_BULK_TICKETS, `Selecione no máximo ${MAX_BULK_TICKETS} chamados`)
+      .refine(
+        (tickets) => new Set(tickets.map((ticket) => ticket.id)).size === tickets.length,
+        'Chamado repetido',
+      ),
+    changes: z
+      .object({
+        status: z.enum(TICKET_STATUSES).optional(),
+        priority: z.enum(TICKET_PRIORITIES).optional(),
+        groupId: z.uuid().optional(),
+        assigneeId: z.uuid().nullable().optional(),
+        categoryId: z.uuid().optional(),
+        companyId: z.uuid().optional(),
+      })
+      .strict()
+      .refine(
+        (changes) => BULK_FIELDS.filter((field) => changes[field] !== undefined).length === 1,
+        'Altere exatamente um campo por vez',
+      ),
+  })
+  .strict();
+
+export type BulkUpdateTicketsInput = z.infer<typeof bulkUpdateTicketsSchema>;
+
+export interface BulkUpdateSuccess {
+  id: string;
+  ok: true;
+  number: number;
+  /** `false` quando o chamado já tinha o valor pedido (RN-09). */
+  changed: boolean;
+  version: number;
+}
+
+export interface BulkUpdateFailure {
+  id: string;
+  ok: false;
+  /** Só quando o chamado está no escopo do ator (RN-08). */
+  number?: number;
+  code: ApiErrorCode;
+  message: string;
+}
+
+export type BulkUpdateResult = BulkUpdateSuccess | BulkUpdateFailure;
+
+export interface BulkUpdateTicketsResponse {
+  results: BulkUpdateResult[];
+  succeeded: number;
+  failed: number;
+}
+
 /** `POST /api/tickets/:id/messages` (RN-31, RN-36). */
 export const createMessageSchema = z
   .object({
@@ -167,6 +238,8 @@ export interface TicketSummary {
   createdAt: string;
   updatedAt: string;
   lastMessageAt: string | null;
+  /** T35: para a ação em lote enviar a versão que o agente viu. */
+  version: number;
   /** T28: só para agentes. */
   sla: TicketSla | null;
 }
