@@ -313,7 +313,7 @@ describe('tickets — T08 (e2e)', () => {
         priority: 'urgent',
       });
       const search = async (q: string) =>
-        numbers(await list('sup', `?status=open,pending&q=${encodeURIComponent(q)}`));
+        numbers(await list('sup', `?status=open&status=pending&q=${encodeURIComponent(q)}`));
 
       expect(await search('SILVA')).toEqual([maria.number]);
       expect(await search('req2@missaosalesiana')).toEqual([assigned.number]);
