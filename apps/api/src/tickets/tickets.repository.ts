@@ -375,14 +375,16 @@ export class TicketsRepository {
 
   /**
    * T37: chamados com algum marco (criação, 1ª resposta, resolução, fechamento ou prazo do SLA)
-   * em `[start, end)`, só com as colunas que o relatório usa (RN-17).
+   * em `[start, end)`, só com as colunas que o relatório usa (RN-17). T40 RN-19: `extraIds` são
+   * chamados avaliados no período sem outro marco nele.
    */
-  findForReport(start: Date, end: Date, groupId: string | null) {
+  findForReport(start: Date, end: Date, groupId: string | null, extraIds: readonly string[] = []) {
     const range = { gte: start, lt: end };
     return this.prisma.ticket.findMany({
       where: {
         ...(groupId ? { groupId } : {}),
         OR: [
+          ...(extraIds.length > 0 ? [{ id: { in: [...extraIds] } }] : []),
           { createdAt: range },
           { firstResponseAt: range },
           { resolvedAt: range },
@@ -392,6 +394,7 @@ export class TicketsRepository {
         ],
       },
       select: {
+        id: true,
         groupId: true,
         assigneeId: true,
         companyId: true,
@@ -407,6 +410,23 @@ export class TicketsRepository {
         resolutionDueAt: true,
         slaPausedMinutes: true,
       },
+    });
+  }
+
+  /** T40 RN-08: número e assunto para a página pública de avaliação (sem escopo: o token autoriza). */
+  findSurveyHeader(id: string) {
+    return this.prisma.ticket.findUnique({
+      where: { id },
+      select: { number: true, subject: true },
+    });
+  }
+
+  /** T40 RN-21: o que a lista de avaliações do relatório mostra de cada chamado. */
+  findSummariesByIds(ids: readonly string[]) {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.prisma.ticket.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, number: true, subject: true, assigneeId: true, groupId: true },
     });
   }
 

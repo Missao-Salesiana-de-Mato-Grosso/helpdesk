@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ApiErrorCode } from '../api-error.js';
 import { INLINE_IMAGE_KEY, INLINE_IMAGE_MAX_FILES } from '../attachments.js';
 import type { NamedRef } from './me.js';
+import type { TicketSatisfaction } from './satisfaction.js';
 import type { TicketSla } from './sla.js';
 
 // Enums de domínio (iguais aos do Prisma). Spec docs/specs/T08-T10-tickets-core.md.
@@ -325,6 +326,11 @@ export interface TicketDetail {
   updatedAt: string;
   /** T28: só para agentes. */
   sla: TicketSla | null;
+  /**
+   * T40 RN-16: só para supervisor e admin (`null` sem pedido de avaliação). Para os outros
+   * papéis o campo não vem.
+   */
+  satisfaction?: TicketSatisfaction | null;
   messages: TicketMessage[];
   events: TicketEvent[];
   /** Nomes dos ids citados em `events[].data` (responsável, grupo, unidade, categoria). */

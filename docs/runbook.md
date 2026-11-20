@@ -343,3 +343,12 @@ Quando alguém é **desativado, bloqueado ou excluído** no Zitadel, o Zitadel a
 **Se não funcionar:** `401 INVALID_SIGNATURE` no log = chave diferente da do target (refaça o passo 3) ou relógio do servidor fora (tolerância de 5 min); `404` = chave ausente no pod. O Zitadel **não reenvia** avisos perdidos (help desk fora do ar): o passo 3 do §5 continua valendo como conferência.
 
 **Desligar:** apagar as execuções no Zitadel (ou esvaziar a chave e fazer deploy).
+
+## 19. Pesquisa de satisfação (T40)
+
+Quando um agente **resolve** um chamado, o e-mail de resolvido ao solicitante traz cinco links (notas de 1 a 5). O link abre `https://suporte.msmt.org.br/avaliar`, uma página **sem login**, onde a pessoa confirma a nota e pode deixar um comentário. O link vale por `CSAT_LINK_DAYS` dias (padrão **30**) ou até a próxima resolução, e nesse prazo a nota pode ser alterada. Fechar o chamado, inclusive pelo fechamento automático, não manda pedido. Spec: `docs/specs/T40-csat.md`.
+
+- **Quem vê:** só supervisor e admin, no painel do chamado ("Avaliação do solicitante") e em Relatórios (bloco Satisfação, coluna nas quebras e a lista Avaliações, com o filtro "Só notas 1 e 2"). Agentes não veem.
+- **Nota baixa não dispara nada:** não reabre o chamado nem avisa ninguém. Acompanhe pela lista de Relatórios.
+- **Mudar o prazo ou desligar:** variável `CSAT_LINK_DAYS` em `deploy/k8s/overlays/prod/config.env` (por PR). `0` desliga: os e-mails param de levar o link, e os links já enviados deixam de valer.
+- **"Link de avaliação inválido":** o link venceu ou o chamado foi resolvido de novo (vale o link do e-mail mais recente). O banco guarda só o hash do token, então não há como reenviar o mesmo link; um novo sai na próxima resolução.

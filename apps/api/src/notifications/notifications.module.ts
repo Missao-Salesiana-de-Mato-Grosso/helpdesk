@@ -5,13 +5,21 @@ import { CategoriesModule } from '../categories/categories.module.js';
 import { CompaniesModule } from '../companies/companies.module.js';
 import type { Env } from '../config/env.js';
 import { GroupsModule } from '../groups/groups.module.js';
+import { SatisfactionModule } from '../satisfaction/satisfaction.module.js';
 import { UsersModule } from '../users/users.module.js';
 import { MAILER, NodemailerMailer, type Mailer } from './mailer.js';
 import { NotificationService } from './notification.service.js';
 import { NotificationsCron } from './notifications.cron.js';
 
 @Module({
-  imports: [UsersModule, GroupsModule, CompaniesModule, CategoriesModule, AttachmentsModule],
+  imports: [
+    UsersModule,
+    GroupsModule,
+    CompaniesModule,
+    CategoriesModule,
+    AttachmentsModule,
+    SatisfactionModule,
+  ],
   providers: [
     NotificationService,
     NotificationsCron,

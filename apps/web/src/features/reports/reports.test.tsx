@@ -1,14 +1,20 @@
 // Spec docs/specs/T37-relatorios.md — tela de relatórios.
-import type { MeResponse, ReportMetrics, ReportRow, ReportSummary } from '@helpdesk/shared';
+import type {
+  MeResponse,
+  ReportMetrics,
+  ReportRow,
+  ReportSummary,
+  SatisfactionReport,
+} from '@helpdesk/shared';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useAuth } from 'react-oidc-context';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../../routes.tsx';
-import { stubApi } from '../../test/api.ts';
+import { callsTo, stubApi } from '../../test/api.ts';
 import { fakeAuth, jsonResponse, renderWithProviders } from '../../test/render.tsx';
 import { me } from '../../test/tickets.ts';
-import { formatDuration, presetRange, reportCsv } from './report-format.ts';
+import { formatDuration, presetRange, reportCsv, satisfactionCsv } from './report-format.ts';
 
 vi.mock('react-oidc-context', () => ({ useAuth: vi.fn() }));
 
@@ -29,6 +35,7 @@ const metrics = (overrides: Partial<ReportMetrics> = {}): ReportMetrics => ({
   resolution: { median: null, average: null, count: 0 },
   firstResponseSla: { met: 0, evaluated: 0 },
   resolutionSla: { met: 0, evaluated: 0 },
+  satisfaction: { responses: 0, satisfied: 0, average: null, requested: 0, answered: 0 },
   ...overrides,
 });
 
@@ -57,6 +64,7 @@ const summary = (from: string, to: string): ReportSummary => ({
       resolution: { median: 1500, average: 1600, count: 9 },
       firstResponseSla: { met: 8, evaluated: 10 },
       resolutionSla: { met: 6, evaluated: 9 },
+      satisfaction: { responses: 8, satisfied: 6, average: 4.1, requested: 10, answered: 7 },
     }),
     openNow: 5,
   },
@@ -71,6 +79,7 @@ const summary = (from: string, to: string): ReportSummary => ({
       resolved: 5,
       firstResponse: { median: 45, average: 50, count: 5 },
       firstResponseSla: { met: 2, evaluated: 3 },
+      satisfaction: { responses: 4, satisfied: 3, average: 4.25, requested: 4, answered: 4 },
     }),
     { ...row('a2', 'Pedro; "Souza"', { created: 3 }), active: false },
     row(null, 'Sem responsável', { created: 2 }),
@@ -90,9 +99,30 @@ const summary = (from: string, to: string): ReportSummary => ({
   ],
 });
 
+const ratings: SatisfactionReport = {
+  items: [
+    {
+      ticketId: 't1',
+      ticketNumber: 1042,
+      ticketSubject: 'Impressora da secretaria',
+      score: 2,
+      comment: 'Demorou; "muito"',
+      ratedAt: '2026-11-18T14:30:00.000Z',
+      assignee: { id: 'a1', name: 'Ana Lima' },
+      group: { id: 'g1', name: 'Suporte TI' },
+    },
+  ],
+  truncated: false,
+};
+
 function openReports(user: MeResponse = supervisor) {
   const calls: string[] = [];
-  stubApi({
+  const fetchMock = stubApi({
+    'GET /api/reports/satisfaction': (_init, url) =>
+      jsonResponse(
+        200,
+        url.searchParams.get('low') === 'true' ? { items: [], truncated: false } : ratings,
+      ),
     'GET /api/me': () => jsonResponse(200, user),
     'GET /api/tickets/counters': () =>
       jsonResponse(200, { mine: 0, group: 0, unassigned: 0, noCompany: 0, slaBreached: 0 }),
@@ -104,7 +134,7 @@ function openReports(user: MeResponse = supervisor) {
     },
   });
   renderWithProviders(<AppRoutes />, { route: '/relatorios' });
-  return calls;
+  return Object.assign(calls, { fetchMock });
 }
 
 describe('relatórios — formatação (T37)', () => {
@@ -133,10 +163,18 @@ describe('relatórios — formatação (T37)', () => {
     const [header, ana, pedro] = csv.slice(1).split('\r\n');
     expect(csv.startsWith('﻿')).toBe(true);
     expect(header).toBe(
-      'Agente;Criados;Resolvidos;Fechados;1ª resposta (mediana, min úteis);Resolução (mediana, min úteis);1ª resposta no prazo (%);Resolução no prazo (%)',
+      'Agente;Criados;Resolvidos;Fechados;1ª resposta (mediana, min úteis);Resolução (mediana, min úteis);1ª resposta no prazo (%);Resolução no prazo (%);Avaliações;Satisfeitos (notas 4 e 5);Satisfação média',
     );
-    expect(ana).toBe('Ana Lima;7;5;0;45;;66,7;');
-    expect(pedro).toBe('"Pedro; ""Souza"" (inativo)";3;0;0;;;;');
+    expect(ana).toBe('Ana Lima;7;5;0;45;;66,7;;4;3;4,3');
+    expect(pedro).toBe('"Pedro; ""Souza"" (inativo)";3;0;0;;;;;0;0;');
+  });
+
+  it('T40 CT-22 CSV das avaliações', () => {
+    const [header, line] = satisfactionCsv(ratings.items).slice(1).split('\r\n');
+    expect(header).toBe('Chamado;Assunto;Nota;Comentário;Responsável;Grupo;Avaliado em');
+    expect(line).toBe(
+      '1042;Impressora da secretaria;2;"Demorou; ""muito""";Ana Lima;Suporte TI;18/11/2026, 10:30',
+    );
   });
 });
 
@@ -200,5 +238,29 @@ describe('ReportsPage (T37)', () => {
     openReports({ ...supervisor, roles: ['agente'] });
     expect(await screen.findByText('Sem permissão')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Relatórios' })).not.toBeInTheDocument();
+  });
+
+  it('T40 CT-22 bloco de satisfação, coluna nas quebras e lista com filtro de notas baixas', async () => {
+    const calls = openReports();
+    expect(await screen.findByText('Satisfação (notas 4 e 5)')).toBeInTheDocument();
+    expect(screen.getByText('Satisfação (notas 4 e 5)').nextSibling).toHaveTextContent('75%');
+    expect(screen.getByText('média 4,1 · 8 avaliações · 70% de resposta')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Por agente' }));
+    const agents = await screen.findByRole('table', { name: 'Por agente' });
+    expect(within(agents).getByText('Ana Lima').closest('tr')).toHaveTextContent('75% (4)');
+
+    const list = await screen.findByRole('table', { name: 'Avaliações' });
+    expect(within(list).getByRole('link', { name: '#1042' })).toHaveAttribute(
+      'href',
+      '/tickets/t1',
+    );
+    expect(within(list).getByText('2 — Insatisfeito')).toBeInTheDocument();
+    expect(within(list).getByText('Demorou; "muito"')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('switch', { name: 'Só notas 1 e 2' }));
+    expect(await screen.findByText('Nenhuma nota baixa no período.')).toBeInTheDocument();
+    const lastCall = callsTo(calls.fetchMock, 'GET /api/reports/satisfaction').at(-1);
+    expect(lastCall?.[0]).toEqual(expect.stringContaining('low=true'));
   });
 });

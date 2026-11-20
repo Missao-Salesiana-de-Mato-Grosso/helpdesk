@@ -1,6 +1,6 @@
 // Spec docs/specs/T37-relatorios.md — filtros do relatório.
 import { describe, expect, it } from 'vitest';
-import { reportDays, reportQuerySchema } from './reports.js';
+import { reportDays, reportQuerySchema, satisfactionReportQuerySchema } from './reports.js';
 
 const parse = (query: object) => reportQuerySchema.safeParse(query).success;
 
@@ -30,5 +30,17 @@ describe('reportQuerySchema (T37)', () => {
   it('conta as duas pontas', () => {
     expect(reportDays('2026-11-01', '2026-11-30')).toBe(30);
     expect(reportDays('2026-11-20', '2026-11-20')).toBe(1);
+  });
+});
+
+const parseCsat = (query: object) => satisfactionReportQuerySchema.safeParse(query);
+
+describe('satisfactionReportQuerySchema (T40)', () => {
+  it('CT-17 mesmos filtros do relatório e `low` opcional', () => {
+    expect(parseCsat({ from: '2026-11-01', to: '2026-11-30' }).data?.low).toBe(false);
+    expect(parseCsat({ from: '2026-11-01', to: '2026-11-30', low: 'true' }).data?.low).toBe(true);
+    expect(parseCsat({ from: '2026-11-01', to: '2026-11-30', low: 'sim' }).success).toBe(false);
+    expect(parseCsat({ from: '2026-11-30', to: '2026-11-01' }).success).toBe(false);
+    expect(parseCsat({ from: '2025-01-01', to: '2026-01-02' }).success).toBe(false);
   });
 });

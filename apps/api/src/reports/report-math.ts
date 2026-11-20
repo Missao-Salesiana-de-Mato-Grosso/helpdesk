@@ -1,4 +1,5 @@
 import {
+  SATISFIED_MIN_SCORE,
   TICKET_PRIORITIES,
   TICKET_SOURCES,
   type ReportDuration,
@@ -6,6 +7,7 @@ import {
   type ReportPoint,
   type ReportRate,
   type ReportRow,
+  type ReportSatisfaction,
   type TicketPriority,
   type TicketSource,
   type TicketStatus,
@@ -28,6 +30,14 @@ export interface ReportTicket {
   firstResponseDueAt: Date | null;
   resolutionDueAt: Date | null;
   slaPausedMinutes: number;
+  /** T40: a avaliação do chamado (a última, RN-18) e quando o link atual foi enviado. */
+  satisfaction?: ReportTicketSatisfaction | null;
+}
+
+export interface ReportTicketSatisfaction {
+  score: number | null;
+  ratedAt: Date | null;
+  requestedAt: Date;
 }
 
 /**
@@ -117,6 +127,37 @@ function rate(outcomes: readonly ('met' | 'missed' | null)[]): ReportRate {
   };
 }
 
+/**
+ * T40 RN-19: avaliações dadas no período (% de 4 e 5, média com uma casa) e, dos links enviados no
+ * período, quantos já foram respondidos.
+ */
+export function satisfactionMetrics(
+  tickets: readonly ReportTicket[],
+  window: ReportWindow,
+): ReportSatisfaction {
+  const scores: number[] = [];
+  let requested = 0;
+  let answered = 0;
+  for (const { satisfaction } of tickets) {
+    if (!satisfaction) continue;
+    if (satisfaction.score !== null && within(satisfaction.ratedAt, window)) {
+      scores.push(satisfaction.score);
+    }
+    if (within(satisfaction.requestedAt, window)) {
+      requested++;
+      if (satisfaction.ratedAt && satisfaction.ratedAt >= satisfaction.requestedAt) answered++;
+    }
+  }
+  const total = scores.reduce((sum, value) => sum + value, 0);
+  return {
+    responses: scores.length,
+    satisfied: scores.filter((value) => value >= SATISFIED_MIN_SCORE).length,
+    average: scores.length === 0 ? null : Math.round((total / scores.length) * 10) / 10,
+    requested,
+    answered,
+  };
+}
+
 /** RN-04 a RN-11 para um conjunto de chamados. */
 export function reportMetrics(
   tickets: readonly ReportTicket[],
@@ -151,6 +192,7 @@ export function reportMetrics(
         slaOutcome(ticket.resolvedAt, ticket.resolutionDueAt, unresolved(ticket), window),
       ),
     ),
+    satisfaction: satisfactionMetrics(tickets, window),
   };
 }
 
@@ -216,7 +258,8 @@ export function breakdown(
     const empty =
       metrics.created + metrics.resolved + metrics.closed === 0 &&
       metrics.firstResponse.count + metrics.firstResponseSla.evaluated === 0 &&
-      metrics.resolutionSla.evaluated === 0;
+      metrics.resolutionSla.evaluated === 0 &&
+      metrics.satisfaction.responses + metrics.satisfaction.requested === 0;
     if (empty) continue;
     const ref = key === null ? null : refs.get(key);
     rows.push({

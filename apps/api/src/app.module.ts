@@ -22,6 +22,7 @@ import { InboundEmailModule } from './inbound-email/inbound-email.module.js';
 import { IntegrationsModule } from './integrations/integrations.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { ReportsModule } from './reports/reports.module.js';
+import { SatisfactionSurveyModule } from './satisfaction/satisfaction-survey.module.js';
 import { TicketsModule } from './tickets/tickets.module.js';
 import { UsersModule } from './users/users.module.js';
 
@@ -60,6 +61,7 @@ import { UsersModule } from './users/users.module.js';
     SlaAdminModule,
     TicketsModule,
     ReportsModule,
+    SatisfactionSurveyModule,
     IntegrationsModule,
     InboundEmailModule,
   ],

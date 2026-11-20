@@ -108,6 +108,9 @@ export const envSchema = z
     // T27: ticket resolvido há N dias sem resposta passa para fechado. 0 desliga.
     AUTO_CLOSE_DAYS: z.coerce.number().int().nonnegative().default(7),
 
+    // T40: validade, em dias, do link da pesquisa de satisfação. 0 desliga a pesquisa.
+    CSAT_LINK_DAYS: z.coerce.number().int().nonnegative().default(30),
+
     // T28: fuso do horário comercial do SLA (IANA).
     BUSINESS_TIMEZONE: z
       .string()

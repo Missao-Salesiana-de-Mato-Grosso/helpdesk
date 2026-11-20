@@ -254,3 +254,58 @@ describe('ticket_assigned (T36)', () => {
     expect(mail.html).not.toContain('toner');
   });
 });
+
+describe('pedido de avaliação (T40)', () => {
+  const csat = { csatUrl: 'http://portal.test/avaliar#tok_123', csatDays: 30 };
+
+  it('CT-08 resolvido com cinco links ?nota=1..5 antes do fragmento, rótulos e validade', () => {
+    const mail = renderNotification('resolved', payload({ bodyHtml: null, ...csat }), true);
+    expect(mail.html).toContain('Como foi o atendimento? Escolha uma nota:');
+    for (const [score, label] of [
+      [1, 'Muito insatisfeito'],
+      [2, 'Insatisfeito'],
+      [3, 'Neutro'],
+      [4, 'Satisfeito'],
+      [5, 'Muito satisfeito'],
+    ] as const) {
+      expect(mail.html).toContain(`href="http://portal.test/avaliar?nota=${score}#tok_123"`);
+      expect(mail.html).toContain(`${score} — ${label}</a>`);
+      expect(mail.text).toContain(
+        `${score} — ${label}: http://portal.test/avaliar?nota=${score}#tok_123`,
+      );
+    }
+    expect(mail.text).toContain('O link vale por 30 dias.');
+    // O pedido vem antes da linha de responder.
+    expect(mail.text.indexOf('Como foi')).toBeLessThan(
+      mail.text.indexOf('Responda este e-mail para continuar'),
+    );
+  });
+
+  it('CT-08 resposta que resolve leva o pedido; resposta comum não', () => {
+    expect(renderNotification('reply', payload({ resolved: true, ...csat }), true).text).toContain(
+      'Como foi o atendimento?',
+    );
+    expect(
+      renderNotification('reply', payload({ resolved: false, ...csat }), true).text,
+    ).not.toContain('Como foi o atendimento?');
+  });
+
+  it('CT-08 linha gravada antes da T40 (sem csatUrl) sai sem o bloco', () => {
+    const mail = renderNotification('resolved', payload({ bodyHtml: null }), true);
+    expect(mail.text).not.toContain('Como foi o atendimento?');
+    expect(mail.html).not.toContain('avaliar');
+  });
+
+  it('CT-08 validade no singular e sem validade conhecida', () => {
+    expect(
+      renderNotification('resolved', payload({ bodyHtml: null, ...csat, csatDays: 1 }), true).text,
+    ).toContain('O link vale por 1 dia.');
+    const noDays = renderNotification(
+      'resolved',
+      payload({ bodyHtml: null, csatUrl: csat.csatUrl }),
+      true,
+    );
+    expect(noDays.text).toContain('Como foi o atendimento?');
+    expect(noDays.text).not.toContain('O link vale');
+  });
+});

@@ -40,6 +40,7 @@ import { CompaniesService } from '../companies/companies.service.js';
 import { GroupsService } from '../groups/groups.service.js';
 import { NotificationService, type NotifiedTicket } from '../notifications/notification.service.js';
 import type { Prisma } from '../generated/prisma/client.js';
+import { SatisfactionService } from '../satisfaction/satisfaction.service.js';
 import { SlaService, type SlaFields } from '../sla/sla.service.js';
 import { SYSTEM_USER_EMAIL } from '../users/system-user.js';
 import { UsersService } from '../users/users.service.js';
@@ -251,6 +252,7 @@ export class TicketsService {
     private readonly notifications: NotificationService,
     private readonly emitter: EventEmitter2,
     private readonly sla: SlaService,
+    private readonly satisfaction: SatisfactionService,
   ) {}
 
   /** RN-21 a RN-30. O controller já exige agente+. */
@@ -674,7 +676,10 @@ export class TicketsService {
       this.categories.namesByIds([...ids.categories]),
     ]);
     const refs = Object.fromEntries(found.flat().map((ref) => [ref.id, ref.name]));
-    return toTicketDetail(row, refs, isAgent(viewer));
+    const detail = toTicketDetail(row, refs, isAgent(viewer));
+    // T40 RN-16: a avaliação só existe na resposta para supervisor e admin.
+    if (!seesAllTickets(viewer)) return detail;
+    return { ...detail, satisfaction: await this.satisfaction.forTicket(row.id) };
   }
 
   /** T28: soma ao `changes` o efeito da mudança de status ou prioridade no SLA. */
@@ -1013,12 +1018,27 @@ export class TicketsService {
   }
 
   /** T37: os chamados que o relatório do período usa e quantos estão em aberto agora. */
-  async reportData(start: Date, end: Date, groupId: string | null) {
+  async reportData(
+    start: Date,
+    end: Date,
+    groupId: string | null,
+    extraIds: readonly string[] = [],
+  ) {
     const [tickets, openNow] = await Promise.all([
-      this.tickets.findForReport(start, end, groupId),
+      this.tickets.findForReport(start, end, groupId, extraIds),
       this.tickets.countOpen(groupId),
     ]);
     return { tickets, openNow };
+  }
+
+  /** T40 RN-08: número e assunto do chamado para a página pública de avaliação. */
+  surveyHeader(id: string): Promise<{ number: number; subject: string } | null> {
+    return this.tickets.findSurveyHeader(id);
+  }
+
+  /** T40 RN-21: número, assunto, responsável e grupo dos chamados da lista de avaliações. */
+  summariesByIds(ids: readonly string[]) {
+    return this.tickets.findSummariesByIds(ids);
   }
 
   /**

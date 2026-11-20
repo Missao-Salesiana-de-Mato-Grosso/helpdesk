@@ -55,6 +55,10 @@ export const ApiErrorCode = {
   FILE_TOO_LARGE: 'FILE_TOO_LARGE',
   UNSUPPORTED_FILE_TYPE: 'UNSUPPORTED_FILE_TYPE',
   TOO_MANY_FILES: 'TOO_MANY_FILES',
+
+  // pesquisa de satisfação (T40)
+  /** Link de avaliação desconhecido, expirado ou substituído por um mais novo. */
+  SURVEY_LINK_INVALID: 'SURVEY_LINK_INVALID',
 } as const;
 
 export type ApiErrorCode = (typeof ApiErrorCode)[keyof typeof ApiErrorCode];
