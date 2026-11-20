@@ -123,7 +123,6 @@ const ticket = (n: number) => ({
 const many = (count: number) => Array.from({ length: count }, (_, n) => ticket(n));
 
 describe('bulkUpdateTicketsSchema (spec T35)', () => {
-
   it('CT-19 aceita 1 e 100 chamados, recusa 0, 101 e repetidos', () => {
     const changes = { priority: 'high' };
     expect(valid({ tickets: many(1), changes })).toBe(true);
