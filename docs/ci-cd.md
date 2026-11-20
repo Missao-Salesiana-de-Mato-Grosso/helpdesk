@@ -8,9 +8,11 @@ Pipeline em `.github/workflows/ci-cd.yml` (GitHub Actions), com dois jobs:
   (`deploy/prod/app.sh`) faz localmente, mas de forma não interativa (`ASSUME_YES=1`), publicando
   a imagem em `cr-msmt-prd` e implantando em `k8s-msmt-prd` (https://suporte.msmt.org.br).
 
-O job `deploy` usa o ambiente do GitHub `production` — configure regras de proteção nele
-(Settings → Environments → production → "Required reviewers") se quiser um aprovador humano antes
-de cada deploy automático.
+O job `deploy` usa o ambiente do GitHub `production`, que hoje **não tem regra de proteção**: o
+deploy começa assim que o `test` passa na `main`, sem aprovação manual. A revisão acontece no PR;
+fazer o merge é fazer o deploy. Para ter um aprovador humano antes de cada deploy, configure
+Settings → Environments → production → "Required reviewers" (disponível no plano gratuito porque o
+repositório é público) e atualize este arquivo, o runbook §1 e o `CLAUDE.md`.
 
 ## Fluxo de mudança
 
@@ -18,14 +20,16 @@ de cada deploy automático.
 2. **Branch** a partir da `main`: `<tipo>/<n>-<resumo>` (ex.: `feat/12-admin-usuarios`, `fix/15-login-externo`).
 3. **Pull Request** para a `main`, citando a issue (`Closes #12`). O template lista as verificações.
 4. O job **test** roda no PR e precisa passar.
-5. **Merge** na `main` → o job **deploy** fica aguardando aprovação no ambiente `production` → um revisor aprova → a imagem é publicada e implantada.
+5. **Merge** na `main` → o job **test** roda de novo → o job **deploy** publica a imagem e implanta, sem etapa de aprovação.
 
 `make deploy` (local) continua existindo como contingência, por exemplo se o GitHub Actions estiver fora.
 
-### Configuração no GitHub (uma vez, pelo dono do repositório)
+### Configuração no GitHub (pelo dono do repositório)
 
-- Settings → Environments → **production** → **Required reviewers**: quem aprova os deploys.
-- Settings → Branches → regra para a `main`: **exigir Pull Request** antes do merge, **exigir o status check `test`** e bloquear push direto e force push.
+Situação conferida em 19/11/2026: **nenhuma das duas está configurada.**
+
+- Settings → Environments → **production** → **Required reviewers**: opcional; quem aprova os deploys, se um dia quiserem a etapa de aprovação.
+- Settings → Branches (ou Rules → Rulesets) → regra para a `main`: **exigir Pull Request** antes do merge, **exigir o status check `test`** e bloquear push direto e force push. Recomendado: sem ela, o fluxo issue → PR depende só de disciplina, e um push direto na `main` vai para produção.
 
 ## Segredos necessários (Settings → Secrets and variables → Actions)
 
