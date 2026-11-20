@@ -2,19 +2,20 @@
 
 Uma spec por tarefa (ou grupo de tarefas) do backlog em `docs/discovery/05-plano-mvp.md`, escrita **na véspera** da sessão do Claude Code que vai implementá-la. Só as tarefas em que a ambiguidade custa caro ganham spec; para as demais, a linha do backlog basta.
 
-| Spec                                                                   | Tarefas                            | Status                                    | Sessão prevista |
-| ---------------------------------------------------------------------- | ---------------------------------- | ----------------------------------------- | --------------- |
-| [T04-T05-auth-jit.md](T04-T05-auth-jit.md)                             | T04, T05 (+ contrato para T06)     | implementada                              | ter 20/10       |
-| [T08-T10-tickets-core.md](T08-T10-tickets-core.md)                     | T08, T09, T10                      | implementada                              | qua 21/10       |
-| [T14-notifications.md](T14-notifications.md)                           | T14                                | implementada                              | qua 21/10       |
-| [T21-inbound-email.md](T21-inbound-email.md)                           | T21                                | implementada                              | qui 22/10       |
-| [T17-deploy.md](T17-deploy.md)                                         | T17 (e etapas 4, 5 e 8 do rollout) | implementada                              | dom 25/10       |
-| [T22-onboarding-liberacao.md](T22-onboarding-liberacao.md)             | T22 (ADR-011; depende da T15)      | implementada (RN-01–20; RN-21–26 adiadas) | ter 28/10       |
-| [T31-assinatura-email.md](T31-assinatura-email.md)                     | T31 (#45; depende da T14)          | implementada                              | seg 16/11       |
-| [T32-imagens-no-texto.md](T32-imagens-no-texto.md)                     | T32 (#47; depende da T13 e T14)    | implementada                              | qua 18/11       |
-| [T33-imagem-assinatura.md](T33-imagem-assinatura.md)                   | T33 (#50; depende da T31 e T32)    | implementada                              | qua 18/11       |
-| [T34-limpeza-imagens-assinatura.md](T34-limpeza-imagens-assinatura.md) | T34 (#52; depende da T33)          | implementada                              | qui 19/11       |
-| [T35-acoes-em-lote.md](T35-acoes-em-lote.md)                           | T35 (#55; depende da T08–T10)      | implementada                              | qui 19/11       |
+| Spec                                                                   | Tarefas                                      | Status                                    | Sessão prevista |
+| ---------------------------------------------------------------------- | -------------------------------------------- | ----------------------------------------- | --------------- |
+| [T04-T05-auth-jit.md](T04-T05-auth-jit.md)                             | T04, T05 (+ contrato para T06)               | implementada                              | ter 20/10       |
+| [T08-T10-tickets-core.md](T08-T10-tickets-core.md)                     | T08, T09, T10                                | implementada                              | qua 21/10       |
+| [T14-notifications.md](T14-notifications.md)                           | T14                                          | implementada                              | qua 21/10       |
+| [T21-inbound-email.md](T21-inbound-email.md)                           | T21                                          | implementada                              | qui 22/10       |
+| [T17-deploy.md](T17-deploy.md)                                         | T17 (e etapas 4, 5 e 8 do rollout)           | implementada                              | dom 25/10       |
+| [T22-onboarding-liberacao.md](T22-onboarding-liberacao.md)             | T22 (ADR-011; depende da T15)                | implementada (RN-01–20; RN-21–26 adiadas) | ter 28/10       |
+| [T31-assinatura-email.md](T31-assinatura-email.md)                     | T31 (#45; depende da T14)                    | implementada                              | seg 16/11       |
+| [T32-imagens-no-texto.md](T32-imagens-no-texto.md)                     | T32 (#47; depende da T13 e T14)              | implementada                              | qua 18/11       |
+| [T33-imagem-assinatura.md](T33-imagem-assinatura.md)                   | T33 (#50; depende da T31 e T32)              | implementada                              | qua 18/11       |
+| [T34-limpeza-imagens-assinatura.md](T34-limpeza-imagens-assinatura.md) | T34 (#52; depende da T33)                    | implementada                              | qui 19/11       |
+| [T35-acoes-em-lote.md](T35-acoes-em-lote.md)                           | T35 (#55; depende da T08–T10)                | implementada                              | qui 19/11       |
+| [T36-round-robin.md](T36-round-robin.md)                               | T36 (#60; depende da T08–T10, T14, T21, T25) | implementada                              | qui 19/11       |
 
 ## Como usar uma spec numa sessão do Claude Code
 

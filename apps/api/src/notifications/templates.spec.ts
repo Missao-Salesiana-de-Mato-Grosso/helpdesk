@@ -228,3 +228,29 @@ describe('templates de notificação (T14)', () => {
     );
   });
 });
+
+describe('ticket_assigned (T36)', () => {
+  it('CT-22 assunto com o aviso, dados do chamado e o link; sem o corpo da mensagem', () => {
+    const mail = renderNotification(
+      'ticket_assigned',
+      payload({
+        ticketNumber: 1042,
+        ticketSubject: 'Sem internet',
+        recipientName: 'Ana',
+        bodyHtml: null,
+        companyName: 'Colégio Dom Bosco',
+      }),
+      true,
+    );
+    expect(mail.subject).toBe('[#1042] Chamado atribuído a você: Sem internet');
+    expect(mail.text).toContain('Olá, Ana.');
+    expect(mail.text).toContain(
+      'O chamado #1042 — Sem internet foi atribuído a você pela distribuição automática da fila Suporte TI.',
+    );
+    expect(mail.text).toContain(
+      'Solicitante: Maria · Unidade: Colégio Dom Bosco · Categoria: Impressoras',
+    );
+    expect(mail.text).toContain('http://portal.test/tickets/t1');
+    expect(mail.html).not.toContain('toner');
+  });
+});

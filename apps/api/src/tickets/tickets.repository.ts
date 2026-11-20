@@ -123,6 +123,8 @@ export interface NewTicket {
   source: Prisma.TicketCreateInput['source'];
   requesterId: string;
   groupId: string;
+  /** T36: já nasce atribuído quando a distribuição automática escolheu alguém. */
+  assigneeId?: string | null;
   categoryId: string;
   companyId: string | null;
   createdAt: Date;

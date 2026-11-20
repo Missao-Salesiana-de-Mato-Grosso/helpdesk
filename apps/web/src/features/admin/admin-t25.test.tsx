@@ -96,9 +96,30 @@ const categoryRoutes = (onPost?: (body: unknown) => void, onPatch?: (body: unkno
     jsonResponse(200, [category({ id: 'k0', name: 'Geral', locked: true }), category({})]),
   'GET /api/admin/groups': () =>
     jsonResponse(200, [
-      { id: 'g1', name: 'Suporte TI', email: null, inboundEmail: null, active: true },
-      { id: 'g2', name: 'Sistemas', email: null, inboundEmail: null, active: true },
-      { id: 'g9', name: 'Antigo', email: null, inboundEmail: null, active: false },
+      {
+        id: 'g1',
+        name: 'Suporte TI',
+        email: null,
+        inboundEmail: null,
+        autoAssign: false,
+        active: true,
+      },
+      {
+        id: 'g2',
+        name: 'Sistemas',
+        email: null,
+        inboundEmail: null,
+        autoAssign: false,
+        active: true,
+      },
+      {
+        id: 'g9',
+        name: 'Antigo',
+        email: null,
+        inboundEmail: null,
+        autoAssign: false,
+        active: false,
+      },
     ]),
   'POST /api/admin/categories': (init: RequestInit | undefined) => {
     onPost?.(jsonBody(init));
@@ -158,12 +179,20 @@ describe('GroupsPage (T25)', () => {
       'GET /api/me': () => jsonResponse(200, ADMIN),
       'GET /api/admin/groups': () =>
         jsonResponse(200, [
-          { id: 'g1', name: 'Cadastros', email: null, inboundEmail: null, active: true },
+          {
+            id: 'g1',
+            name: 'Cadastros',
+            email: null,
+            inboundEmail: null,
+            autoAssign: false,
+            active: true,
+          },
           {
             id: 'g2',
             name: 'Financeiro',
             email: null,
             inboundEmail: 'financeiro@missaosalesiana.org.br',
+            autoAssign: false,
             active: true,
           },
         ]),
@@ -197,6 +226,7 @@ describe('GroupsPage (T25)', () => {
             name: 'Suporte TI',
             email: 'suporte@missaosalesiana.org.br',
             inboundEmail: null,
+            autoAssign: false,
             active: true,
           },
         ]),
@@ -217,5 +247,51 @@ describe('GroupsPage (T25)', () => {
     expect(
       await within(dialog).findByText('O grupo é o padrão de categorias ativas (Geral).'),
     ).toBeInTheDocument();
+  });
+});
+
+describe('GroupsPage — distribuição automática (T36)', () => {
+  it('CT-20 liga "Distribuir automaticamente" e a lista mostra a distribuição', async () => {
+    let patchBody: unknown;
+    stubApi({
+      'GET /api/me': () => jsonResponse(200, ADMIN),
+      'GET /api/admin/groups': () =>
+        jsonResponse(200, [
+          {
+            id: 'g1',
+            name: 'Suporte TI',
+            email: null,
+            inboundEmail: null,
+            autoAssign: false,
+            active: true,
+          },
+          {
+            id: 'g2',
+            name: 'Sistemas',
+            email: null,
+            inboundEmail: null,
+            autoAssign: true,
+            active: true,
+          },
+        ]),
+      'PATCH /api/admin/groups/g1': (init) => {
+        patchBody = jsonBody(init);
+        return jsonResponse(200, {});
+      },
+    });
+    renderWithProviders(<GroupsPage />);
+
+    const row = (await screen.findByRole('cell', { name: 'Sistemas' })).closest('tr')!;
+    expect(within(row).getByText('Automática')).toBeInTheDocument();
+    const manual = screen.getByRole('cell', { name: 'Suporte TI' }).closest('tr')!;
+    expect(within(manual).getByText('Manual')).toBeInTheDocument();
+
+    await userEvent.click(within(manual).getByRole('button', { name: 'Editar' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Editar Suporte TI' });
+    const toggle = within(dialog).getByLabelText(/^Distribuir automaticamente/);
+    expect(toggle).not.toBeChecked();
+    await userEvent.click(toggle);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+    await waitFor(() => expect(patchBody).toEqual({ autoAssign: true }));
   });
 });

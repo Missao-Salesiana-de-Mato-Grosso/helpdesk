@@ -46,4 +46,10 @@ describe('eventText', () => {
   ])('%#: %s', (input, expected) => {
     expect(eventText(input, refs)).toBe(expected);
   });
+
+  it('CT-21 (T36) atribuição pela distribuição automática', () => {
+    expect(
+      eventText(event('assigned', { from: null, to: 'u1', reason: 'round_robin' }), refs),
+    ).toBe('atribuiu automaticamente a Ana (distribuição do grupo)');
+  });
 });

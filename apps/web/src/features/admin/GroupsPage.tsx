@@ -44,6 +44,7 @@ export function GroupsPage() {
               <Table.Th>Nome</Table.Th>
               <Table.Th>E-mail de aviso</Table.Th>
               <Table.Th>Caixa de entrada</Table.Th>
+              <Table.Th>Distribuição</Table.Th>
               <Table.Th>Situação</Table.Th>
               <Table.Th />
             </Table.Tr>
@@ -54,6 +55,7 @@ export function GroupsPage() {
                 <Table.Td>{group.name}</Table.Td>
                 <Table.Td>{group.email ?? '—'}</Table.Td>
                 <Table.Td>{group.inboundEmail ?? '—'}</Table.Td>
+                <Table.Td>{group.autoAssign ? 'Automática' : 'Manual'}</Table.Td>
                 <Table.Td>
                   <StatusBadge active={group.active} />
                 </Table.Td>
@@ -95,6 +97,7 @@ function GroupModal({ group, onClose }: { group: GroupItem | null; onClose: () =
   const [email, setEmail] = useState(group?.email ?? '');
   const [inbound, setInbound] = useState(group?.inboundEmail ?? '');
   const [active, setActive] = useState(group?.active ?? true);
+  const [autoAssign, setAutoAssign] = useState(group?.autoAssign ?? false);
 
   const submit = () => {
     const trimmed = name.trim();
@@ -105,12 +108,16 @@ function GroupModal({ group, onClose }: { group: GroupItem | null; onClose: () =
         ...(trimmed !== group.name ? { name: trimmed } : {}),
         ...(mail !== group.email ? { email: mail } : {}),
         ...(inboundEmail !== group.inboundEmail ? { inboundEmail } : {}),
+        ...(autoAssign !== group.autoAssign ? { autoAssign } : {}),
         ...(active !== group.active ? { active } : {}),
       };
       if (Object.keys(data).length === 0) return onClose();
       save.mutate({ id: group.id, data }, { onSuccess: onClose });
     } else {
-      save.mutate({ data: { name: trimmed, email: mail, inboundEmail } }, { onSuccess: onClose });
+      save.mutate(
+        { data: { name: trimmed, email: mail, inboundEmail, autoAssign } },
+        { onSuccess: onClose },
+      );
     }
   };
 
@@ -136,6 +143,12 @@ function GroupModal({ group, onClose }: { group: GroupItem | null; onClose: () =
           type="email"
           value={inbound}
           onChange={(event) => setInbound(event.currentTarget.value)}
+        />
+        <Checkbox
+          label="Distribuir automaticamente"
+          description="Chamados novos sem responsável vão para os agentes do grupo, um de cada vez, em ordem alfabética."
+          checked={autoAssign}
+          onChange={(event) => setAutoAssign(event.currentTarget.checked)}
         />
         {group && (
           <Checkbox

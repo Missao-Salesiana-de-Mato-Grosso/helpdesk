@@ -25,6 +25,8 @@ export interface GroupItem extends CatalogItem {
   email: string | null;
   /** Caixa encaminhada para a do help desk: e-mail novo para ela abre ticket neste grupo (#42). */
   inboundEmail: string | null;
+  /** Distribui os chamados novos sem responsável entre os agentes do grupo, em rodízio (T36). */
+  autoAssign: boolean;
 }
 
 export interface CategoryItem extends CatalogItem {
@@ -52,7 +54,12 @@ const groupEmail = z
 
 /** `POST /api/admin/groups`. */
 export const createGroupSchema = z
-  .object({ name, email: groupEmail.optional(), inboundEmail: groupEmail.optional() })
+  .object({
+    name,
+    email: groupEmail.optional(),
+    inboundEmail: groupEmail.optional(),
+    autoAssign: z.boolean().optional(),
+  })
   .strict();
 export type CreateGroupInput = z.infer<typeof createGroupSchema>;
 
@@ -62,6 +69,7 @@ export const updateGroupSchema = z
     name: name.optional(),
     email: groupEmail.optional(),
     inboundEmail: groupEmail.optional(),
+    autoAssign: z.boolean().optional(),
     active: z.boolean().optional(),
   })
   .strict()
