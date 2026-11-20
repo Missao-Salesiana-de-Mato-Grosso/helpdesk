@@ -126,6 +126,19 @@ const MATRIX: RouteCase[] = [
       pendente: 200,
     },
   },
+  // T39 CT-11: rota pública do Zitadel. Não usa o token; sem assinatura válida é 401 para todos.
+  {
+    method: 'post',
+    path: '/api/integrations/zitadel/events',
+    expected: {
+      anonimo: 401,
+      solicitante: 401,
+      agente: 401,
+      supervisor: 401,
+      admin: 401,
+      pendente: 401,
+    },
+  },
   // T22 RN-06: /me, /companies e /departments são as únicas rotas abertas a quem está pending.
   { method: 'get', path: '/api/me', expected: { ...AUTHENTICATED, pendente: 200 } },
   {

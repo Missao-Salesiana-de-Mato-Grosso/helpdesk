@@ -47,6 +47,12 @@ describe('eventText', () => {
     expect(eventText(input, refs)).toBe(expected);
   });
 
+  it('CT-12 (T39) responsável desligado no Zitadel', () => {
+    expect(
+      eventText(event('assigned', { from: 'u1', to: null, reason: 'user_deactivated' }), refs),
+    ).toBe('removeu o responsável (Ana) — desligado no Zitadel');
+  });
+
   it('CT-21 (T36) atribuição pela distribuição automática', () => {
     expect(
       eventText(event('assigned', { from: null, to: 'u1', reason: 'round_robin' }), refs),

@@ -140,7 +140,8 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
   }
 
   const moduleRef = await builder.compile();
-  const app = moduleRef.createNestApplication<INestApplication<App>>();
+  // Como no main.ts: corpo bruto guardado (assinatura do Zitadel, T39).
+  const app = moduleRef.createNestApplication<INestApplication<App>>({ rawBody: true });
   // Como no main.ts: logger pino e headers de segurança (T18).
   app.useLogger(app.get(Logger));
   app.setGlobalPrefix('api');

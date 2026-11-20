@@ -8,7 +8,11 @@ import { serveSpa } from './common/spa.js';
 import type { Env } from './config/env.js';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+    // T39: a assinatura do Zitadel é calculada sobre o corpo bruto.
+    rawBody: true,
+  });
   app.useLogger(app.get(Logger));
   const config = app.get<ConfigService<Env, true>>(ConfigService);
   app.setGlobalPrefix('api');

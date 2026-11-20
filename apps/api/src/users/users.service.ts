@@ -372,6 +372,21 @@ export class UsersService {
     return { user: toUserSummary(row), zitadelSub: row.zitadelSub };
   }
 
+  /**
+   * T39 RN-05 e RN-06: inativa quem tem este `sub` do Zitadel. `null` se não existe no help desk;
+   * `changed: false` se já estava inativo. Os papéis do app ficam como estão (RN-07).
+   */
+  async deactivateBySub(sub: string): Promise<{ id: string; changed: boolean } | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { zitadelSub: sub },
+      select: { id: true, active: true },
+    });
+    if (!user) return null;
+    if (!user.active) return { id: user.id, changed: false };
+    await this.prisma.user.update({ where: { id: user.id }, data: { active: false } });
+    return { id: user.id, changed: true };
+  }
+
   /** Para validar a troca de membros de um grupo (T15). Ids desconhecidos ficam de fora. */
   membershipCandidates(ids: readonly string[]): Promise<MembershipCandidate[]> {
     if (ids.length === 0) return Promise.resolve([]);

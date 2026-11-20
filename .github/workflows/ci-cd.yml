@@ -3,7 +3,8 @@ name: CI/CD
 # Testa em toda PR/push; implanta em produção (Magalu Cloud) só em push na main.
 # Segredos necessários (Settings → Secrets and variables → Actions) — ver docs/ci-cd.md:
 #   MGC_API_KEY, KUBECONFIG_PROD, DB_HOST, DB_HELPDESK_PASSWORD, S3_ACCESS_KEY, S3_SECRET_KEY,
-#   SMTP_USER, SMTP_PASSWORD (opcional), MAILBOX_USER, MAILBOX_PASSWORD, MAILBOX_START_SINCE (opcional)
+#   SMTP_USER, SMTP_PASSWORD (opcional), MAILBOX_USER, MAILBOX_PASSWORD, MAILBOX_START_SINCE (opcional),
+#   ZITADEL_ACTIONS_SIGNING_KEY (opcional, T39)
 
 on:
   push:
@@ -97,6 +98,7 @@ jobs:
           MAILBOX_USER: ${{ secrets.MAILBOX_USER }}
           MAILBOX_PASSWORD: ${{ secrets.MAILBOX_PASSWORD }}
           MAILBOX_START_SINCE: ${{ secrets.MAILBOX_START_SINCE }}
+          ZITADEL_ACTIONS_SIGNING_KEY: ${{ secrets.ZITADEL_ACTIONS_SIGNING_KEY }}
         run: |
           infra_dir="$RUNNER_TEMP/msmt-infra-automation"
           mkdir -p "$infra_dir/secrets"
@@ -109,6 +111,8 @@ jobs:
             [[ -n "$MAILBOX_USER" ]] && printf 'MAILBOX_USER=%s\nMAILBOX_PASSWORD=%s\n' "$MAILBOX_USER" "$MAILBOX_PASSWORD"
             [[ -n "$MAILBOX_START_SINCE" ]] && printf 'MAILBOX_START_SINCE=%s\n' "$MAILBOX_START_SINCE"
           } > "$infra_dir/secrets/helpdesk-email.env"
+          # T39: vazio = rota do Zitadel desligada.
+          printf 'ZITADEL_ACTIONS_SIGNING_KEY=%s\n' "$ZITADEL_ACTIONS_SIGNING_KEY" > "$infra_dir/secrets/zitadel-actions.env"
           chmod 600 "$infra_dir"/secrets/*
           echo "INFRA_DIR=$infra_dir" >> "$GITHUB_ENV"
 

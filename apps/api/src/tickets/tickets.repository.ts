@@ -352,6 +352,16 @@ export class TicketsRepository {
     return count;
   }
 
+  /** T39 RN-08: ids dos chamados abertos ou pendentes com este responsável. */
+  async findOpenAssignedTo(userId: string): Promise<string[]> {
+    const rows = await this.prisma.ticket.findMany({
+      where: { assigneeId: userId, status: { in: ['open', 'pending'] } },
+      orderBy: { number: 'asc' },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
+
   /** T27: ids dos tickets resolvidos antes de `cutoff`, os mais antigos primeiro. */
   async findResolvedBefore(cutoff: Date, limit: number): Promise<string[]> {
     const rows = await this.prisma.ticket.findMany({

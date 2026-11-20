@@ -18,6 +18,7 @@ Uma spec por tarefa (ou grupo de tarefas) do backlog em `docs/discovery/05-plano
 | [T36-round-robin.md](T36-round-robin.md)                               | T36 (#60; depende da T08–T10, T14, T21, T25) | implementada                              | qui 19/11       |
 | [T37-relatorios.md](T37-relatorios.md)                                 | T37 (#64; depende da T08–T10 e T28)          | implementada                              | sex 20/11       |
 | [T38-busca-full-text.md](T38-busca-full-text.md)                       | T38 (#66; depende da T08, #48, T13 e T21)    | implementada                              | sex 20/11       |
+| [T39-desligamento-zitadel.md](T39-desligamento-zitadel.md)             | T39 (#67; depende da T05, T15 e T36)         | implementada                              | sex 20/11       |
 
 ## Como usar uma spec numa sessão do Claude Code
 
