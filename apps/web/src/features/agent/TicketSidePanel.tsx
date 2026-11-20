@@ -10,6 +10,7 @@ import {
   type UpdateTicketInput,
 } from '@helpdesk/shared';
 import { useState, type Ref } from 'react';
+import { SatisfactionPanel } from '../satisfaction/SatisfactionPanel.tsx';
 import { SlaPanel } from '../tickets/SlaBadge.tsx';
 import { PRIORITY_LABEL, STATUS_LABEL } from '../tickets/format.ts';
 import { useCategories, useCompanies, useGroupMembers, useGroups } from '../tickets/queries.ts';
@@ -80,6 +81,10 @@ export function TicketSidePanel({
   return (
     <Stack>
       {ticket.sla && <SlaPanel sla={ticket.sla} />}
+      {/* T40 RN-16: o campo só vem para supervisor e admin. */}
+      {ticket.satisfaction !== undefined && (
+        <SatisfactionPanel satisfaction={ticket.satisfaction} />
+      )}
       <Paper withBorder p="md">
         <Stack gap="sm">
           <Select

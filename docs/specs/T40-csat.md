@@ -1,6 +1,6 @@
 # Spec T40 — Pesquisa de satisfação (CSAT)
 
-> Status: pronta · Tarefas: T40 (#70) · Depende de: T14 (outbox e e-mail de resolvido), T35 (resolver em lote), T37 (relatórios) · Revisada em: 20/11/2026
+> Status: implementada (20/11/2026) · Tarefas: T40 (#70) · Depende de: T14 (outbox e e-mail de resolvido), T35 (resolver em lote), T37 (relatórios) · Revisada em: 20/11/2026
 
 ## 1. Objetivo
 
@@ -211,7 +211,16 @@ ticket_satisfaction
 
 ## 10. Decisões tomadas na implementação
 
-_(preenchido depois da implementação)_
+- **Módulos:** `satisfaction` é dono da tabela `ticket_satisfaction` (`SatisfactionService`: gerar e invalidar o link, buscar pelo token, gravar a nota, bloco do painel, dados do relatório). As rotas públicas ficam num módulo à parte (`SatisfactionSurveyModule`), que junta esse service ao `TicketsService` (número e assunto). Assim não há ciclo: notificações, chamados e relatórios importam o `SatisfactionModule`, e só o módulo das rotas importa os chamados.
+- **Onde o link nasce:** no `NotificationService.enqueue`, na transação da resolução, depois dos filtros de destinatário (T14 RN-06). Se o e-mail de resolvido (`resolved` ou `reply` com `resolved`) vai ao solicitante, um link novo é gerado; se não vai, o anterior é invalidado. Isso cobre o PATCH, o lote e a resposta que resolve sem tocar em cada caminho. O payload ganhou `csatUrl` e `csatDays`, opcionais, para as linhas antigas da outbox continuarem válidas.
+- **E-mail:** o bloco de avaliação vem depois do texto de resolvido e antes de "Responda este e-mail…". Cada link é `<PORTAL_URL>/avaliar?nota=<n>#<token>`.
+- **Gravação:** o `UPDATE` da nota leva o hash e o prazo no `WHERE`. Se uma resolução trocar o link no meio, nada é gravado e a resposta é 404.
+- **Relatório:** `requested` e `answered` são calculados também nas linhas das quebras (a spec dizia `0`); a tela só os mostra nos totais. Os chamados avaliados no período entram na consulta do relatório mesmo sem outro marco nele (`findForReport` com `extraIds`). Uma linha de quebra que só tem avaliação no período não some.
+- **CSV:** os cabeçalhos novos seguem os da T37, em pt-BR (`Avaliações`, `Satisfeitos (notas 4 e 5)`, `Satisfação média`), e não `avaliacoes`/`satisfeitos`/`media_satisfacao` como estava na RN-20. A lista de avaliações tem o botão "Baixar CSV das avaliações" (nome diferente do "Baixar CSV" das quebras).
+- **Limite por IP:** `@Throttle` fixo de 30/min no controller das rotas públicas. Cada suíte e2e sobe a própria aplicação, então o contador não vaza entre arquivos.
+- **Página:** fora do `RequireAuth` e do `AppLayout`. O comentário é um textarea de 4 linhas (o `autosize` do Mantine depende de `document.fonts`, que o jsdom não tem).
+- **Docs:** runbook §19 (o que é, quem vê, como mudar o prazo ou desligar, link inválido); `CSAT_LINK_DAYS` no `.env.example`; o escopo marca o CSAT como T40.
+- **Testes:** CT-01 (parte), CT-07 (`CSAT_LINK_DAYS=0` e prazo) em `satisfaction.service.spec.ts` e `survey-token.spec.ts`; CT-08 em `templates.spec.ts`; CT-10 e CT-11 (validação) também em `packages/shared/src/schemas/satisfaction.test.ts`; CT-16 (cálculo) em `report-math.spec.ts`; CT-17 (filtro) também em `reports.test.ts` do shared; CT-01 a CT-07, CT-09 a CT-14, CT-16 e CT-17 em `test/satisfaction.e2e-spec.ts`; CT-15 em `test/logging.e2e-spec.ts` (precisa ser a primeira aplicação do processo); CT-18 na matriz de permissões; CT-19 a CT-21 em `features/satisfaction/satisfaction.test.tsx`; CT-22 em `features/reports/reports.test.tsx`. Os e2e rodam só no CI (sem Docker nesta máquina).
 
 ## 11. Prompt sugerido para a sessão
 

@@ -15,6 +15,7 @@ export * from './schemas/access-requests.js';
 export * from './schemas/canned-responses.js';
 export * from './schemas/catalog.js';
 export * from './schemas/reports.js';
+export * from './schemas/satisfaction.js';
 export * from './schemas/signature.js';
 export * from './schemas/sla.js';
 export * from './schemas/tickets.js';

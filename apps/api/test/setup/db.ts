@@ -11,6 +11,7 @@ const TABLES = [
   'email_message_refs',
   'inbound_emails',
   'notifications',
+  'ticket_satisfaction',
   'ticket_events',
   'attachments',
   'ticket_messages',

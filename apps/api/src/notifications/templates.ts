@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { SATISFACTION_LABELS, SATISFACTION_SCORES } from '@helpdesk/shared';
 import { z } from 'zod';
+import { surveyScoreUrl } from '../satisfaction/survey-token.js';
 
 export const NOTIFICATION_TEMPLATES = [
   'ticket_created',
@@ -89,6 +91,12 @@ export const notificationPayload = z.object({
       }),
     )
     .optional(),
+  /**
+   * T40 RN-06: link de avaliação (`<PORTAL_URL>/avaliar#<token>`), só no e-mail de resolvido ao
+   * solicitante, e a validade em dias. Ausentes nos outros e nas linhas gravadas antes da T40.
+   */
+  csatUrl: z.string().nullable().optional(),
+  csatDays: z.number().optional(),
 });
 
 export type NotificationPayload = z.infer<typeof notificationPayload>;
@@ -141,7 +149,8 @@ export interface RenderedMail {
 
 type Block =
   | { kind: 'text'; value: string }
-  | { kind: 'message'; html: string; plain: string; signatureHtml: string | null };
+  | { kind: 'message'; html: string; plain: string; signatureHtml: string | null }
+  | { kind: 'survey'; url: string; days: number | null };
 
 const text = (value: string): Block => ({ kind: 'text', value });
 
@@ -257,6 +266,11 @@ export function renderNotification(
       ),
     );
   }
+  // T40 RN-01 e RN-06: o pedido de avaliação vai no e-mail que resolve o chamado.
+  const resolves = template === 'resolved' || (template === 'reply' && payload.resolved);
+  if (resolves && payload.csatUrl) {
+    blocks.push({ kind: 'survey', url: payload.csatUrl, days: payload.csatDays ?? null });
+  }
   // RN-18: avisos sem ticket não são conversas — nada para responder.
   if (payload.ticketNumber !== null) blocks.push(text(REPLY_LINE));
 
@@ -335,12 +349,60 @@ function intro(template: NotificationTemplate, p: NotificationPayload): Block[] 
 
 const FONT = 'font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222';
 
-function toHtml(blocks: Block[], portalUrl: string | null): string {
-  const parts = blocks.map((block) =>
-    block.kind === 'text'
-      ? `<p style="margin:0 0 12px">${escapeHtml(block.value)}</p>`
-      : `<div style="margin:0 0 12px;padding:12px;border-left:3px solid #ccc;background:#f7f7f7">${block.html}${signatureBlock(block.signatureHtml)}</div>`,
+const SURVEY_INTRO = 'Como foi o atendimento? Escolha uma nota:';
+
+const surveyValidity = (days: number | null) =>
+  days === null ? null : `O link vale por ${days} ${days === 1 ? 'dia' : 'dias'}.`;
+
+/** T40 RN-06: um link por nota, com o rótulo. */
+function surveyHtml(url: string, days: number | null): string {
+  const links = SATISFACTION_SCORES.map((score) => {
+    const href = escapeHtml(surveyScoreUrl(url, score));
+    const label = escapeHtml(`${score} — ${SATISFACTION_LABELS[score]}`);
+    return `<a href="${href}" style="display:inline-block;margin:0 6px 6px 0;padding:6px 10px;border:1px solid #bbb;border-radius:4px;color:#222;text-decoration:none">${label}</a>`;
+  }).join('');
+  const validity = surveyValidity(days);
+  return [
+    `<p style="margin:0 0 8px">${escapeHtml(SURVEY_INTRO)}</p>`,
+    `<p style="margin:0 0 6px">${links}</p>`,
+    validity
+      ? `<p style="margin:0 0 12px;font-size:12px;color:#777">${escapeHtml(validity)}</p>`
+      : '',
+  ].join('');
+}
+
+function surveyText(url: string, days: number | null): string {
+  const lines = SATISFACTION_SCORES.map(
+    (score) => `${score} — ${SATISFACTION_LABELS[score]}: ${surveyScoreUrl(url, score)}`,
   );
+  const validity = surveyValidity(days);
+  return [SURVEY_INTRO, ...lines, ...(validity ? [validity] : [])].join('\n');
+}
+
+function blockHtml(block: Block): string {
+  switch (block.kind) {
+    case 'text':
+      return `<p style="margin:0 0 12px">${escapeHtml(block.value)}</p>`;
+    case 'survey':
+      return surveyHtml(block.url, block.days);
+    default:
+      return `<div style="margin:0 0 12px;padding:12px;border-left:3px solid #ccc;background:#f7f7f7">${block.html}${signatureBlock(block.signatureHtml)}</div>`;
+  }
+}
+
+function blockText(block: Block): string {
+  switch (block.kind) {
+    case 'text':
+      return block.value;
+    case 'survey':
+      return surveyText(block.url, block.days);
+    default:
+      return `${block.plain}${signatureText(block.signatureHtml)}`;
+  }
+}
+
+function toHtml(blocks: Block[], portalUrl: string | null): string {
+  const parts = blocks.map(blockHtml);
   if (portalUrl) {
     const href = escapeHtml(portalUrl);
     parts.push(
@@ -354,9 +416,7 @@ function toHtml(blocks: Block[], portalUrl: string | null): string {
 }
 
 function toText(blocks: Block[], portalUrl: string | null): string {
-  const parts = blocks.map((block) =>
-    block.kind === 'text' ? block.value : `${block.plain}${signatureText(block.signatureHtml)}`,
-  );
+  const parts = blocks.map(blockText);
   if (portalUrl) parts.push(`Ou acompanhe pelo portal: ${portalUrl}`);
   parts.push('--\nSuporte MSMT — Missão Salesiana de Mato Grosso');
   return `${parts.join('\n\n')}\n`;

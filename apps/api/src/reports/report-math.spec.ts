@@ -124,3 +124,46 @@ describe('relatórios — cálculos (T37)', () => {
     expect(week).toEqual({ date: '2026-11-02', created: 2, resolved: 1 });
   });
 });
+
+const rating = (score: number | null, ratedAt: string | null, requestedAt: string) => ({
+  satisfaction: {
+    score,
+    ratedAt: ratedAt ? at(ratedAt) : null,
+    requestedAt: at(requestedAt),
+  },
+});
+
+describe('relatórios — satisfação (T40)', () => {
+  it('CT-16 avaliações pela data em que foram dadas; % de 4 e 5, média com uma casa', () => {
+    const metrics = reportMetrics(
+      [
+        ticket(rating(5, '2026-11-17T10:00', '2026-11-16T09:00')),
+        ticket(rating(4, '2026-11-18T10:00', '2026-11-10T09:00')),
+        ticket(rating(2, '2026-11-19T10:00', '2026-11-19T09:00')),
+        // Dada antes do período: não conta, mas o link foi enviado no período e não foi respondido.
+        ticket(rating(1, '2026-11-15T10:00', '2026-11-17T09:00')),
+        // Link enviado no período, ainda sem resposta.
+        ticket(rating(null, null, '2026-11-18T09:00')),
+        ticket(),
+      ],
+      window,
+    );
+    expect(metrics.satisfaction).toEqual({
+      responses: 3,
+      satisfied: 2,
+      average: 3.7,
+      requested: 4,
+      answered: 2,
+    });
+  });
+
+  it('CT-16 sem avaliação no período, média sem valor', () => {
+    expect(reportMetrics([ticket()], window).satisfaction).toEqual({
+      responses: 0,
+      satisfied: 0,
+      average: null,
+      requested: 0,
+      answered: 0,
+    });
+  });
+});

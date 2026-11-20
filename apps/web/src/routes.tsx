@@ -20,6 +20,7 @@ import { CategoriesPage, CompaniesPage, DepartmentsPage } from './features/admin
 import { GroupsPage } from './features/admin/GroupsPage.tsx';
 import { UsersPage } from './features/admin/UsersPage.tsx';
 import { CannedResponsesPage } from './features/canned-responses/CannedResponsesPage.tsx';
+import { SatisfactionPage, SURVEY_PATH } from './features/satisfaction/SatisfactionPage.tsx';
 import { QueuePage } from './features/queue/QueuePage.tsx';
 import { SignaturePage } from './features/signature/SignaturePage.tsx';
 import { SlaSettingsPage } from './features/sla/SlaSettingsPage.tsx';
@@ -43,6 +44,8 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path={CALLBACK_PATH} element={<AuthCallback />} />
+      {/* T40 RN-08: avaliação pelo link do e-mail, sem login. */}
+      <Route path={SURVEY_PATH} element={<SatisfactionPage />} />
       <Route
         element={
           <RequireAuth>

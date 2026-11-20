@@ -139,6 +139,34 @@ const MATRIX: RouteCase[] = [
       pendente: 401,
     },
   },
+  // T40 CT-18: rotas públicas da avaliação. Não usam o token de login; quem autoriza é o token do
+  // link, e um token desconhecido é 404 para todos (nunca 401).
+  {
+    method: 'post',
+    path: '/api/satisfaction/lookup',
+    body: () => ({ token: 'a'.repeat(43) }),
+    expected: {
+      anonimo: 404,
+      solicitante: 404,
+      agente: 404,
+      supervisor: 404,
+      admin: 404,
+      pendente: 404,
+    },
+  },
+  {
+    method: 'put',
+    path: '/api/satisfaction',
+    body: () => ({ token: 'a'.repeat(43), score: 4 }),
+    expected: {
+      anonimo: 404,
+      solicitante: 404,
+      agente: 404,
+      supervisor: 404,
+      admin: 404,
+      pendente: 404,
+    },
+  },
   // T22 RN-06: /me, /companies e /departments são as únicas rotas abertas a quem está pending.
   { method: 'get', path: '/api/me', expected: { ...AUTHENTICATED, pendente: 200 } },
   {
@@ -299,6 +327,14 @@ const MATRIX: RouteCase[] = [
     path: () => '/api/reports/summary?from=2026-11-01&to=2026-11-30',
     template: '/api/reports/summary',
     label: '/api/reports/summary',
+    expected: ADMIN_OR_SUPERVISOR,
+  },
+  // T40 CT-18: lista de avaliações — só supervisor e admin.
+  {
+    method: 'get',
+    path: () => '/api/reports/satisfaction?from=2026-11-01&to=2026-11-30',
+    template: '/api/reports/satisfaction',
+    label: '/api/reports/satisfaction',
     expected: ADMIN_OR_SUPERVISOR,
   },
   {

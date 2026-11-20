@@ -9,6 +9,8 @@ import type { Env } from '../config/env.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { GroupsService } from '../groups/groups.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { SatisfactionService } from '../satisfaction/satisfaction.service.js';
+import { surveyUrl } from '../satisfaction/survey-token.js';
 import { SignatureService } from '../users/signature.service.js';
 import { UsersService, type UserContact } from '../users/users.service.js';
 import {
@@ -140,6 +142,7 @@ export class NotificationService {
     private readonly categories: CategoriesService,
     private readonly attachments: AttachmentsService,
     private readonly signatures: SignatureService,
+    private readonly satisfaction: SatisfactionService,
     @Inject(MAILER) private readonly mailer: Mailer,
     config: ConfigService<Env, true>,
   ) {
@@ -158,6 +161,8 @@ export class NotificationService {
     const group = await this.groups.notificationTarget(ticket.groupId);
     const planned = await this.plan(event, group);
     const recipients = this.filter(planned, event.actorId);
+    // T40: antes do `return` abaixo — uma resolução sem e-mail também invalida o link anterior.
+    const surveyToken = await this.surveyLink(tx, event, recipients);
     if (recipients.length === 0) return;
 
     const [contacts, companies, categories] = await Promise.all([
@@ -179,7 +184,7 @@ export class NotificationService {
       : [];
 
     await tx.notification.createMany({
-      data: recipients.map(({ template, to }) => {
+      data: recipients.map(({ template, to, userId }) => {
         const payload: NotificationPayload = {
           ticketId: ticket.id,
           ticketNumber: ticket.number,
@@ -203,6 +208,13 @@ export class NotificationService {
           categoryName: categories[0]?.name ?? null,
           ...(template === 'reply' && signatureHtml ? { signatureHtml } : {}),
           ...(template === 'reply' && signatureImages.length > 0 ? { signatureImages } : {}),
+          // T40 RN-06: o link de avaliação só no e-mail do solicitante.
+          ...(surveyToken && userId === ticket.requesterId
+            ? {
+                csatUrl: surveyUrl(this.portalUrl, surveyToken),
+                csatDays: this.satisfaction.linkDays,
+              }
+            : {}),
         };
         return {
           ticketId: ticket.id,
@@ -214,6 +226,30 @@ export class NotificationService {
         };
       }),
     });
+  }
+
+  /**
+   * T40 RN-01 a RN-04: a resolução que manda e-mail ao solicitante gera um link novo de avaliação
+   * (na transação do evento); a que não manda só invalida o anterior. Devolve o token, ou `null`.
+   */
+  private async surveyLink(
+    tx: Prisma.TransactionClient,
+    event: NotificationEvent,
+    recipients: readonly Planned[],
+  ): Promise<string | null> {
+    const resolving =
+      event.type === 'resolved' || (event.type === 'public_reply' && event.resolved);
+    if (!resolving) return null;
+    const { ticket } = event;
+    const toRequester = recipients.some(
+      ({ template, userId }) =>
+        userId === ticket.requesterId && (template === 'resolved' || template === 'reply'),
+    );
+    if (!toRequester) {
+      await this.satisfaction.revokeLink(tx, ticket.id);
+      return null;
+    }
+    return this.satisfaction.issueLink(tx, ticket.id);
   }
 
   /** RN-01 a RN-04 e RN-08: quem recebe o quê, antes dos filtros. */

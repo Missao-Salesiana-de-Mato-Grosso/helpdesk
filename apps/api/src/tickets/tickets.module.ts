@@ -4,6 +4,7 @@ import { CategoriesModule } from '../categories/categories.module.js';
 import { CompaniesModule } from '../companies/companies.module.js';
 import { GroupsModule } from '../groups/groups.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
+import { SatisfactionModule } from '../satisfaction/satisfaction.module.js';
 import { UsersModule } from '../users/users.module.js';
 import { SlaModule } from '../sla/sla.module.js';
 import { AutoCloseCron } from './auto-close.cron.js';
@@ -20,6 +21,7 @@ import { TicketsService } from './tickets.service.js';
     CompaniesModule,
     GroupsModule,
     NotificationsModule,
+    SatisfactionModule,
     SlaModule,
   ],
   controllers: [TicketsController, AttachmentsController],
