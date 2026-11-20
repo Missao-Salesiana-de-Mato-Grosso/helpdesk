@@ -1,11 +1,21 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ApiErrorCode, type NamedRef } from '@helpdesk/shared';
 import { ApiException } from '../common/api-exception.js';
+import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AGENT_ROLES, isAgentRole, UsersService } from '../users/users.service.js';
+import { nextAutoAssignee } from './auto-assign.js';
+
+/** Membros que contam como agentes ativos: aviso ao grupo (T14), atribuição e rodízio (T36). */
+const activeAgentMember = (groupId: string) => ({
+  groupId,
+  user: { active: true, roles: { hasSome: [...AGENT_ROLES] } },
+});
 
 @Injectable()
 export class GroupsService {
+  private readonly logger = new Logger(GroupsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly users: UsersService,
@@ -113,14 +123,45 @@ export class GroupsService {
 
   private async activeAgents(groupId: string): Promise<NamedRef[]> {
     const members = await this.prisma.groupMember.findMany({
-      where: {
-        groupId,
-        user: { active: true, roles: { hasSome: [...AGENT_ROLES] } },
-      },
+      where: activeAgentMember(groupId),
       select: { user: { select: { id: true, name: true } } },
       orderBy: { user: { name: 'asc' } },
     });
     return members.map((member) => member.user);
+  }
+
+  /**
+   * T36: o próximo agente do rodízio, ou `null` se o grupo não distribui (inativo ou sem
+   * `autoAssign`) ou não tem agente elegível. Trava a linha do grupo e grava quem recebeu na
+   * mesma transação do ticket (RN-11): duas criações simultâneas não caem no mesmo agente.
+   */
+  async pickAutoAssignee(tx: Prisma.TransactionClient, groupId: string): Promise<NamedRef | null> {
+    const [group] = await tx.$queryRaw<
+      { active: boolean; auto_assign: boolean; last_auto_assignee_id: string | null }[]
+    >`SELECT active, auto_assign, last_auto_assignee_id::text FROM groups WHERE id = ${groupId}::uuid FOR UPDATE`;
+    if (!group?.active || !group.auto_assign) return null;
+
+    const members = await tx.groupMember.findMany({
+      where: activeAgentMember(groupId),
+      select: { user: { select: { id: true, name: true } } },
+    });
+    const last = group.last_auto_assignee_id
+      ? await tx.user.findUnique({
+          where: { id: group.last_auto_assignee_id },
+          select: { id: true, name: true },
+        })
+      : null;
+    const next = nextAutoAssignee(
+      members.map((member) => member.user),
+      last,
+    );
+    if (!next) {
+      // RN-06: o chamado fica sem responsável; a operação não falha.
+      this.logger.warn(`Distribuição automática do grupo ${groupId}: nenhum agente elegível`);
+      return null;
+    }
+    await tx.group.update({ where: { id: groupId }, data: { lastAutoAssigneeId: next.id } });
+    return next;
   }
 
   /** Nomes por id (para o histórico do ticket); ids desconhecidos ficam de fora. */

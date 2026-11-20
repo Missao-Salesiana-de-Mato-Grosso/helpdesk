@@ -36,6 +36,15 @@ describe('group schemas', () => {
     expect(updateGroupSchema.parse({ inboundEmail: '' })).toEqual({ inboundEmail: null });
     expect(createGroupSchema.safeParse({ name: 'TI', inboundEmail: 'x' }).success).toBe(false);
   });
+
+  it('CT-01 (T36) accepts autoAssign as a boolean, alone in an update', () => {
+    expect(createGroupSchema.parse({ name: 'TI', autoAssign: true })).toEqual({
+      name: 'TI',
+      autoAssign: true,
+    });
+    expect(updateGroupSchema.parse({ autoAssign: false })).toEqual({ autoAssign: false });
+    expect(updateGroupSchema.safeParse({ autoAssign: 'sim' }).success).toBe(false);
+  });
 });
 
 describe('createCategorySchema', () => {

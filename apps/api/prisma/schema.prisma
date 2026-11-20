@@ -127,17 +127,18 @@ model User {
   createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  company          Company?         @relation(fields: [companyId], references: [id])
-  department       Department?      @relation(fields: [departmentId], references: [id])
-  accessDecidedBy  User?            @relation("AccessDecisions", fields: [accessDecidedById], references: [id])
-  accessDecisions  User[]           @relation("AccessDecisions")
-  groupMemberships GroupMember[]
-  requestedTickets Ticket[]         @relation("TicketRequester")
-  assignedTickets  Ticket[]         @relation("TicketAssignee")
-  messages         TicketMessage[]
-  events           TicketEvent[]
-  cannedResponses  CannedResponse[]
-  signatureImages  SignatureImage[]
+  company            Company?         @relation(fields: [companyId], references: [id])
+  department         Department?      @relation(fields: [departmentId], references: [id])
+  accessDecidedBy    User?            @relation("AccessDecisions", fields: [accessDecidedById], references: [id])
+  accessDecisions    User[]           @relation("AccessDecisions")
+  groupMemberships   GroupMember[]
+  requestedTickets   Ticket[]         @relation("TicketRequester")
+  assignedTickets    Ticket[]         @relation("TicketAssignee")
+  messages           TicketMessage[]
+  events             TicketEvent[]
+  cannedResponses    CannedResponse[]
+  signatureImages    SignatureImage[]
+  autoAssignedGroups Group[]          @relation("GroupLastAutoAssignee")
 
   @@index([companyId])
   @@index([accessRequestedAt], map: "users_access_requested_at_pending_idx")
@@ -173,20 +174,25 @@ model Department {
 
 /// Grupo de atendimento (fila de agentes).
 model Group {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name         String   @unique
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name               String   @unique
   /// Opcional: e-mail que recebe o aviso de ticket novo na fila.
-  email        String?  @db.Citext
+  email              String?  @db.Citext
   /// Opcional: caixa de outro setor encaminhada para a do help desk (ex.: cadastros@). E-mail novo
   /// enviado para ela abre o ticket neste grupo, em vez do grupo padrão da categoria "Geral".
-  inboundEmail String?  @unique @map("inbound_email") @db.Citext
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  inboundEmail       String?  @unique @map("inbound_email") @db.Citext
+  active             Boolean  @default(true)
+  /// T36: distribui os chamados novos sem responsável entre os agentes do grupo, em rodízio.
+  autoAssign         Boolean  @default(false) @map("auto_assign")
+  /// T36: quem recebeu por último na distribuição automática (o próximo vem depois dele).
+  lastAutoAssigneeId String?  @map("last_auto_assignee_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  members    GroupMember[]
-  tickets    Ticket[]
-  categories Category[]
+  lastAutoAssignee User?         @relation("GroupLastAutoAssignee", fields: [lastAutoAssigneeId], references: [id], onDelete: SetNull)
+  members          GroupMember[]
+  tickets          Ticket[]
+  categories       Category[]
 
   @@map("groups")
 }

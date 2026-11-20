@@ -422,11 +422,30 @@ export class TicketsService {
         });
       }
 
+      // T36 RN-03c e RN-04: foi para outro grupo sem responsável, e o corpo não tirou o
+      // responsável de propósito: o grupo de destino distribui, no mesmo incremento de versão.
+      const auto =
+        changes.groupId !== undefined &&
+        input.assigneeId === undefined &&
+        ticket.assigneeId === null
+          ? await this.pickAutoAssignee(tx, groupId)
+          : null;
+      if (auto) changes.assigneeId = auto.assigneeId;
+
       if (events.length === 0) return { emits: [], outcome: unchanged };
       await this.applySla(ticket, changes);
       await this.tickets.update(tx, id, changes, true);
       for (const event of events) {
         await this.events.append(tx, { ...event, ticketId: id, actorId: actor.id, ip });
+      }
+      if (auto) {
+        const assignedTicket = notified(ticket, {
+          assigneeId: auto.assigneeId,
+          groupId,
+          companyId,
+          categoryId: input.categoryId ?? ticket.categoryId,
+        });
+        pending.push(await this.recordAutoAssignment(tx, assignedTicket, auto.systemId));
       }
       if (changes.status === 'resolved') {
         await this.notifications.enqueue(tx, {
@@ -735,14 +754,18 @@ export class TicketsService {
     const sla = await this.sla.initial(input.priority, createdAt);
     const stored = await this.storeUpload(upload.files, images);
 
-    const created = await this.withStoredFiles(stored, () =>
+    const groupId = category.defaultGroup.id;
+    const { ticket: created, emits } = await this.withStoredFiles(stored, () =>
       this.tickets.transaction(async (tx) => {
+        // T36 RN-03a/RN-04: só o chamado aberto pelo próprio solicitante entra no rodízio.
+        const auto = source === 'portal' ? await this.pickAutoAssignee(tx, groupId) : null;
         const ticket = await this.tickets.create(tx, {
           subject: input.subject,
           priority: input.priority,
           source,
           requesterId: requester.id,
-          groupId: category.defaultGroup.id,
+          groupId,
+          assigneeId: auto?.assigneeId ?? null,
           categoryId: category.id,
           companyId,
           createdAt,
@@ -764,22 +787,26 @@ export class TicketsService {
           data: input.relatedTicketId ? { relatedTicketId: input.relatedTicketId } : {},
           ip,
         });
+        const notifiedTicket: NotifiedTicket = {
+          id: ticket.id,
+          number: ticket.number,
+          subject: input.subject,
+          requesterId: requester.id,
+          assigneeId: auto?.assigneeId ?? null,
+          groupId,
+          companyId,
+          categoryId: category.id,
+        };
         await this.notifications.enqueue(tx, {
           type: 'ticket_created',
-          ticket: {
-            id: ticket.id,
-            number: ticket.number,
-            subject: input.subject,
-            requesterId: requester.id,
-            assigneeId: null,
-            groupId: category.defaultGroup.id,
-            companyId,
-            categoryId: category.id,
-          },
+          ticket: notifiedTicket,
           actorId: actor.id,
           message: { bodyHtml, attachments: stored },
         });
-        return ticket;
+        const assigned = auto
+          ? [await this.recordAutoAssignment(tx, notifiedTicket, auto.systemId)]
+          : [];
+        return { ticket, emits: assigned };
       }),
     );
 
@@ -790,6 +817,7 @@ export class TicketsService {
       requesterId: requester.id,
       source,
     } satisfies TicketCreatedEvent);
+    this.emitAll(emits);
 
     return this.toDetail(await this.tickets.loadAfterWrite(actor, created.id), actor);
   }
@@ -815,13 +843,16 @@ export class TicketsService {
   ): Promise<{ id: string; number: number }> {
     const createdAt = new Date();
     const sla = await this.sla.initial('medium', createdAt);
-    const created = await this.tickets.transaction(async (tx) => {
+    const { ticket: created, emits } = await this.tickets.transaction(async (tx) => {
+      // T36 RN-03b: chamado novo por e-mail entra no rodízio do grupo.
+      const auto = await this.pickAutoAssignee(tx, input.groupId);
       const ticket = await this.tickets.create(tx, {
         subject: input.subject,
         priority: 'medium',
         source: 'email',
         requesterId: author.id,
         groupId: input.groupId,
+        assigneeId: auto?.assigneeId ?? null,
         categoryId: input.categoryId,
         companyId: author.companyId,
         createdAt,
@@ -844,22 +875,26 @@ export class TicketsService {
         data: input.relatedTicketId ? { relatedTicketId: input.relatedTicketId } : {},
       });
       await write(tx, ticket);
+      const notifiedTicket: NotifiedTicket = {
+        id: ticket.id,
+        number: ticket.number,
+        subject: input.subject,
+        requesterId: author.id,
+        assigneeId: auto?.assigneeId ?? null,
+        groupId: input.groupId,
+        companyId: author.companyId,
+        categoryId: input.categoryId,
+      };
       await this.notifications.enqueue(tx, {
         type: 'ticket_created',
-        ticket: {
-          id: ticket.id,
-          number: ticket.number,
-          subject: input.subject,
-          requesterId: author.id,
-          assigneeId: null,
-          groupId: input.groupId,
-          companyId: author.companyId,
-          categoryId: input.categoryId,
-        },
+        ticket: notifiedTicket,
         actorId: author.id,
         message: { bodyHtml: input.bodyHtml, attachments: stored },
       });
-      return ticket;
+      const assigned = auto
+        ? [await this.recordAutoAssignment(tx, notifiedTicket, auto.systemId)]
+        : [];
+      return { ticket, emits: assigned };
     });
 
     this.emitter.emit(TicketDomainEvent.created, {
@@ -869,6 +904,7 @@ export class TicketsService {
       requesterId: author.id,
       source: 'email',
     } satisfies TicketCreatedEvent);
+    this.emitAll(emits);
     return { id: created.id, number: created.number };
   }
 
@@ -955,6 +991,52 @@ export class TicketsService {
     if (emits === null) return 'closed';
     this.emitAll(emits);
     return 'added';
+  }
+
+  /**
+   * T36: o próximo agente do rodízio do grupo, com o ator do sistema que assina a atribuição.
+   * `null` quando o grupo não distribui ou não tem elegível (RN-02, RN-06).
+   */
+  private async pickAutoAssignee(
+    tx: Tx,
+    groupId: string,
+  ): Promise<{ assigneeId: string; systemId: string } | null> {
+    const picked = await this.groups.pickAutoAssignee(tx, groupId);
+    if (!picked) return null;
+    const system = await this.users.findByEmail(SYSTEM_USER_EMAIL);
+    if (!system) {
+      this.logger.error(`Distribuição automática sem o ator do sistema (${SYSTEM_USER_EMAIL})`);
+      return null;
+    }
+    return { assigneeId: picked.id, systemId: system.id };
+  }
+
+  /**
+   * T36 RN-12 a RN-15: evento `assigned` do sistema com `reason: 'round_robin'` e o e-mail
+   * `ticket_assigned` ao agente, na transação do ticket. Devolve o evento de domínio, emitido
+   * depois do commit.
+   */
+  private async recordAutoAssignment(
+    tx: Tx,
+    ticket: NotifiedTicket,
+    systemId: string,
+  ): Promise<PendingEmit> {
+    await this.events.append(tx, {
+      ticketId: ticket.id,
+      actorId: systemId,
+      type: 'assigned',
+      data: { from: null, to: ticket.assigneeId, reason: 'round_robin' },
+    });
+    await this.notifications.enqueue(tx, { type: 'auto_assigned', ticket, actorId: systemId });
+    return {
+      name: TicketDomainEvent.assigned,
+      payload: {
+        ticketId: ticket.id,
+        actorId: systemId,
+        from: null,
+        to: ticket.assigneeId,
+      } satisfies TicketAssignedEvent,
+    };
   }
 
   /**

@@ -7,6 +7,8 @@ export const NOTIFICATION_TEMPLATES = [
   'reply',
   'requester_reply',
   'resolved',
+  // T36 RN-13: aviso ao agente que a distribuição automática escolheu.
+  'ticket_assigned',
   // T22 (RN-16 a RN-18): avisos sem ticket, da liberação de acesso.
   'access_request_created',
   'access_granted',
@@ -21,8 +23,14 @@ export const AUTO_SUBMITTED: Record<NotificationTemplate, boolean> = {
   reply: false,
   requester_reply: true,
   resolved: true,
+  ticket_assigned: true,
   access_request_created: true,
   access_granted: true,
+};
+
+/** Texto entre o `[#n]` e o assunto do ticket (T36 RN-13). */
+const SUBJECT_PREFIX: Partial<Record<NotificationTemplate, string>> = {
+  ticket_assigned: 'Chamado atribuído a você: ',
 };
 
 /** Assunto fixo dos templates sem ticket (T22 RN-16, RN-17): sem `[#n]`. */
@@ -255,7 +263,7 @@ export function renderNotification(
   return {
     subject:
       payload.ticketNumber !== null
-        ? `[#${payload.ticketNumber}] ${payload.ticketSubject}`
+        ? `[#${payload.ticketNumber}] ${SUBJECT_PREFIX[template] ?? ''}${payload.ticketSubject}`
         : (SYSTEM_SUBJECT[template] ?? template),
     html: toHtml(blocks, payload.portalUrl),
     text: toText(blocks, payload.portalUrl),
@@ -290,6 +298,20 @@ function intro(template: NotificationTemplate, p: NotificationPayload): Block[] 
       ];
     case 'requester_reply':
       return [text(`${p.requesterName} respondeu no chamado ${ticket}:`)];
+    case 'ticket_assigned':
+      return [
+        text(`Olá, ${p.recipientName}.`),
+        text(
+          `O chamado ${ticket} foi atribuído a você pela distribuição automática da fila ${p.groupName ?? ''}.`,
+        ),
+        text(
+          [
+            `Solicitante: ${p.requesterName}`,
+            `Unidade: ${p.companyName ?? 'sem unidade'}`,
+            `Categoria: ${p.categoryName ?? '—'}`,
+          ].join(' · '),
+        ),
+      ];
     case 'access_request_created':
       return [
         text('Novo pedido de acesso ao help desk.'),

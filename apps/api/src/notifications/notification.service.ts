@@ -63,7 +63,9 @@ export type NotificationEvent =
       /** A mesma requisição resolveu o ticket (RN-04): um e-mail só. */
       resolved: boolean;
     }
-  | { type: 'resolved'; ticket: NotifiedTicket; actorId: string };
+  | { type: 'resolved'; ticket: NotifiedTicket; actorId: string }
+  /** T36 RN-13: a distribuição automática atribuiu o ticket a `ticket.assigneeId`. */
+  | { type: 'auto_assigned'; ticket: NotifiedTicket; actorId: string };
 
 export interface OutboxResult {
   sent: number;
@@ -164,7 +166,7 @@ export class NotificationService {
       this.categories.namesByIds([ticket.categoryId]),
     ]);
     const nameOf = (id: string) => contacts.find((c) => c.id === id)?.name ?? '';
-    const message = event.type === 'resolved' ? null : event.message;
+    const message = 'message' in event ? event.message : null;
     // T31 RN-09: a assinatura do autor é congelada aqui, como o resto do payload.
     const signed =
       event.type === 'public_reply' &&
@@ -237,6 +239,11 @@ export class NotificationService {
           );
         }
         return this.groupPlanned('requester_reply', group);
+      case 'auto_assigned':
+        if (!ticket.assigneeId) return [];
+        return (await this.users.contactsByIds([ticket.assigneeId])).map((user) =>
+          userPlanned('ticket_assigned', user, false),
+        );
       default: // resolved
         return requester('resolved');
     }

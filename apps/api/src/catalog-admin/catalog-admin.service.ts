@@ -21,7 +21,7 @@ import { mailboxAddress } from '../notifications/notification.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 const itemSelect = { id: true, name: true, active: true } as const;
-const groupSelect = { ...itemSelect, email: true, inboundEmail: true } as const;
+const groupSelect = { ...itemSelect, email: true, inboundEmail: true, autoAssign: true } as const;
 const categorySelect = {
   ...itemSelect,
   defaultGroup: { select: { id: true, name: true, active: true } },
