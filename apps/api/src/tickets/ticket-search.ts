@@ -2,6 +2,8 @@ import {
   TICKET_PRIORITIES,
   TICKET_PRIORITY_LABELS,
   TICKET_STATUSES,
+  TICKET_MATCH_END,
+  TICKET_MATCH_START,
   TICKET_STATUS_LABELS,
 } from '@helpdesk/shared';
 import type { Prisma } from '../generated/prisma/client.js';
@@ -24,6 +26,84 @@ export function searchFilter(q: string | undefined): Prisma.TicketWhereInput | n
   if (term.length < MIN_TERM) return null;
   const words = [...new Set(term.split(/\s+/))];
   return { AND: words.map(wordFilter) };
+}
+
+/**
+ * T38: o termo que também vai para a busca no texto, ou `null` quando a busca é só pelo número
+ * (RN-06) ou o termo é curto demais.
+ */
+export function textSearchTerm(q: string | undefined): string | null {
+  const term = q?.trim() ?? '';
+  if (NUMBER.test(term) || term.length < MIN_TERM) return null;
+  return term;
+}
+
+/** T38: palavras do termo para o nome dos anexos (RN-05), sem aspas nem exclusões. */
+export function attachmentWords(term: string): string[] {
+  const words = term
+    .split(/\s+/)
+    .filter((word) => word && !word.startsWith('-'))
+    .map((word) => word.replaceAll('"', ''))
+    .filter((word) => word.length > 0);
+  return [...new Set(words)];
+}
+
+/** Escapa `%`, `_` e `\` para um `LIKE ... ESCAPE '\'`. */
+export function escapeLike(value: string): string {
+  return value.replaceAll(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+/**
+ * Um item por código Unicode, como o Postgres conta os caracteres no `translate` e no
+ * `ts_headline` (emoji é um caractere só nos dois lados).
+ */
+function codePoints(value: string): string[] {
+  return Array.from(value);
+}
+
+const ACCENTED = 'áàâãäéèêëíìîïóòôõöúùûüçñÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑ';
+const PLAIN = 'aaaaaeeeeiiiiooooouuuucnAAAAAEEEEIIIIOOOOOUUUUCN';
+const FOLD = new Map(codePoints(ACCENTED).map((char, index) => [char, PLAIN[index]!]));
+
+/** Igual à função SQL `helpdesk_fold`: uma letra por letra, mesmo tamanho. */
+export function foldText(value: string): string {
+  return codePoints(value)
+    .map((char) => FOLD.get(char) ?? char)
+    .join('');
+}
+
+export const MATCH_START = TICKET_MATCH_START;
+export const MATCH_END = TICKET_MATCH_END;
+
+/**
+ * T38 RN-08: o trecho vem do Postgres sobre o texto sem acento. Como `helpdesk_fold` troca uma
+ * letra por uma, o mesmo pedaço do texto original tem as mesmas posições: copia as letras do
+ * original e mantém os marcadores. Se não achar o pedaço (espaços normalizados), devolve como veio.
+ */
+export function restoreAccents(headline: string, plain: string): string {
+  const bare = headline.replaceAll(MATCH_START, '').replaceAll(MATCH_END, '');
+  const chars = codePoints(plain);
+  const folded = chars.map((char) => FOLD.get(char) ?? char);
+  const start = indexOfChars(folded, codePoints(bare));
+  if (start < 0) return headline;
+  let cursor = start;
+  let result = '';
+  for (const char of headline) {
+    if (char === MATCH_START || char === MATCH_END) result += char;
+    else result += chars[cursor++] ?? char;
+  }
+  return result.trim();
+}
+
+function indexOfChars(haystack: readonly string[], needle: readonly string[]): number {
+  if (needle.length === 0) return -1;
+  outer: for (let i = 0; i + needle.length <= haystack.length; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
 }
 
 function wordFilter(word: string): Prisma.TicketWhereInput {

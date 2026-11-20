@@ -40,6 +40,7 @@ import {
   useQueue,
   useTicketCounters,
 } from '../tickets/queries.ts';
+import { MatchSnippet } from '../tickets/MatchSnippet.tsx';
 
 const isQueueSlug = (value: string | undefined): value is QueueSlug =>
   value !== undefined && value in QUEUE_VIEWS;
@@ -308,6 +309,7 @@ function Queue({ slug }: { slug: QueueSlug }) {
                       <Anchor component={Link} to={`/tickets/${ticket.id}`}>
                         {ticket.subject}
                       </Anchor>
+                      {ticket.match && <MatchSnippet match={ticket.match} />}
                     </Table.Td>
                     <Table.Td>
                       <Group gap={4} wrap="nowrap">

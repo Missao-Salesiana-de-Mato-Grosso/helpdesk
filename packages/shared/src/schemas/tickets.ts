@@ -242,6 +242,18 @@ export interface TicketSummary {
   version: number;
   /** T28: só para agentes. */
   sla: TicketSla | null;
+  /** T38: onde o termo da busca apareceu no texto; ausente quando casou só pelos campos. */
+  match?: TicketMatch;
+}
+
+/** Início e fim de cada parte encontrada no trecho (caracteres de uso privado do Unicode). */
+export const TICKET_MATCH_START = '\uE000';
+export const TICKET_MATCH_END = '\uE001';
+
+/** T38 RN-08: trecho em texto puro, com as partes encontradas entre os marcadores acima. */
+export interface TicketMatch {
+  snippet: string;
+  source: 'public' | 'internal' | 'attachment';
 }
 
 export interface TicketListResponse {

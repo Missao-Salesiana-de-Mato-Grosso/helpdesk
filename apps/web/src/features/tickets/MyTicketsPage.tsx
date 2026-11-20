@@ -19,6 +19,7 @@ import { Link } from 'react-router';
 import { StatusBadge } from './StatusBadge.tsx';
 import { formatDateTime } from './format.ts';
 import { MY_TICKETS_PAGE_SIZE, useMyTickets } from './queries.ts';
+import { MatchSnippet } from './MatchSnippet.tsx';
 
 const FILTERS = {
   andamento: { label: 'Em andamento', statuses: ['open', 'pending'] },
@@ -117,6 +118,7 @@ export function MyTicketsPage() {
                       <Anchor component={Link} to={`/tickets/${ticket.id}`}>
                         {ticket.subject}
                       </Anchor>
+                      {ticket.match && <MatchSnippet match={ticket.match} />}
                     </Table.Td>
                     <Table.Td>
                       <StatusBadge status={ticket.status} />
