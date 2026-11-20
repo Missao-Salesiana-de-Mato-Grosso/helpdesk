@@ -1,6 +1,6 @@
 # Spec T39 — Desativar no help desk quem é desligado no Zitadel
 
-> Status: pronta · Tarefas: T39 (#67) · Depende de: T05 (JIT, `zitadel_sub`), T15 (usuário ativo/inativo), T36 (rodízio) · Revisada em: 20/11/2026
+> Status: implementada (20/11/2026) · Tarefas: T39 (#67) · Depende de: T05 (JIT, `zitadel_sub`), T15 (usuário ativo/inativo), T36 (rodízio) · Revisada em: 20/11/2026
 
 ## 1. Objetivo
 
@@ -111,7 +111,14 @@ Nenhuma migração. A verificação da assinatura precisa do **corpo bruto**: a 
 
 ## 10. Decisões tomadas na implementação
 
-_A preencher depois da sessão._
+- **Módulo:** `integrations` (controller + service). A verificação da assinatura é uma função pura (`integrations/zitadel-signature.ts`), espelho do `pkg/actions/signing.go` do v4.19.5; `signZitadelPayload` monta o cabeçalho como o Zitadel, para os testes.
+- **Corpo bruto:** `rawBody: true` no `NestFactory.create` (e no app dos testes). A assinatura é conferida sobre esses bytes, e o JSON é lido de novo deles com um schema zod que só pega `aggregateID`, `aggregateType` e `event_type` (o formato de `event_payload` diverge entre as páginas da documentação, e a spec não precisa dele).
+- **Responsabilidades:** `UsersService.deactivateBySub` inativa (sem mexer nos papéis do app); `TicketsService.releaseAssignedTickets` devolve os chamados, com a mesma trava por chamado e o mesmo ator do sistema do fechamento automático (T27), e reaproveita o rodízio da T36.
+- **Cache:** o service invalida o `UserCache` pelo `sub`, como a tela de usuários faz, para o `403 USER_INACTIVE` valer na hora (CT-10).
+- **CT-03:** "sem chave, 404" virou teste unitário do service (`zitadel-events.service.spec.ts`): a suíte e2e sobe todas as aplicações com a mesma chave (`vitest.config.e2e.ts`), e a configuração é lida uma vez.
+- **Deploy:** `ZITADEL_ACTIONS_SIGNING_KEY` entra pelo secret do GitHub → `secrets/zitadel-actions.env` → `deploy/prod/app.sh` → `helpdesk-secrets`, só quando preenchida. Runbook §18 (ligar, diagnosticar, desligar), §5 (passos 3 e 4) e §6 (rotação da chave); tabela de segredos em `docs/ci-cd.md`.
+- **Não foi feito nada no Zitadel.** A configuração de produção segue o runbook §18, com confirmação do dono do produto, e cada passo vai para `docs/ambientes.md`. Antes, vale conferir no Zitadel local o corpo real do evento (§3).
+- **Testes:** CT-01 em `zitadel-signature.spec.ts`; CT-02 e CT-04 a CT-10 em `test/zitadel-events.e2e-spec.ts` (rodam só no CI); CT-11 na matriz de permissões; CT-12 em `event-text.test.ts`.
 
 ## 11. Prompt sugerido para a sessão
 

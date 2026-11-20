@@ -116,9 +116,9 @@ Faça os três passos no mesmo dia. Desde o ADR-011 o login aceita qualquer cont
 
 1. **Workspace** (contas `@missaosalesiana.org.br`): Admin do Google → Usuários → **Suspender**. A conta deixa de entrar no Google e, portanto, no Zitadel.
 2. **Zitadel** ⚠️: console → Usuários → a pessoa → **Desativar**. Remova também as autorizações do projeto Help Desk.
-3. **Help desk** ⚠️: portal → Administração → **Usuários** → buscar a pessoa → **Editar** → desmarcar **Ativo** e os **Papéis** concedidos no app → Salvar. A API passa a responder `403 USER_INACTIVE` já na próxima requisição, mesmo com token ainda válido, e a pessoa deixa de receber tickets e avisos de grupo. Ela some da tela de membros dos grupos; ao salvar os membros de um grupo, ela sai dele de vez.
+3. **Help desk** ⚠️ (automático quando o desligamento pelo Zitadel está ligado, §18; confira e, se não aconteceu, faça à mão): portal → Administração → **Usuários** → buscar a pessoa → **Editar** → desmarcar **Ativo** e os **Papéis** concedidos no app → Salvar. A API passa a responder `403 USER_INACTIVE` já na próxima requisição, mesmo com token ainda válido, e a pessoa deixa de receber tickets e avisos de grupo. Ela some da tela de membros dos grupos; ao salvar os membros de um grupo, ela sai dele de vez.
 
-4. Tickets atribuídos à pessoa: no portal, a fila "Todos" (supervisor) filtrada pelo responsável. Reatribuir um a um.
+4. Tickets atribuídos à pessoa: com o desligamento pelo Zitadel ligado (§18), os abertos e pendentes voltam sozinhos para a fila do grupo. Sem ele, no portal, a fila "Todos" (supervisor) filtrada pelo responsável: reatribuir um a um.
 
 O histórico (mensagens, eventos) continua com o nome da pessoa. **Não apague o usuário.**
 
@@ -128,15 +128,16 @@ Regra: o deploy pelo GitHub lê os **secrets do repositório** (Settings → Sec
 
 > ⚠️ **Redefinir a senha da conta Google de `suporte@` apaga todas as senhas de app dela**, e o help desk para de ler e de enviar e-mails na hora (log `Ciclo da caixa interrompido: Command failed`). Foi o que derrubou o e-mail em 11/11/2026, das 22:06 às ~23:33 (`docs/ambientes.md` §2.6, #44). Se precisar trocar a senha da conta, faça numa janela combinada e, logo em seguida, crie uma senha de app nova e siga a primeira linha da tabela abaixo. Depois: os e-mails que chegaram durante a queda são lidos no ciclo seguinte, mas as notificações que tentaram sair nesse intervalo **não voltam sozinhas**: o Gmail responde 535 (senha inválida), que a outbox trata como falha permanente e marca `failed` na 1ª tentativa. Liste as `failed` do intervalo e reenfileire as que ainda fizerem sentido (seção 9).
 
-| Segredo                                  | Onde se gera                                                                                                  | Atualizar em                                                                                   | Depois                                                          |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Senha de app de `suporte@` (SMTP e IMAP) | Conta Google de `suporte@` → Segurança → Senhas de app → criar nova; **revogar a antiga só depois do deploy** | `secrets/helpdesk-email.env` (`SMTP_PASSWORD`, `MAILBOX_PASSWORD`) e os mesmos nomes no GitHub | Deploy (seção 1). Conferir no log o ciclo da caixa e um envio   |
-| Senha do banco `helpdesk`                | Trocar `DB_HELPDESK_PASSWORD` em `secrets/database.env`; `make database` no `msmt-infra-automation` aplica ⚠️ | Secret `DB_HELPDESK_PASSWORD` no GitHub                                                        | Deploy imediato: o app perde a conexão até o Secret novo chegar |
-| Chave do Object Storage do app           | `msmt-infra-automation` (`make storage`) ⚠️ ou painel → Object Storage → chaves                               | `secrets/object-storage.env` e `S3_ACCESS_KEY`/`S3_SECRET_KEY` no GitHub                       | Deploy; testar download de um anexo; só então revogar a antiga  |
-| Segredo do cliente OAuth do Google       | Google Cloud (`msmt-iam-zitadel`, conta `tecnologia@`) → Credenciais → `Zitadel produção` → redefinir segredo | Console do Zitadel → Configurações padrão → Provedores de identidade → Google                  | Testar login numa aba anônima                                   |
-| `MGC_API_KEY` (pipeline)                 | Console da Magalu → API Keys                                                                                  | Secret do GitHub                                                                               | Re-run do último deploy para validar                            |
-| `KUBECONFIG_PROD` (certificado de 1 ano) | `make cluster` no `msmt-infra-automation`                                                                     | Secret do GitHub (arquivo inteiro)                                                             | **Vence ~25/10/2027** (P11, seção 11)                           |
-| Masterkey do Zitadel                     | **Nunca rotacionar.** Trocá-la torna os dados do Zitadel ilegíveis                                            | —                                                                                              | Manter `secrets/zitadel.env` no cofre                           |
+| Segredo                                                            | Onde se gera                                                                                                  | Atualizar em                                                                                   | Depois                                                          |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Senha de app de `suporte@` (SMTP e IMAP)                           | Conta Google de `suporte@` → Segurança → Senhas de app → criar nova; **revogar a antiga só depois do deploy** | `secrets/helpdesk-email.env` (`SMTP_PASSWORD`, `MAILBOX_PASSWORD`) e os mesmos nomes no GitHub | Deploy (seção 1). Conferir no log o ciclo da caixa e um envio   |
+| Senha do banco `helpdesk`                                          | Trocar `DB_HELPDESK_PASSWORD` em `secrets/database.env`; `make database` no `msmt-infra-automation` aplica ⚠️ | Secret `DB_HELPDESK_PASSWORD` no GitHub                                                        | Deploy imediato: o app perde a conexão até o Secret novo chegar |
+| Chave do Object Storage do app                                     | `msmt-infra-automation` (`make storage`) ⚠️ ou painel → Object Storage → chaves                               | `secrets/object-storage.env` e `S3_ACCESS_KEY`/`S3_SECRET_KEY` no GitHub                       | Deploy; testar download de um anexo; só então revogar a antiga  |
+| Segredo do cliente OAuth do Google                                 | Google Cloud (`msmt-iam-zitadel`, conta `tecnologia@`) → Credenciais → `Zitadel produção` → redefinir segredo | Console do Zitadel → Configurações padrão → Provedores de identidade → Google                  | Testar login numa aba anônima                                   |
+| `MGC_API_KEY` (pipeline)                                           | Console da Magalu → API Keys                                                                                  | Secret do GitHub                                                                               | Re-run do último deploy para validar                            |
+| Chave do desligamento pelo Zitadel (`ZITADEL_ACTIONS_SIGNING_KEY`) | Console/API do Zitadel → target `helpdesk-desligamento` → gerar nova chave (§18)                              | `secrets/zitadel-actions.env` e o mesmo nome no GitHub                                         | Deploy imediato: até lá, os avisos do Zitadel recebem 401       |
+| `KUBECONFIG_PROD` (certificado de 1 ano)                           | `make cluster` no `msmt-infra-automation`                                                                     | Secret do GitHub (arquivo inteiro)                                                             | **Vence ~25/10/2027** (P11, seção 11)                           |
+| Masterkey do Zitadel                                               | **Nunca rotacionar.** Trocá-la torna os dados do Zitadel ilegíveis                                            | —                                                                                              | Manter `secrets/zitadel.env` no cofre                           |
 
 ## 7. Virada do e-mail e rollback
 
@@ -326,3 +327,19 @@ O app lê só a caixa `suporte@`. Outra caixa entra **encaminhando** para ela: o
 4. **Testar:** de uma conta de fora, mandar um e-mail para a caixa do setor. Em até 1 min: ticket no grupo, aviso aos membros e confirmação `[#n]` para o remetente. Se não aparecer, ver o motivo em `inbound_emails` (§10; ex.: `dmarc_fail`) e o rótulo `helpdesk/erro` no Gmail de `suporte@` (§8).
 
 Para desligar: apagar a caixa de entrada do grupo e o encaminhamento no Gmail.
+
+## 18. Desligamento automático pelo Zitadel (T39)
+
+Quando alguém é **desativado, bloqueado ou excluído** no Zitadel, o Zitadel avisa o help desk (Actions v2) e a pessoa fica **inativa** aqui na hora; os chamados abertos e pendentes dela voltam para a fila do grupo (com distribuição automática, o rodízio escolhe outro agente). **Reativar não é automático**: reative em Administração → Usuários. Spec: `docs/specs/T39-desligamento-zitadel.md`.
+
+**Ligar** ⚠️ (cada passo no Zitadel de produção com confirmação do dono do produto; registre em `docs/ambientes.md`):
+
+1. Código no ar: sem a chave, `POST /api/integrations/zitadel/events` responde 404.
+2. No Zitadel (IAM_OWNER), criar o target: nome `helpdesk-desligamento`, tipo **webhook** (`restWebhook`, `interruptOnError: false`), endpoint `https://suporte.msmt.org.br/api/integrations/zitadel/events`, timeout `10s`, payload JSON (`POST /v2/actions/targets`). **Guarde a `signingKey` da resposta**: ela não aparece de novo.
+3. Gravar a chave como `ZITADEL_ACTIONS_SIGNING_KEY` no secret do GitHub e em `../msmt-infra-automation/secrets/zitadel-actions.env`, e fazer o deploy (re-run do último).
+4. Criar três execuções por evento apontando para o target (`PUT /v2/actions/executions`, condição `{"event": {"event": "<nome>"}}`): `user.deactivated`, `user.locked`, `user.removed`.
+5. Testar com um usuário de teste: desativar no Zitadel; em segundos ele aparece inativo em Administração → Usuários e o log da API mostra `Zitadel user.deactivated: usuário <id> desativado; N chamado(s) devolvido(s) à fila`.
+
+**Se não funcionar:** `401 INVALID_SIGNATURE` no log = chave diferente da do target (refaça o passo 3) ou relógio do servidor fora (tolerância de 5 min); `404` = chave ausente no pod. O Zitadel **não reenvia** avisos perdidos (help desk fora do ar): o passo 3 do §5 continua valendo como conferência.
+
+**Desligar:** apagar as execuções no Zitadel (ou esvaziar a chave e fazer deploy).

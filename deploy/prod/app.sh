@@ -88,6 +88,9 @@ email_file=helpdesk-email.env
     # Sem caixa configurada: leitura desligada (o driver imap exigiria usuário e senha na subida).
     printf 'INBOUND_ENABLED=false\nMAILBOX_DRIVER=folder\n'
   fi
+  # T39: chave do target de Actions v2 do Zitadel; sem ela a rota de desligamento fica desligada.
+  actions_key=$(read_secret zitadel-actions.env ZITADEL_ACTIONS_SIGNING_KEY)
+  [[ -z "$actions_key" ]] || printf 'ZITADEL_ACTIONS_SIGNING_KEY=%s\n' "$actions_key"
 } | apply_env_secret helpdesk helpdesk-secrets
 [[ -n "$(read_secret "$email_file" SMTP_USER)" ]] ||
   warn "Sem SMTP em $SECRETS_DIR/$email_file: notificações por e-mail DESLIGADAS."
