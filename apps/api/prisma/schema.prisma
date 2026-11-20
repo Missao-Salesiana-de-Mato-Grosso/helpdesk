@@ -280,22 +280,25 @@ model Ticket {
 
 /// Mensagem da conversa: resposta pública ou nota interna.
 model TicketMessage {
-  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  ticketId   String      @map("ticket_id") @db.Uuid
-  authorId   String      @map("author_id") @db.Uuid
-  kind       MessageKind
-  via        MessageVia
+  id           String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId     String                   @map("ticket_id") @db.Uuid
+  authorId     String                   @map("author_id") @db.Uuid
+  kind         MessageKind
+  via          MessageVia
   /// HTML já sanitizado (sanitize-html, allowlist em docs/specs/T08-T10-tickets-core.md §7).
-  bodyHtml   String      @map("body_html")
+  bodyHtml     String                   @map("body_html")
   /// Trecho citado de um e-mail de resposta. A UI mostra recolhido.
-  quotedHtml String?     @map("quoted_html")
-  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  quotedHtml   String?                  @map("quoted_html")
+  /// T38: gerada pelo banco (corpo + texto citado, sem acento, dicionário portuguese). Só leitura.
+  searchVector Unsupported("tsvector")? @map("search_vector")
+  createdAt    DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
 
   ticket      Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   author      User         @relation(fields: [authorId], references: [id])
   attachments Attachment[]
 
   @@index([ticketId, createdAt])
+  @@index([searchVector], type: Gin, map: "ticket_messages_search_vector_idx")
   @@map("ticket_messages")
 }
 

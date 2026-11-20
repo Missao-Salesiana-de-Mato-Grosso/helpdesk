@@ -14,6 +14,7 @@ import {
   type TicketCounters,
   type TicketDetail,
   type TicketListResponse,
+  type TicketMatch,
   type TicketStatus,
   type TicketView,
   type UpdateTicketInput,
@@ -43,7 +44,7 @@ import { SlaService, type SlaFields } from '../sla/sla.service.js';
 import { SYSTEM_USER_EMAIL } from '../users/system-user.js';
 import { UsersService } from '../users/users.service.js';
 import { isAgent, seesAllTickets, type ScopeUser } from './ticket-scope.js';
-import { searchFilter } from './ticket-search.js';
+import { attachmentWords, searchFilter, textSearchTerm } from './ticket-search.js';
 import { planStatusChange, ticketClosed, versionConflict } from './ticket-status.js';
 import { toTicketDetail, toTicketSummary } from './tickets.mapper.js';
 import {
@@ -1129,15 +1130,33 @@ export class TicketsService {
     if (query.groupId) filters.push({ groupId: query.groupId });
     if (query.slaBreached) filters.push(slaBreached(new Date()));
     const search = searchFilter(query.q);
-    if (search) filters.push(search);
+    // T38 RN-03: casa pelos campos (#48) ou pelo texto das mensagens e nomes de anexos.
+    const term = textSearchTerm(query.q);
+    const words = term ? attachmentWords(term) : [];
+    const textIds = term ? await this.tickets.findTextMatches(viewer, term, words) : [];
+    if (search) {
+      filters.push(textIds.length > 0 ? { OR: [search, { id: { in: textIds } }] } : search);
+    }
 
     const { rows, total } = await this.tickets.list(viewer, { AND: filters }, SORTS[query.sort], {
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
     });
     const agentView = isAgent(viewer);
+    const textMatched = new Set(textIds);
+    const matches = term
+      ? await this.tickets.findTextSnippets(
+          viewer,
+          rows.filter((row) => textMatched.has(row.id)).map((row) => row.id),
+          term,
+          words,
+        )
+      : new Map<string, TicketMatch>();
     return {
-      items: rows.map((row) => toTicketSummary(row, agentView)),
+      items: rows.map((row) => {
+        const match = matches.get(row.id);
+        return { ...toTicketSummary(row, agentView), ...(match ? { match } : {}) };
+      }),
       total,
       page: query.page,
       pageSize: query.pageSize,

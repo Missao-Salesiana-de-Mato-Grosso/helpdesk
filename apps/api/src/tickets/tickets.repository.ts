@@ -3,6 +3,7 @@ import type { TicketStatus } from '@helpdesk/shared';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { isAgent, ticketScope, type ScopeUser } from './ticket-scope.js';
+import { escapeLike, MATCH_END, MATCH_START, restoreAccents } from './ticket-search.js';
 
 export type Tx = Prisma.TransactionClient;
 
@@ -216,6 +217,98 @@ export class TicketsRepository {
       this.prisma.ticket.count({ where }),
     ]);
     return { rows, total };
+  }
+
+  /**
+   * T38 RN-01 a RN-05: ids dos chamados com uma mensagem que casa com o termo (full-text, sem
+   * acento, dicionário portuguese) ou com anexos cujos nomes têm todas as palavras. Só mensagens
+   * e anexos públicos para quem não é agente (RN-02); o escopo do chamado é aplicado por quem
+   * chama, na mesma listagem.
+   */
+  async findTextMatches(viewer: ScopeUser, term: string, words: string[]): Promise<string[]> {
+    const visible = isAgent(viewer) ? Prisma.sql`TRUE` : Prisma.sql`m.kind = 'public'`;
+    const query = Prisma.sql`websearch_to_tsquery('portuguese', helpdesk_fold(${term}))`;
+    const attachments =
+      words.length === 0
+        ? Prisma.empty
+        : Prisma.sql`
+          UNION
+          SELECT m.ticket_id FROM attachments a
+          JOIN ticket_messages m ON m.id = a.message_id
+          WHERE ${visible} AND NOT a.inline
+          GROUP BY m.ticket_id
+          HAVING ${Prisma.join(
+            words.map(
+              (word) =>
+                Prisma.sql`bool_or(lower(helpdesk_fold(a.filename)) LIKE '%' || lower(helpdesk_fold(${escapeLike(word)})) || '%' ESCAPE '\\')`,
+            ),
+            ' AND ',
+          )}`;
+    const rows = await this.prisma.$queryRaw<{ ticket_id: string }[]>`
+      SELECT DISTINCT m.ticket_id FROM ticket_messages m
+      WHERE m.search_vector @@ ${query} AND ${visible}
+      ${attachments}`;
+    return rows.map((row) => row.ticket_id);
+  }
+
+  /**
+   * T38 RN-08: para cada chamado, o trecho da mensagem mais recente que casa (texto puro, com
+   * marcadores) ou, sem mensagem, o primeiro anexo cujo nome casa.
+   */
+  async findTextSnippets(
+    viewer: ScopeUser,
+    ticketIds: string[],
+    term: string,
+    words: string[],
+  ): Promise<Map<string, { snippet: string; source: 'public' | 'internal' | 'attachment' }>> {
+    const found = new Map<
+      string,
+      { snippet: string; source: 'public' | 'internal' | 'attachment' }
+    >();
+    if (ticketIds.length === 0) return found;
+    const visible = isAgent(viewer) ? Prisma.sql`TRUE` : Prisma.sql`m.kind = 'public'`;
+    const ids = Prisma.sql`ARRAY[${Prisma.join(ticketIds)}]::uuid[]`;
+    const messages = await this.prisma.$queryRaw<
+      { ticket_id: string; kind: 'public' | 'internal'; headline: string; plain: string }[]
+    >`
+      SELECT DISTINCT ON (m.ticket_id) m.ticket_id, m.kind::text AS kind,
+        ts_headline('portuguese', helpdesk_fold(t.plain), q,
+          ${`StartSel=${MATCH_START}, StopSel=${MATCH_END}, MaxWords=30, MinWords=12, ShortWord=2`}) AS headline,
+        t.plain
+      FROM ticket_messages m
+      CROSS JOIN LATERAL (SELECT websearch_to_tsquery('portuguese', helpdesk_fold(${term})) AS q) w
+      CROSS JOIN LATERAL (
+        SELECT trim(regexp_replace(
+          coalesce(helpdesk_plain_text(m.body_html), '') || ' ' ||
+          coalesce(helpdesk_plain_text(m.quoted_html), ''), '\\s+', ' ', 'g')) AS plain
+      ) t
+      WHERE m.ticket_id = ANY(${ids}) AND m.search_vector @@ w.q AND ${visible}
+      ORDER BY m.ticket_id, m.created_at DESC`;
+    for (const row of messages) {
+      found.set(row.ticket_id, {
+        snippet: restoreAccents(row.headline, row.plain),
+        source: row.kind,
+      });
+    }
+
+    const missing = ticketIds.filter((id) => !found.has(id));
+    if (missing.length === 0 || words.length === 0) return found;
+    const files = await this.prisma.$queryRaw<{ ticket_id: string; filename: string }[]>`
+      SELECT DISTINCT ON (m.ticket_id) m.ticket_id, a.filename
+      FROM attachments a JOIN ticket_messages m ON m.id = a.message_id
+      WHERE m.ticket_id = ANY(ARRAY[${Prisma.join(missing)}]::uuid[]) AND ${visible} AND NOT a.inline
+        AND ${Prisma.join(
+          words.map(
+            (word) =>
+              Prisma.sql`lower(helpdesk_fold(a.filename)) LIKE '%' || lower(helpdesk_fold(${escapeLike(word)})) || '%' ESCAPE '\\'`,
+          ),
+          ' OR ',
+        )}
+      ORDER BY m.ticket_id, m.created_at DESC`;
+    for (const row of files) {
+      found.set(row.ticket_id, { snippet: `Anexo: ${row.filename}`, source: 'attachment' });
+    }
+    return found;
   }
 
   count(viewer: ScopeUser, filter: Prisma.TicketWhereInput): Promise<number> {
