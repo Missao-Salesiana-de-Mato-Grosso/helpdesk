@@ -1,6 +1,6 @@
 # Spec T37 — Relatórios de atendimento
 
-> Status: pronta · Tarefas: T37 (#64) · Depende de: T08–T10 (timestamps do ticket), T28 (SLA e horário útil) · Revisada em: 20/11/2026
+> Status: implementada (20/11/2026) · Tarefas: T37 (#64) · Depende de: T08–T10 (timestamps do ticket), T28 (SLA e horário útil) · Revisada em: 20/11/2026
 
 ## 1. Objetivo
 
@@ -160,7 +160,14 @@ Nenhuma variável nova. Dependências novas no `apps/web`: `@mantine/charts@9.7.
 
 ## 10. Decisões tomadas na implementação
 
-_A preencher depois da sessão._
+- **Módulos:** o módulo `reports` não lê tabelas de outros módulos (regra do CLAUDE.md). Os chamados vêm de `TicketsService.reportData` (consulta em `TicketsRepository.findForReport`, só com as colunas do relatório), e os nomes vêm de `refsByIds` novos em `GroupsService`, `UsersService`, `CompaniesService` e `CategoriesService`.
+- **Fuso:** os limites do período e o agrupamento por dia usam dois helpers novos em `sla/business-time.ts` (`startOfLocalDay` e `localDate`), no fuso `BUSINESS_TIMEZONE`.
+- **"(inativo)" (RN-14):** a API devolve `active` em cada linha, e a tela e o CSV acrescentam "(inativo)" ao nome.
+- **Linhas vazias:** uma quebra só lista quem tem algum número no período (criados, resolvidos, fechados, tempo ou SLA avaliado).
+- **Validação de data:** o zod roda todas as checagens mesmo depois de uma falhar. Uma data inexistente (30/02) chegou a lançar exceção em vez de recusar, o que viraria 500; a checagem foi unificada, e o CT-12 cobre o caso.
+- **Carregamento:** a tela é carregada sob demanda (`React.lazy`). Os gráficos (`recharts`) ficam num arquivo separado de ~430 kB, que só supervisor e admin baixam; o bundle principal continua do mesmo tamanho.
+- **Versões:** `@mantine/charts` fixado em `9.7.3`, a mesma versão do core instalada (o peer pede igualdade exata); `recharts` em `~3.10.1`.
+- **Testes:** CT-01 em `reports.test.ts` (shared); CT-02 a CT-05 em `report-math.spec.ts`; CT-07 a CT-13 em `test/reports.e2e-spec.ts` e na matriz de permissões (rodam só no CI); CT-06 e CT-14 a CT-17 em `features/reports/reports.test.tsx`.
 
 ## 11. Prompt sugerido para a sessão
 

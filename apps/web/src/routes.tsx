@@ -1,3 +1,5 @@
+import { Loader } from '@mantine/core';
+import { lazy, Suspense } from 'react';
 import { Navigate, Outlet, Route, Routes } from 'react-router';
 import { AccessRejectedPage } from './auth/AccessRejectedPage.tsx';
 import { AuthCallback } from './auth/AuthCallback.tsx';
@@ -31,6 +33,11 @@ function HomeRedirect() {
   const { data: me } = useMe();
   return me ? <Navigate to={homePath(me.isAgent)} replace /> : null;
 }
+
+// T37: os gráficos (recharts) só carregam para quem abre os relatórios.
+const ReportsPage = lazy(async () => ({
+  default: (await import('./features/reports/ReportsPage.tsx')).ReportsPage,
+}));
 
 export function AppRoutes() {
   return (
@@ -91,6 +98,17 @@ export function AppRoutes() {
             element={
               <RequireRole roles={['admin', 'supervisor']}>
                 <CannedResponsesPage />
+              </RequireRole>
+            }
+          />
+          {/* T37: relatórios — admin e supervisor. */}
+          <Route
+            path="relatorios"
+            element={
+              <RequireRole roles={['admin', 'supervisor']}>
+                <Suspense fallback={<Loader aria-label="Carregando" />}>
+                  <ReportsPage />
+                </Suspense>
               </RequireRole>
             }
           />

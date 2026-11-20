@@ -68,6 +68,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: 'Pedidos de acesso', to: '/admin/liberacao' },
       { label: 'Respostas prontas', to: '/admin/respostas-prontas' },
+      { label: 'Relatórios', to: '/relatorios' },
     ],
   },
 ];
