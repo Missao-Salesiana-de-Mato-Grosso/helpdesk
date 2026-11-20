@@ -36,6 +36,10 @@ export function eventText(event: TicketEvent, refs: Record<string, string>): str
       return `mudou a prioridade de ${priority(from)} para ${priority(to)}`;
     case 'assigned':
       if (to === null || to === undefined) return `removeu o responsável (${name(from)})`;
+      // T36 RN-18: a distribuição automática assina como o ator do sistema.
+      if (event.data.reason === 'round_robin') {
+        return `atribuiu automaticamente a ${name(to)} (distribuição do grupo)`;
+      }
       return from === null || from === undefined
         ? `atribuiu a ${name(to)}`
         : `trocou o responsável de ${name(from)} para ${name(to)}`;

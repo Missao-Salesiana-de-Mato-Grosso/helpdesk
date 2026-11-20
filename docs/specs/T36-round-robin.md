@@ -1,6 +1,6 @@
 # Spec T36 — Distribuição automática (round-robin) por grupo
 
-> Status: pronta · Tarefas: T36 (#60) · Depende de: T08–T10 (criação e `PATCH` de ticket), T14 (outbox), T21 (e-mail de entrada), T25 (Administração → Grupos), T35 (alteração em lote) · Revisada em: 19/11/2026
+> Status: implementada (20/11/2026) · Tarefas: T36 (#60) · Depende de: T08–T10 (criação e `PATCH` de ticket), T14 (outbox), T21 (e-mail de entrada), T25 (Administração → Grupos), T35 (alteração em lote) · Revisada em: 19/11/2026
 
 ## 1. Objetivo
 
@@ -63,7 +63,7 @@ Quando um grupo liga a **distribuição automática**, cada chamado novo que ent
 **Tela**
 
 - **RN-17** — Em Administração → Grupos, o formulário do grupo ganha a chave "Distribuir automaticamente" com a ajuda "Chamados novos sem responsável vão para os agentes do grupo, um de cada vez, em ordem alfabética." A lista de grupos mostra "Automática" numa coluna "Distribuição" quando ligada.
-- **RN-18** — No histórico do chamado, o evento da RN-12 aparece como "Atribuído automaticamente a <nome>" (sem "por <ator>").
+- **RN-18** — No histórico do chamado, o evento da RN-12 aparece como "Sistema atribuiu automaticamente a <nome> (distribuição do grupo)".
 
 ## 5. Contrato da API
 
@@ -130,12 +130,18 @@ Nenhuma variável nova.
 | CT-18 | atribuição manual a Ana                                                              | outbox                                                         | Nenhum `ticket_assigned`; `last_auto_assignee_id` inalterado                                                               | RN-10, RN-13         |
 | CT-19 | admin                                                                                | `PATCH /admin/groups/:id` `{ autoAssign: true }`, depois `GET` | `autoAssign: true` na lista; agente recebe 403 na mesma rota (matriz já cobre a rota)                                      | RN-01                |
 | CT-20 | tela de grupos (admin)                                                               | liga "Distribuir automaticamente" e salva                      | `PATCH` com `autoAssign: true`; a lista mostra "Automática" na coluna Distribuição                                         | RN-17                |
-| CT-21 | detalhe do chamado com evento `assigned` `reason: 'round_robin'`                     | agente abre o chamado                                          | Histórico mostra "Atribuído automaticamente a Ana"                                                                         | RN-18                |
+| CT-21 | detalhe do chamado com evento `assigned` `reason: 'round_robin'`                     | agente abre o chamado                                          | Histórico mostra "atribuiu automaticamente a Ana (distribuição do grupo)"                                                  | RN-18                |
 | CT-22 | `ticket_assigned` renderizado                                                        | template                                                       | Assunto `[#1042] Chamado atribuído a você: <assunto>`; corpo com grupo, solicitante e link; sem o corpo da mensagem        | RN-13                |
 
 ## 10. Decisões tomadas na implementação
 
-_A preencher depois da sessão._
+- **Histórico (RN-18):** o histórico sempre mostra o nome do ator antes da frase, então o evento aparece como "**Sistema** atribuiu automaticamente a Ana (distribuição do grupo)", no mesmo padrão do fechamento automático da T27. O CT-21 testa a frase em `event-text.test.ts`.
+- **Tela (RN-17):** "Distribuir automaticamente" é um checkbox, como o "Ativo" do mesmo formulário, e aparece também no "Novo grupo". A coluna "Distribuição" mostra "Automática" ou "Manual".
+- **Ordem (RN-07):** comparação com `Intl.Collator('pt-BR', { sensitivity: 'base' })`, que ignora acento e maiúsculas ("Álvaro" vem antes de "Bruno"); empate pelo id. A ordem é feita no código, não no `ORDER BY`, para a comparação com o último atribuído (RN-08) usar a mesma regra.
+- **Ator do sistema ausente:** se `system@helpdesk.local` não existir, o chamado fica sem responsável e a API registra um erro no log, em vez de falhar a criação. Em produção o seed sempre o cria.
+- **Evento de domínio:** o `ticket.updated` da mudança de grupo lista só os eventos do autor do `PATCH`; a atribuição automática sai num `ticket.assigned` separado, com o ator do sistema (RN-15).
+- **Elegíveis (RN-05):** a consulta é a mesma do aviso ao grupo e do seletor de responsável (`activeAgentMember` no `GroupsService`).
+- **Testes:** CT-02 a CT-05 em `groups/auto-assign.spec.ts`, CT-22 em `templates.spec.ts`, CT-06 a CT-19 em `test/round-robin.e2e-spec.ts` (rodam só no CI, sem banco local nesta máquina), CT-01 em `catalog.test.ts`, CT-20 em `admin-t25.test.tsx`.
 
 ## 11. Prompt sugerido para a sessão
 
