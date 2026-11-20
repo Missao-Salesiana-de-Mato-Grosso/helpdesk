@@ -1,4 +1,6 @@
 import { Logger } from '@nestjs/common';
+// Constante interna do @nestjs/schedule: chave dos metadados que o @Cron grava no método.
+const SCHEDULE_CRON_OPTIONS = 'SCHEDULE_CRON_OPTIONS';
 import { SignatureImagesCron } from './signature-images.cron.js';
 import type { SignatureService } from './signature.service.js';
 
@@ -42,5 +44,20 @@ describe('SignatureImagesCron (spec T34)', () => {
     await expect(cron.tick()).resolves.toBeUndefined();
     await cron.tick();
     expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it('CT-08 loga a contagem mesmo quando nada foi apagado', async () => {
+    const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    await cronWith(() => Promise.resolve({ deleted: 0, failed: 0 })).tick();
+    expect(log).toHaveBeenCalledWith('Imagens da assinatura: 0 apagada(s), 0 com falha no storage');
+  });
+
+  it('CT-09 roda às 3h30 no fuso de Cuiabá', () => {
+    const tick: unknown = Object.getOwnPropertyDescriptor(
+      SignatureImagesCron.prototype,
+      'tick',
+    )?.value;
+    const options: unknown = Reflect.getMetadata(SCHEDULE_CRON_OPTIONS, tick as object);
+    expect(options).toMatchObject({ cronTime: '30 3 * * *', timeZone: 'America/Cuiaba' });
   });
 });
