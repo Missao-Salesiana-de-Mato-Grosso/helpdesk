@@ -4,6 +4,7 @@ import {
   Badge,
   Burger,
   Group,
+  Image,
   Menu,
   NavLink,
   ScrollArea,
@@ -18,6 +19,9 @@ import { Link, Outlet, useLocation } from 'react-router';
 import { useMe } from '../auth/useMe.ts';
 import { useTicketCounters } from '../features/tickets/queries.ts';
 import { SIGNATURE_PATH, visibleSections } from './navigation.ts';
+
+/** Servido de `apps/web/public` (mesmo arquivo dos ícones da aba). */
+export const LOGO_SRC = '/logo-s.png';
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Administrador',
@@ -59,6 +63,8 @@ export function AppLayout() {
               size="sm"
               aria-label="Abrir menu"
             />
+            {/* #75: o "S" dos Salesianos ao lado do nome; decorativo, o nome vem no título. */}
+            <Image src={LOGO_SRC} alt="" w={32} h={32} />
             <Title order={1} size="h4">
               {APP_NAME}
             </Title>
