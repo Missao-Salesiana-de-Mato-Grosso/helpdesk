@@ -173,6 +173,15 @@ export class GroupsService {
     });
   }
 
+  /** Nomes e situação por id (T37: linhas do relatório, com "(inativo)"). */
+  refsByIds(ids: readonly string[]): Promise<(NamedRef & { active: boolean })[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.prisma.group.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, name: true, active: true },
+    });
+  }
+
   async isActive(id: string): Promise<boolean> {
     const found = await this.prisma.group.findFirst({
       where: { id, active: true },

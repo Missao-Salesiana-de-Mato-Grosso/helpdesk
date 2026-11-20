@@ -74,6 +74,16 @@ function toUtc(date: string, minute: number, timeZone: string): Date {
   return new Date(Math.round(guess));
 }
 
+/** Dia local (`AAAA-MM-DD`) de um instante, no fuso (T37: agrupar por dia). */
+export function localDate(instant: Date, timeZone: string): string {
+  return toLocal(instant, timeZone).date;
+}
+
+/** Instante UTC da meia-noite do dia local `date`, no fuso (T37: limites do período). */
+export function startOfLocalDay(date: string, timeZone: string): Date {
+  return toUtc(date, 0, timeZone);
+}
+
 const nextDay = (date: string) =>
   new Date(Date.parse(`${date}T00:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
 

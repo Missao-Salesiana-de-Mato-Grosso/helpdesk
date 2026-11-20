@@ -16,6 +16,7 @@ Uma spec por tarefa (ou grupo de tarefas) do backlog em `docs/discovery/05-plano
 | [T34-limpeza-imagens-assinatura.md](T34-limpeza-imagens-assinatura.md) | T34 (#52; depende da T33)                    | implementada                              | qui 19/11       |
 | [T35-acoes-em-lote.md](T35-acoes-em-lote.md)                           | T35 (#55; depende da T08–T10)                | implementada                              | qui 19/11       |
 | [T36-round-robin.md](T36-round-robin.md)                               | T36 (#60; depende da T08–T10, T14, T21, T25) | implementada                              | qui 19/11       |
+| [T37-relatorios.md](T37-relatorios.md)                                 | T37 (#64; depende da T08–T10 e T28)          | implementada                              | sex 20/11       |
 
 ## Como usar uma spec numa sessão do Claude Code
 
