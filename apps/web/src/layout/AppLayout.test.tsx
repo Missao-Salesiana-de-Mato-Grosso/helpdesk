@@ -1,9 +1,10 @@
-import type { MeResponse, Role } from '@helpdesk/shared';
+import { APP_NAME, type MeResponse, type Role } from '@helpdesk/shared';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useAuth } from 'react-oidc-context';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../routes.tsx';
+import { LOGO_SRC } from './AppLayout.tsx';
 import { callsTo, stubApi } from '../test/api.ts';
 import { fakeAuth, jsonResponse, renderWithProviders, type FakeAuth } from '../test/render.tsx';
 
@@ -115,6 +116,15 @@ describe('AppLayout e rotas (T07)', () => {
     expect(screen.getByText('Supervisor')).toBeInTheDocument();
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Sair' }));
     expect(auth.signoutRedirect).toHaveBeenCalled();
+  });
+
+  it('#75 cabeçalho mostra o "S" dos Salesianos ao lado do nome do sistema', async () => {
+    renderAs([]);
+    const title = await screen.findByRole('heading', { name: APP_NAME, level: 1 });
+    const logo = title.parentElement?.querySelector('img');
+    expect(logo).toHaveAttribute('src', LOGO_SRC);
+    // Decorativa: o nome já está no título, o leitor de tela não repete.
+    expect(logo).toHaveAttribute('alt', '');
   });
 
   it('rota desconhecida dentro do portal → "Página não encontrada"', async () => {
