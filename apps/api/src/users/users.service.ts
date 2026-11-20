@@ -153,6 +153,15 @@ export class UsersService {
     });
   }
 
+  /** Nomes e situação por id (T37: linhas do relatório, com "(inativo)"). */
+  refsByIds(ids: readonly string[]): Promise<(NamedRef & { active: boolean })[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.prisma.user.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, name: true, active: true },
+    });
+  }
+
   /** Dados de contato para as notificações (T14). */
   contactsByIds(ids: readonly string[]): Promise<UserContact[]> {
     if (ids.length === 0) return Promise.resolve([]);

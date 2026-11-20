@@ -270,6 +270,50 @@ export class TicketsRepository {
     return rows.map((row) => row.id);
   }
 
+  /**
+   * T37: chamados com algum marco (criação, 1ª resposta, resolução, fechamento ou prazo do SLA)
+   * em `[start, end)`, só com as colunas que o relatório usa (RN-17).
+   */
+  findForReport(start: Date, end: Date, groupId: string | null) {
+    const range = { gte: start, lt: end };
+    return this.prisma.ticket.findMany({
+      where: {
+        ...(groupId ? { groupId } : {}),
+        OR: [
+          { createdAt: range },
+          { firstResponseAt: range },
+          { resolvedAt: range },
+          { closedAt: range },
+          { firstResponseDueAt: range },
+          { resolutionDueAt: range },
+        ],
+      },
+      select: {
+        groupId: true,
+        assigneeId: true,
+        companyId: true,
+        categoryId: true,
+        source: true,
+        priority: true,
+        status: true,
+        createdAt: true,
+        firstResponseAt: true,
+        resolvedAt: true,
+        closedAt: true,
+        firstResponseDueAt: true,
+        resolutionDueAt: true,
+        slaPausedMinutes: true,
+      },
+    });
+  }
+
+  /** T37 RN-04: abertos e pendentes agora. */
+  countOpen(groupId: string | null): Promise<number> {
+    return this.prisma.ticket.count({
+      where: { status: { in: ['open', 'pending'] }, ...(groupId ? { groupId } : {}) },
+    });
+  }
+
   /** Grava as mudanças; `bumpVersion` incrementa `version` (RN-22). Sempre atualiza `updated_at`. */
   async update(tx: Tx, id: string, changes: TicketChanges, bumpVersion: boolean): Promise<void> {
     await tx.ticket.update({

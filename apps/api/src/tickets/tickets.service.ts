@@ -1011,6 +1011,15 @@ export class TicketsService {
     return { assigneeId: picked.id, systemId: system.id };
   }
 
+  /** T37: os chamados que o relatório do período usa e quantos estão em aberto agora. */
+  async reportData(start: Date, end: Date, groupId: string | null) {
+    const [tickets, openNow] = await Promise.all([
+      this.tickets.findForReport(start, end, groupId),
+      this.tickets.countOpen(groupId),
+    ]);
+    return { tickets, openNow };
+  }
+
   /**
    * T36 RN-12 a RN-15: evento `assigned` do sistema com `reason: 'round_robin'` e o e-mail
    * `ticket_assigned` ao agente, na transação do ticket. Devolve o evento de domínio, emitido

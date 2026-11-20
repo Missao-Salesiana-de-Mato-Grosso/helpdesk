@@ -280,6 +280,12 @@ const MATRIX: RouteCase[] = [
   },
   // T22: fila de liberação — só admin e supervisor.
   { method: 'get', path: '/api/users/access-requests', expected: ADMIN_OR_SUPERVISOR },
+  // T37 CT-11: relatórios — só supervisor e admin.
+  {
+    method: 'get',
+    path: '/api/reports/summary?from=2026-11-01&to=2026-11-30',
+    expected: ADMIN_OR_SUPERVISOR,
+  },
   {
     method: 'post',
     path: (ref) => `/api/users/${ref.pendingUserId}/access/approve`,

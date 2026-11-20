@@ -30,6 +30,15 @@ export class CategoriesService {
     });
   }
 
+  /** Nomes e situação por id (T37: linhas do relatório, com "(inativo)"). */
+  refsByIds(ids: readonly string[]): Promise<(NamedRef & { active: boolean })[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.prisma.category.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, name: true, active: true },
+    });
+  }
+
   /** Categoria ativa pelo nome (T21: tickets por e-mail entram em "Geral"). */
   findActiveByName(name: string): Promise<ActiveCategory | null> {
     return this.prisma.category.findFirst({
