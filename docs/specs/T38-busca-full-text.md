@@ -1,6 +1,6 @@
 # Spec T38 — Busca no texto dos chamados (full-text)
 
-> Status: pronta · Tarefas: T38 (#66) · Depende de: T08 (listagem e RN-15), #48 (pesquisa atual), T13 (anexos), T21 (texto citado) · Revisada em: 20/11/2026
+> Status: implementada (20/11/2026) · Tarefas: T38 (#66) · Depende de: T08 (listagem e RN-15), #48 (pesquisa atual), T13 (anexos), T21 (texto citado) · Revisada em: 20/11/2026
 
 ## 1. Objetivo
 
@@ -131,7 +131,13 @@ Nenhuma variável nova. Nenhuma dependência nova.
 
 ## 10. Decisões tomadas na implementação
 
-_A preencher depois da sessão._
+- **Duas funções SQL em vez de uma (§6):** `helpdesk_plain_text` tira as tags e decodifica as entidades (mantém maiúsculas e acentos), e `helpdesk_fold` troca cada letra acentuada por uma letra sem acento, **com o mesmo número de caracteres**. O índice usa `to_tsvector('portuguese', helpdesk_fold(helpdesk_plain_text(…)))` (o dicionário já ignora maiúsculas). Com uma função só, que também passava para minúsculas, o trecho do resultado sairia sem acento e em minúsculas.
+- **Trecho com acentos (RN-08):** o `ts_headline` marca o trecho sobre o texto sem acento; a API acha esse pedaço no texto original nas mesmas posições (`restoreAccents` em `ticket-search.ts`) e copia as letras originais, mantendo os marcadores. Se não achar, devolve o trecho sem acento. A contagem é por código Unicode nos dois lados (`Array.from` no JS, caracteres no Postgres).
+- **Marcadores:** `TICKET_MATCH_START`/`TICKET_MATCH_END` (U+E000/U+E001) em `packages/shared`, usados pela API e pela tela.
+- **Anexos:** imagens coladas no texto (T32, `inline`) ficam fora da busca por nome (nomes genéricos como `image.png`). Para o trecho "Anexo: <nome>", basta o nome ter **uma** das palavras: o chamado já casou pela regra da RN-05.
+- **Integração com a listagem:** a busca no texto devolve os ids dos chamados (`TicketsRepository.findTextMatches`), que entram como `OR` no filtro por campos da #48; escopo, visão, filtros, ordenação e paginação continuam os de sempre. Os trechos são buscados só para os chamados da página (`findTextSnippets`).
+- **Prisma:** a coluna fica no schema como `Unsupported("tsvector")?` com o índice GIN, para o schema bater com a migração; a coluna gerada é escrita só no SQL da migração.
+- **Testes:** CT-01 a CT-12 em `test/text-search.e2e-spec.ts` (rodam só no CI); auxiliares (`textSearchTerm`, `attachmentWords`, `escapeLike`, `foldText`, `restoreAccents`) em `ticket-search.spec.ts`; CT-13 a CT-15 em `features/tickets/match-snippet.test.tsx`.
 
 ## 11. Prompt sugerido para a sessão
 
