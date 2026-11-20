@@ -99,7 +99,8 @@ async function applyChange(field: string, valueLabel: string, value: string) {
   await userEvent.click(await screen.findByRole('button', { name: 'Confirmar' }));
 }
 
-describe('Fila — ações em lote (T35)', () => {
+// Cada teste faz dezenas de interações (~2,5 s sozinho); com a suíte em paralelo passa dos 5 s padrão.
+describe('Fila — ações em lote (T35)', { timeout: 15_000 }, () => {
   beforeEach(() => {
     vi.mocked(useAuth).mockReturnValue(fakeAuth());
   });
