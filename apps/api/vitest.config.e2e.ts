@@ -30,6 +30,8 @@ export default defineConfig({
       ZITADEL_ORG_ID: '',
       AUTH_CLOCK_TOLERANCE_SECONDS: '60',
       AUTH_CACHE_TTL_SECONDS: '60',
+      // T39: rota do Zitadel ligada; a suíte assina os corpos com esta chave.
+      ZITADEL_ACTIONS_SIGNING_KEY: 'test-signing-key',
       // Anexos (T13) em disco, numa pasta temporária que a suíte de anexos limpa.
       STORAGE_DRIVER: 'local',
       STORAGE_LOCAL_PATH: E2E_STORAGE_PATH,

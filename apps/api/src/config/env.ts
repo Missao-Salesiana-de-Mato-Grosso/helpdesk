@@ -62,6 +62,8 @@ export const envSchema = z
     SMTP_SECURE: flag('false'),
     SMTP_USER: optionalText,
     SMTP_PASSWORD: optionalText,
+    /** T39: chave do target de Actions v2 no Zitadel. Vazia = integração de desligamento desligada. */
+    ZITADEL_ACTIONS_SIGNING_KEY: optionalText,
     MAIL_FROM: z.string().min(3).default('Suporte MSMT <suporte@missaosalesiana.org.br>'),
     PORTAL_URL: z
       .url()

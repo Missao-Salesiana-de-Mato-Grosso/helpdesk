@@ -1050,6 +1050,63 @@ export class TicketsService {
   }
 
   /**
+   * T39 RN-08 e RN-09: tira o responsável desligado dos chamados abertos e pendentes, assinando
+   * como o ator do sistema (`reason: 'user_deactivated'`). Nos grupos com distribuição automática,
+   * o rodízio escolhe outro agente na mesma transação (o desligado já está inativo, fora dele).
+   * Cada chamado tem a própria transação; um erro não impede os outros. Devolve quantos soltou.
+   */
+  async releaseAssignedTickets(userId: string): Promise<number> {
+    const ids = await this.tickets.findOpenAssignedTo(userId);
+    if (ids.length === 0) return 0;
+    const system = await this.users.findByEmail(SYSTEM_USER_EMAIL);
+    if (!system) throw new Error(`Ator do sistema (${SYSTEM_USER_EMAIL}) ausente: rode o seed`);
+
+    let released = 0;
+    for (const id of ids) {
+      try {
+        const emits = await this.tickets.transaction(async (tx) => {
+          const ticket = await this.tickets.lockInScope(tx, AUTO_CLOSE_SCOPE, id);
+          if (ticket?.assigneeId !== userId) return null;
+          if (ticket.status !== 'open' && ticket.status !== 'pending') return null;
+          const auto = await this.pickAutoAssignee(tx, ticket.groupId);
+          await this.tickets.update(tx, id, { assigneeId: auto?.assigneeId ?? null }, true);
+          await this.events.append(tx, {
+            ticketId: id,
+            actorId: system.id,
+            type: 'assigned',
+            data: { from: userId, to: null, reason: 'user_deactivated' },
+          });
+          const pending: PendingEmit[] = [
+            {
+              name: TicketDomainEvent.assigned,
+              payload: {
+                ticketId: id,
+                actorId: system.id,
+                from: userId,
+                to: null,
+              } satisfies TicketAssignedEvent,
+            },
+          ];
+          if (auto) {
+            const assigned = notified(ticket, { assigneeId: auto.assigneeId });
+            pending.push(await this.recordAutoAssignment(tx, assigned, auto.systemId));
+          }
+          return pending;
+        });
+        if (emits) {
+          this.emitAll(emits);
+          released++;
+        }
+      } catch (error) {
+        this.logger.error(
+          `Devolução do ticket ${id} à fila falhou: ${error instanceof Error ? error.message : 'erro'}`,
+        );
+      }
+    }
+    return released;
+  }
+
+  /**
    * T27: fecha os tickets resolvidos há mais de `days` dias, assinando como o ator do sistema.
    * Cada ticket tem a própria transação e é conferido de novo com a linha travada (pode ter sido
    * reaberto entretanto). Devolve quantos fechou.
