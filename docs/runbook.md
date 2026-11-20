@@ -37,9 +37,9 @@ Convenções:
 
 ## 1. Deploy
 
-**Caminho normal** 📘 (`docs/ci-cd.md`): issue → branch → Pull Request → CI `test` verde → merge na `main` → o job `deploy` espera a aprovação no ambiente `production` (GitHub → Actions → execução → **Review deployments**) → imagem `helpdesk:<sha curto>` publicada em `cr-msmt-prd`, migração (Job `helpdesk-migrate`: `prisma migrate deploy` + seed), rollout e checagem de `/api/health`.
+**Caminho normal** 📘 (`docs/ci-cd.md`): issue → branch → Pull Request → CI `test` verde → merge na `main` → o job `deploy` começa sozinho, sem aprovação (o merge já é o deploy) → imagem `helpdesk:<sha curto>` publicada em `cr-msmt-prd`, migração (Job `helpdesk-migrate`: `prisma migrate deploy` + seed), rollout e checagem de `/api/health`.
 
-Depois de aprovar:
+Depois do merge:
 
 1. Acompanhar o job até o fim. Se a **migração** falhar, o app em produção **não** é alterado (o rollout só roda depois do Job).
 2. `make status`: `/api/health` = 200.
@@ -64,14 +64,14 @@ Para saber se houve migração: `git diff <sha anterior> <sha ruim> --stat -- ap
 
 ### 2.1 Voltar a imagem anterior ⚠️
 
-- **Pelo GitHub:** Actions → workflow **CI/CD** → a execução da `main` que estava boa → **Re-run all jobs** → aprovar o `deploy`. O job refaz a imagem daquele commit e implanta.
+- **Pelo GitHub:** Actions → workflow **CI/CD** → a execução da `main` que estava boa → **Re-run all jobs**. O job refaz a imagem daquele commit e implanta.
 - **Pelo Terminal** (mais rápido, sem build): `make deploy SKIP_BUILD=1 TAG=<sha curto bom>`. A tag é o `git rev-parse --short` do commit; as publicadas estão no registry `cr-msmt-prd` (painel da Magalu).
 
 ⚠️ O Job de migração roda também no rollback, com a pasta de migrações da versão antiga. Se o banco já tiver uma migração que a versão antiga não conhece, o `prisma migrate deploy` deve apenas não ter nada a aplicar; confirme no log do Job (`kubectl … -n helpdesk logs job/helpdesk-migrate`) antes de considerar o rollback concluído.
 
 ### 2.2 Reverter na `main`
 
-GitHub → PR que introduziu o problema → **Revert** → abre um PR de reversão → CI → merge → deploy aprovado normalmente. Isso deixa a `main` igual ao que está em produção.
+GitHub → PR que introduziu o problema → **Revert** → abre um PR de reversão → CI → merge → deploy automático, como qualquer outro. Isso deixa a `main` igual ao que está em produção.
 
 ## 3. Backup e restore
 
